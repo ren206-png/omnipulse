@@ -26,7 +26,9 @@ router.get('/oauth/connect', requireAuth, async (req: Request, res: Response): P
   const redirectUri = `${process.env.API_URL ?? 'http://localhost:4000'}/api/v1/social-accounts/oauth/callback`
 
   const urls: Record<string, string> = {
-    INSTAGRAM: `https://api.instagram.com/oauth/authorize?client_id=${process.env.INSTAGRAM_CLIENT_ID ?? 'INSTAGRAM_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user_profile,user_media&response_type=code&state=${state}`,
+    // Instagram now uses Facebook/Meta OAuth (Basic Display API deprecated Dec 2024)
+    // Requires an Instagram Business or Creator account linked to a Facebook Page
+    INSTAGRAM: `https://www.facebook.com/dialog/oauth?client_id=${process.env.FACEBOOK_CLIENT_ID ?? 'FACEBOOK_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=instagram_basic,instagram_content_publish,instagram_manage_accounts,pages_show_list,pages_read_engagement&response_type=code&state=${state}`,
     FACEBOOK: `https://www.facebook.com/v19.0/dialog/oauth?client_id=${process.env.FACEBOOK_CLIENT_ID ?? 'FACEBOOK_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=pages_manage_posts,pages_read_engagement&response_type=code&state=${state}`,
     X: `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${process.env.X_CLIENT_ID ?? 'X_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=tweet.read+tweet.write+users.read&state=${state}&code_challenge=${pkceVerifier}&code_challenge_method=plain`,
     TIKTOK: `https://www.tiktok.com/v2/auth/authorize/?client_key=${process.env.TIKTOK_CLIENT_KEY ?? 'TIKTOK_CLIENT_KEY'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user.info.basic,video.upload&response_type=code&state=${state}`,
@@ -61,24 +63,53 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
     let profileName = ''
 
     if (platform === 'INSTAGRAM') {
-      const tokenRes = await fetch('https://api.instagram.com/oauth/access_token', {
-        method: 'POST',
-        body: new URLSearchParams({
-          client_id: process.env.INSTAGRAM_CLIENT_ID ?? '',
-          client_secret: process.env.INSTAGRAM_CLIENT_SECRET ?? '',
-          grant_type: 'authorization_code',
-          redirect_uri: redirectUri,
-          code,
-        }),
-      })
-      const tokenData = await tokenRes.json() as { access_token?: string; user_id?: number }
-      accessToken = tokenData.access_token ?? ''
-      externalProfileId = String(tokenData.user_id ?? '')
-      if (accessToken) {
-        const profileRes = await fetch(`https://graph.instagram.com/me?fields=username&access_token=${accessToken}`)
-        const profile = await profileRes.json() as { username?: string }
-        profileName = profile.username ?? externalProfileId
+      // Step 1: Exchange code for short-lived user token via Facebook (same app as Facebook OAuth)
+      const tokenRes = await fetch(
+        `https://graph.facebook.com/v20.0/oauth/access_token?client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&redirect_uri=${encodeURIComponent(redirectUri)}&code=${code}`,
+      )
+      const tokenData = await tokenRes.json() as { access_token?: string; error?: { message?: string } }
+      const shortToken = tokenData.access_token ?? ''
+      if (!shortToken) throw new Error(tokenData.error?.message ?? 'No token from Facebook')
+
+      // Step 2: Exchange for long-lived token (60-day)
+      const longTokenRes = await fetch(
+        `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${shortToken}`,
+      )
+      const longTokenData = await longTokenRes.json() as { access_token?: string }
+      accessToken = longTokenData.access_token ?? shortToken
+
+      // Step 3: Get the user's Facebook Pages
+      const pagesRes = await fetch(`https://graph.facebook.com/v20.0/me/accounts?access_token=${accessToken}`)
+      const pagesData = await pagesRes.json() as { data?: Array<{ id: string; access_token: string; name: string }> }
+      const pages = pagesData.data ?? []
+
+      // Step 4: Find a page that has an Instagram Business Account linked
+      let igUserId = ''
+      let igUsername = ''
+      for (const page of pages) {
+        const igRes = await fetch(
+          `https://graph.facebook.com/v20.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`,
+        )
+        const igData = await igRes.json() as { instagram_business_account?: { id: string } }
+        if (igData.instagram_business_account?.id) {
+          igUserId = igData.instagram_business_account.id
+          // Step 5: Get Instagram username
+          const usernameRes = await fetch(
+            `https://graph.facebook.com/v20.0/${igUserId}?fields=name,username&access_token=${page.access_token}`,
+          )
+          const usernameData = await usernameRes.json() as { username?: string; name?: string }
+          igUsername = usernameData.username ?? usernameData.name ?? igUserId
+          break
+        }
       }
+
+      if (!igUserId) {
+        logger.warn({ pages: pages.length }, 'No Instagram Business Account found on any Facebook Page')
+        throw new Error('no_ig_business_account')
+      }
+
+      externalProfileId = igUserId
+      profileName = igUsername
     } else if (platform === 'FACEBOOK') {
       const tokenRes = await fetch(
         `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&redirect_uri=${encodeURIComponent(redirectUri)}&code=${code}`,
@@ -173,8 +204,10 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
     logger.info({ platform, workspaceId }, 'OAuth account connected')
     res.redirect(`${webUrl}/dashboard/accounts?connected=${platform}`)
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'oauth_failed'
+    const safeCode = ['no_ig_business_account'].includes(errMsg) ? errMsg : 'oauth_failed'
     logger.error({ err }, 'OAuth callback error')
-    res.redirect(`${(process.env.WEB_URL ?? 'http://localhost:3000')}/dashboard/accounts?error=oauth_failed`)
+    res.redirect(`${(process.env.WEB_URL ?? 'http://localhost:3000')}/dashboard/accounts?error=${safeCode}`)
   }
 })
 

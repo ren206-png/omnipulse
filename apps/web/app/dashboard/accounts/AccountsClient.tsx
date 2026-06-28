@@ -25,9 +25,9 @@ const PLATFORM_CONFIG: Record<Platform, PlatformConfig> = {
   },
   INSTAGRAM: {
     color: '#E1306C',
-    handlePlaceholder: '@your_username or Business ID',
+    handlePlaceholder: '@your_instagram_username',
     instructions:
-      '1. Go to developers.facebook.com (Instagram uses Meta\'s platform)\n2. Add Instagram Basic Display\n3. Get your User Access Token\n4. Paste it above',
+      '1. Your Instagram account must be a Business or Creator account\n2. Link it to a Facebook Page (Instagram app → Settings → Account type → Professional)\n3. Click Connect — you\'ll be taken through Facebook Login\n4. Approve the requested permissions',
   },
   TIKTOK: {
     color: '#000000',
@@ -350,6 +350,13 @@ function PlatformCard({
         </p>
       )}
 
+      {/* Instagram requires Business account notice */}
+      {!connected && platform === 'INSTAGRAM' && (
+        <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md px-2 py-1.5 leading-relaxed">
+          Requires a Business or Creator account linked to a Facebook Page
+        </p>
+      )}
+
       {/* Action button */}
       {connected && account ? (
         <Button
@@ -441,7 +448,9 @@ export function AccountsClient({ token }: Props) {
       const clean = window.location.pathname
       window.history.replaceState({}, '', clean)
       if (connected) showToast(`${connected} connected successfully!`, 'success')
-      else if (oauthError) showToast(`OAuth failed: ${oauthError}`, 'info')
+      else if (oauthError === 'no_ig_business_account') {
+        showToast('No Instagram Business Account found. Convert your account to Business/Creator and link it to a Facebook Page first.', 'info')
+      } else if (oauthError) showToast(`OAuth failed: ${oauthError}`, 'info')
     }
   }, [])
 
