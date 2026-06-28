@@ -8,7 +8,7 @@ import { emitWebhook } from '../lib/webhookEmitter.js'
 
 async function publishToPlatform(
   post: { content: string; mediaUrls: string[] },
-  account: { platform: string; accessToken: string },
+  account: { platform: string; accessToken: string; externalProfileId: string },
 ): Promise<string> {
   const { platform, accessToken } = account
   const content = post.content
@@ -36,21 +36,39 @@ async function publishToPlatform(
   }
 
   if (platform === 'INSTAGRAM') {
+    // Instagram Graph API v20 — Business Account ID is stored as externalProfileId
+    const igUserId = account.externalProfileId || 'me'
     if (post.mediaUrls?.length > 0) {
+      // Step 1: Create media container
       const containerRes = await fetch(
-        `https://graph.instagram.com/me/media?image_url=${encodeURIComponent(post.mediaUrls[0])}&caption=${encodeURIComponent(content)}&access_token=${accessToken}`,
-        { method: 'POST' },
+        `https://graph.facebook.com/v20.0/${igUserId}/media`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image_url: post.mediaUrls[0],
+            caption: content,
+            access_token: accessToken,
+          }),
+        },
       )
       const container = await containerRes.json() as { id?: string; error?: { message?: string } }
-      if (!containerRes.ok) throw new Error(container.error?.message ?? 'IG container failed')
+      if (!containerRes.ok) throw new Error(container.error?.message ?? 'IG container creation failed')
+      // Step 2: Publish the container
       const publishRes = await fetch(
-        `https://graph.instagram.com/me/media_publish?creation_id=${container.id}&access_token=${accessToken}`,
-        { method: 'POST' },
+        `https://graph.facebook.com/v20.0/${igUserId}/media_publish`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ creation_id: container.id, access_token: accessToken }),
+        },
       )
-      const published = await publishRes.json() as { id?: string }
+      const published = await publishRes.json() as { id?: string; error?: { message?: string } }
+      if (!publishRes.ok) throw new Error(published.error?.message ?? 'IG publish failed')
       return published.id ?? ''
     }
-    return 'instagram_text_only_not_supported'
+    // Instagram requires media — text-only posts are not supported
+    throw new Error('Instagram requires at least one image or video. Add media to publish.')
   }
 
   // TIKTOK and GOOGLE/YouTube require complex video upload flows — log as pending
@@ -84,7 +102,7 @@ const worker = new Worker(
       try {
         const externalId = await publishToPlatform(
           { content: post.content, mediaUrls: post.mediaUrls },
-          { platform, accessToken: account.accessToken },
+          { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
         )
         responseLog[platform] = externalId
       } catch (err) {

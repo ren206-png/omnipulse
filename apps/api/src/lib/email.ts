@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { logger } from './logger.js'
 
 const resend = new Resend(process.env.RESEND_API_KEY ?? 're_placeholder')
 
@@ -28,8 +29,7 @@ export async function sendInvitationEmail(opts: {
       `,
     })
   } catch (err) {
-    // Non-fatal — log but don't throw
-    console.error('Email send failed:', err)
+    logger.error({ err, to: opts.to }, 'Invitation email send failed')
   }
 }
 
@@ -53,6 +53,6 @@ export async function sendPasswordResetEmail(opts: { to: string; resetToken: str
       `,
     })
   } catch (err) {
-    console.error('Password reset email failed:', err)
+    logger.error({ err, to: opts.to }, 'Password reset email send failed')
   }
 }

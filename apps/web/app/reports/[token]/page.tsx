@@ -15,6 +15,9 @@ interface PlatformBreakdown {
 
 interface ReportData {
   workspaceName: string
+  label?: string
+  startDate?: string
+  endDate?: string
   generatedAt: string
   publishedPostCount: number
   snapshots: Snapshot[]
@@ -83,8 +86,11 @@ export default async function PublicReportPage({
                 Analytics Report
               </p>
               <h1 className="text-2xl font-bold">{data.workspaceName}</h1>
+              {data.label && <p className="text-sm font-medium text-foreground mt-0.5">{data.label}</p>}
               <p className="text-sm text-muted-foreground mt-1">
-                Generated {format(new Date(data.generatedAt), 'MMMM d, yyyy · h:mm a')}
+                {data.startDate && data.endDate
+                  ? `${format(new Date(data.startDate), 'MMM d, yyyy')} – ${format(new Date(data.endDate), 'MMM d, yyyy')}`
+                  : `Generated ${format(new Date(data.generatedAt), 'MMMM d, yyyy')}`}
               </p>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -129,7 +135,11 @@ export default async function PublicReportPage({
             <p className="text-3xl font-bold tabular-nums">
               {data.publishedPostCount}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">last 30 days</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {data.startDate && data.endDate
+                ? `${format(new Date(data.startDate), 'MMM d')} – ${format(new Date(data.endDate), 'MMM d')}`
+                : 'last 30 days'}
+            </p>
           </div>
 
           <div className="rounded-xl border bg-card shadow-sm p-5">
@@ -237,7 +247,7 @@ export default async function PublicReportPage({
                           Engagement
                         </p>
                         <p className="text-lg font-bold tabular-nums mt-0.5">
-                          {(s.engagementRate * 100).toFixed(1)}%
+                          {s.engagementRate.toFixed(2)}%
                         </p>
                       </div>
                     </div>
