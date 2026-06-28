@@ -42,6 +42,7 @@ export async function loginAction(email: string, password: string): Promise<{ er
     path: '/',
     maxAge: 60 * 60 * 24 * 7,
     sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
   })
   redirect('/dashboard')
 }

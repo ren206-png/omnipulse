@@ -166,7 +166,7 @@ router.post('/:workspaceId/invitations', async (req: Request, res: Response): Pr
       create: { workspaceId, email, role: role as 'ADMIN' | 'MEMBER', expiresAt },
     })
 
-    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/invite/${invitation.token}`
+    const inviteUrl = `${process.env.WEB_URL ?? 'http://localhost:3000'}/invite/${invitation.token}`
     logger.info({ inviteUrl, email, workspaceId }, 'Invitation created (dev: use this URL)')
 
     // Send invitation email (non-fatal — errors are logged inside sendInvitationEmail)

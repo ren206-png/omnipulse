@@ -32,6 +32,7 @@ export async function signupAction(
     path: '/',
     maxAge: 60 * 60 * 24 * 7,
     sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
   })
   redirect('/dashboard')
 }

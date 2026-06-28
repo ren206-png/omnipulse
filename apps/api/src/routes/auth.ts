@@ -8,6 +8,7 @@ import { env } from '../config/env.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 import { rateLimit } from '../middleware/rateLimit.js'
+import { sendPasswordResetEmail } from '../lib/email.js'
 
 const router = Router()
 
@@ -132,10 +133,10 @@ router.post('/forgot-password', resetLimiter, async (req: Request, res: Response
       data: { passwordResetToken: token, passwordResetExpires: expires },
     })
 
-    // In production, send this via email. For now, log it so dev can use it.
-    logger.info({ userId: user.id, resetToken: token }, 'Password reset token generated')
+    logger.info({ userId: user.id }, 'Password reset token generated')
+    await sendPasswordResetEmail({ to: user.email, resetToken: token })
     if (env.NODE_ENV !== 'production') {
-      console.log(`\n[DEV] Password reset link: ${process.env.APP_URL ?? 'http://localhost:3000'}/reset-password/${token}\n`)
+      console.log(`\n[DEV] Password reset link: ${process.env.WEB_URL ?? 'http://localhost:3000'}/reset-password/${token}\n`)
     }
 
     res.json({ message: 'If that email exists, a reset link has been sent.' })

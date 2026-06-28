@@ -33,3 +33,5 @@ apps/mobile/ios/
 .turbo/
 pnpm-lock.yaml
 pnpm-workspace.yaml
+apps/api/prisma/dev.db
+apps/mobile/.env

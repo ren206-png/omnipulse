@@ -216,7 +216,7 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
   if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
 
   try {
-    const { allowed, limit, current } = await checkLimit(prisma, workspaceId, 'postsPerMonth')
+    const { allowed, limit, current } = await checkLimit(prisma, workspaceId, 'scheduledPosts')
     if (!allowed) {
       sendError(res, 403, 'PLAN_LIMIT', `Plan limit reached: ${current}/${limit} posts this month. Upgrade to schedule more.`)
       return

@@ -1,5 +1,8 @@
 import 'dotenv/config'
+import { createRequire } from 'module'
 import { AppError } from '../lib/apiError.js'
+
+const require = createRequire(import.meta.url)
 
 type AyrshareSDK = {
   post(params: {
@@ -39,12 +42,11 @@ export class AyrshareService {
     if (!apiKey) {
       throw new AppError(500, 'CONFIGURATION_ERROR', 'AYRSHARE_API_KEY is not configured')
     }
-    // dynamic import to support both CJS and ESM builds of the SDK
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const SocialPost = (globalThis as unknown as { require: (m: string) => { default?: unknown; new (k: string): AyrshareSDK } }).require?.('social-media-api')
-    if (SocialPost) {
-      this.social = new SocialPost(apiKey)
-    } else {
+    try {
+      const SocialPost = require('social-media-api') as { default?: new (k: string) => AyrshareSDK } & (new (k: string) => AyrshareSDK)
+      const Ctor = (SocialPost as any).default ?? SocialPost
+      this.social = new Ctor(apiKey)
+    } catch {
       throw new AppError(500, 'CONFIGURATION_ERROR', 'social-media-api package not available')
     }
   }

@@ -32,3 +32,27 @@ export async function sendInvitationEmail(opts: {
     console.error('Email send failed:', err)
   }
 }
+
+export async function sendPasswordResetEmail(opts: { to: string; resetToken: string }) {
+  const appUrl = process.env.WEB_URL ?? 'http://localhost:3000'
+  const resetUrl = `${appUrl}/reset-password/${opts.resetToken}`
+
+  try {
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM ?? 'OmniPulse <noreply@getomnipulse.com>',
+      to: opts.to,
+      subject: 'Reset your OmniPulse password',
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
+          <h1 style="color:#6366f1;margin-bottom:8px">OmniPulse</h1>
+          <h2 style="color:#1f2937">Reset your password</h2>
+          <p style="color:#4b5563">We received a request to reset the password for your account. Click the button below to choose a new password.</p>
+          <a href="${resetUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin:16px 0">Reset Password</a>
+          <p style="color:#9ca3af;font-size:12px">This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.</p>
+        </div>
+      `,
+    })
+  } catch (err) {
+    console.error('Password reset email failed:', err)
+  }
+}
