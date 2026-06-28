@@ -83,7 +83,7 @@ router.post(
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
       size: req.file.size,
-      url: `${env.APP_URL.replace(':3000', ':4000')}/uploads/${req.file.filename}`,
+      url: `${env.API_URL}/uploads/${req.file.filename}`,
       createdAt: new Date().toISOString(),
     }
 

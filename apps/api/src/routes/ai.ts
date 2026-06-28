@@ -439,7 +439,7 @@ router.post('/translate', async (req: Request, res: Response): Promise<void> => 
     const Anthropic = (await import('@anthropic-ai/sdk')).default
     const client = new Anthropic()
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       messages: [{
         role: 'user',
@@ -508,7 +508,7 @@ router.post('/trends', async (req: Request, res: Response): Promise<void> => {
     const client = new Anthropic()
     const platformStr = platforms?.join(', ') ?? 'Instagram, TikTok, X'
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 1000,
       messages: [{
         role: 'user',
@@ -544,7 +544,7 @@ router.post('/draft-reply', async (req: Request, res: Response): Promise<void> =
     const Anthropic = (await import('@anthropic-ai/sdk')).default
     const client = new Anthropic()
     const message_result = await client.messages.create({
-      model: 'claude-haiku-4-5',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,
       messages: [{
         role: 'user',

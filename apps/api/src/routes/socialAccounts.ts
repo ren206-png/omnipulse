@@ -19,13 +19,16 @@ router.get('/oauth/connect', requireAuth, async (req: Request, res: Response): P
     return
   }
 
-  const state = Buffer.from(JSON.stringify({ platform, workspaceId, userId: req.user!.id })).toString('base64url')
+  // Generate a cryptographically secure PKCE verifier (43-128 chars, URL-safe)
+  const pkceVerifier = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url')
+  const statePayload = { platform, workspaceId, userId: req.user!.id, pkceVerifier }
+  const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url')
   const redirectUri = `${process.env.API_URL ?? 'http://localhost:4000'}/api/v1/social-accounts/oauth/callback`
 
   const urls: Record<string, string> = {
     INSTAGRAM: `https://api.instagram.com/oauth/authorize?client_id=${process.env.INSTAGRAM_CLIENT_ID ?? 'INSTAGRAM_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user_profile,user_media&response_type=code&state=${state}`,
     FACEBOOK: `https://www.facebook.com/v19.0/dialog/oauth?client_id=${process.env.FACEBOOK_CLIENT_ID ?? 'FACEBOOK_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=pages_manage_posts,pages_read_engagement&response_type=code&state=${state}`,
-    X: `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${process.env.X_CLIENT_ID ?? 'X_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=tweet.read+tweet.write+users.read&state=${state}&code_challenge=challenge&code_challenge_method=plain`,
+    X: `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${process.env.X_CLIENT_ID ?? 'X_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=tweet.read+tweet.write+users.read&state=${state}&code_challenge=${pkceVerifier}&code_challenge_method=plain`,
     TIKTOK: `https://www.tiktok.com/v2/auth/authorize/?client_key=${process.env.TIKTOK_CLIENT_KEY ?? 'TIKTOK_CLIENT_KEY'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user.info.basic,video.upload&response_type=code&state=${state}`,
     GOOGLE: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID ?? 'GOOGLE_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=https://www.googleapis.com/auth/youtube.upload&response_type=code&state=${state}`,
   }
@@ -45,10 +48,11 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
   }
 
   try {
-    const { platform, workspaceId } = JSON.parse(Buffer.from(state, 'base64url').toString()) as {
+    const { platform, workspaceId, pkceVerifier } = JSON.parse(Buffer.from(state, 'base64url').toString()) as {
       platform: string
       workspaceId: string
       userId: string
+      pkceVerifier?: string
     }
     const redirectUri = `${process.env.API_URL ?? 'http://localhost:4000'}/api/v1/social-accounts/oauth/callback`
 
@@ -94,7 +98,7 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
           'Content-Type': 'application/x-www-form-urlencoded',
           Authorization: `Basic ${Buffer.from(`${process.env.X_CLIENT_ID}:${process.env.X_CLIENT_SECRET}`).toString('base64')}`,
         },
-        body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: 'challenge' }),
+        body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: pkceVerifier ?? 'challenge' }),
       })
       const tokenData = await tokenRes.json() as { access_token?: string }
       accessToken = tokenData.access_token ?? ''

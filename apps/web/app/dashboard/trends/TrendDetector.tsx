@@ -45,7 +45,7 @@ function saveCache(key: string, data: TrendResult) {
   try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })) } catch {}
 }
 
-export function TrendDetector() {
+export function TrendDetector({ token }: { token: string }) {
   const router = useRouter()
   const [niche, setNiche] = useState('')
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['Instagram', 'TikTok'])
@@ -55,12 +55,6 @@ export function TrendDetector() {
   const [copiedTag, setCopiedTag] = useState<string | null>(null)
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
-
-  function getToken() {
-    if (typeof document === 'undefined') return ''
-    const match = document.cookie.match(/token=([^;]+)/)
-    return match ? match[1] : ''
-  }
 
   function togglePlatform(p: string) {
     setSelectedPlatforms((prev) =>
@@ -78,7 +72,6 @@ export function TrendDetector() {
     setError(null)
     setResult(null)
     try {
-      const token = getToken()
       const res = await fetch(`${apiUrl}/api/v1/ai/trends`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

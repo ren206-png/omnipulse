@@ -15,7 +15,7 @@ export default async function TrendsPage() {
           Discover what&apos;s trending in your niche and get AI-powered content ideas.
         </p>
       </div>
-      <TrendDetector />
+      <TrendDetector token={token} />
     </div>
   )
 }
