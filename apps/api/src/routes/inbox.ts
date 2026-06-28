@@ -74,8 +74,13 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 })
 
-// POST /api/v1/inbox/seed?workspaceId=
+// POST /api/v1/inbox/seed?workspaceId= — dev/demo only, blocked in production
 router.post('/seed', async (req: Request, res: Response): Promise<void> => {
+  if (process.env.NODE_ENV === 'production') {
+    sendError(res, 403, 'FORBIDDEN', 'Seed endpoint is not available in production')
+    return
+  }
+
   const { workspaceId } = req.query as { workspaceId?: string }
 
   if (!workspaceId) {

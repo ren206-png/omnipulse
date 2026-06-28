@@ -186,6 +186,8 @@ model SharedReport {
   workspaceId String
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   label       String?
+  startDate   String?
+  endDate     String?
   expiresAt   DateTime?
   createdAt   DateTime  @default(now())
   createdBy   String

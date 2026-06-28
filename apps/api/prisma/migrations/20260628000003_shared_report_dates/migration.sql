@@ -1,0 +1,2 @@
+ALTER TABLE "SharedReport" ADD COLUMN IF NOT EXISTS "startDate" TEXT;
+ALTER TABLE "SharedReport" ADD COLUMN IF NOT EXISTS "endDate" TEXT;

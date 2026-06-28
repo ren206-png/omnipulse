@@ -10,10 +10,12 @@ const router = Router()
 
 // POST /api/v1/reports — create a shared report
 router.post('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
-  const { workspaceId, label, expiresAt } = req.body as {
+  const { workspaceId, label, expiresAt, startDate, endDate } = req.body as {
     workspaceId?: string
     label?: string
     expiresAt?: string
+    startDate?: string
+    endDate?: string
   }
 
   if (!workspaceId) {
@@ -35,6 +37,8 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
       data: {
         workspaceId,
         label: label ?? null,
+        startDate: startDate ?? null,
+        endDate: endDate ?? null,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         createdBy: req.user!.id,
       },
@@ -45,6 +49,8 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
         id: report.id,
         token: report.token,
         label: report.label,
+        startDate: report.startDate,
+        endDate: report.endDate,
         expiresAt: report.expiresAt,
         shareUrl: `${env.APP_URL}/reports/${report.token}`,
       },
@@ -80,10 +86,12 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
     })
 
     res.json({
-      reports: (reports as Array<{ id: string; token: string; label: string | null; expiresAt: Date | null; createdAt: Date }>).map((r) => ({
+      reports: (reports as Array<{ id: string; token: string; label: string | null; startDate: string | null; endDate: string | null; expiresAt: Date | null; createdAt: Date }>).map((r) => ({
         id: r.id,
         token: r.token,
         label: r.label,
+        startDate: r.startDate,
+        endDate: r.endDate,
         expiresAt: r.expiresAt,
         createdAt: r.createdAt,
         shareUrl: `${env.APP_URL}/reports/${r.token}`,
@@ -144,8 +152,11 @@ router.get('/public/:token', async (req: Request, res: Response): Promise<void> 
       return
     }
 
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    // Use stored date range if present, else default last 30 days
+    const rangeEnd = report.endDate ? new Date(report.endDate) : new Date()
+    const rangeStart = report.startDate
+      ? new Date(report.startDate)
+      : new Date(rangeEnd.getTime() - 30 * 24 * 60 * 60 * 1000)
 
     // Fetch social accounts with their latest snapshots
     const socialAccounts = await prisma.socialAccount.findMany({
@@ -158,12 +169,12 @@ router.get('/public/:token', async (req: Request, res: Response): Promise<void> 
       },
     })
 
-    // Published post count in last 30 days
+    // Published post count within the report's date range
     const publishedPostCount = await prisma.scheduledPost.count({
       where: {
         workspaceId: report.workspaceId,
         status: 'PUBLISHED',
-        scheduledFor: { gte: thirtyDaysAgo },
+        scheduledFor: { gte: rangeStart, lte: rangeEnd },
       },
     })
 
@@ -191,6 +202,9 @@ router.get('/public/:token', async (req: Request, res: Response): Promise<void> 
 
     res.json({
       workspaceName: report.workspace.name,
+      label: report.label,
+      startDate: report.startDate ?? rangeStart.toISOString().split('T')[0],
+      endDate: report.endDate ?? rangeEnd.toISOString().split('T')[0],
       generatedAt: new Date().toISOString(),
       publishedPostCount,
       snapshots,

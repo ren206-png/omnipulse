@@ -73,7 +73,7 @@ function GenerateReportModal({
   async function handleShare() {
     setSharing(true)
     try {
-      const body: Record<string, string> = { workspaceId }
+      const body: Record<string, string> = { workspaceId, startDate: config.startDate, endDate: config.endDate }
       if (config.label.trim()) body.label = config.label.trim()
       const res = await fetch(`${apiUrl}/api/v1/reports`, {
         method: 'POST',
