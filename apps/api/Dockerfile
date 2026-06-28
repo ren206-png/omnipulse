@@ -1,33 +1,33 @@
 FROM node:20-alpine AS base
 WORKDIR /app
-RUN npm install -g pnpm@9
 
 # ── Install dependencies ───────────────────────────────────────────────────────
 FROM base AS deps
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile
+COPY package.json ./
+RUN npm install --legacy-peer-deps --ignore-scripts
 
 # ── Build ──────────────────────────────────────────────────────────────────────
 FROM deps AS builder
 COPY . .
-# Generate Prisma client before compiling
-RUN npx prisma generate
-RUN pnpm build
+RUN ./node_modules/.bin/prisma generate
+RUN npm run build
 
 # ── Runtime ────────────────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 WORKDIR /app
-RUN npm install -g pnpm@9
 
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile --prod
+COPY package.json ./
+RUN npm install --legacy-peer-deps --ignore-scripts --omit=dev
 
-# Copy compiled output + generated prisma client
+# Copy compiled output + generated prisma client + migrations
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/generated ./generated
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 EXPOSE 4000
 ENV NODE_ENV=production
 
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/index.js"]
