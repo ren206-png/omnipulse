@@ -31,3 +31,5 @@ apps/mobile/ios/
 
 # Turbopack cache
 .turbo/
+pnpm-lock.yaml
+pnpm-workspace.yaml

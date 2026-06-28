@@ -5,7 +5,7 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm install --legacy-peer-deps"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["npm run build", "./node_modules/.bin/prisma generate"]
 
 [start]
 cmd = "node dist/index.js"
