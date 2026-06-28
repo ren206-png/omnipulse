@@ -9,8 +9,6 @@ RUN npm install --legacy-peer-deps --ignore-scripts
 COPY . .
 RUN ./node_modules/.bin/prisma generate
 RUN npm run build
-# Prisma generated files are at /app/generated but compiled imports expect /app/dist/generated
-RUN cp -r generated dist/generated
 
 EXPOSE 4000
 ENV NODE_ENV=production
