@@ -8,6 +8,7 @@ interface CompetitorSnapshot {
   id: string
   followers: number
   estimatedEngagement: number
+  source: string
   recordedAt: string
 }
 
@@ -30,20 +31,17 @@ const PLATFORM_COLORS: Record<string, string> = {
 }
 
 function Sparkline({ snapshots }: { snapshots: CompetitorSnapshot[] }) {
-  const points = [...snapshots].reverse().slice(-5)
-  if (points.length < 2) {
-    return <div className="text-xs text-muted-foreground">Not enough data</div>
-  }
+  const points = [...snapshots].reverse().slice(-6)
+  if (points.length < 2) return null
   const values = points.map((s) => s.followers)
   const min = Math.min(...values)
   const max = Math.max(...values)
   const range = max - min || 1
   const coords = values.map((v, i) => {
     const x = (i / (values.length - 1)) * 100
-    const y = 40 - ((v - min) / range) * 30
+    const y = 34 - ((v - min) / range) * 26
     return `${x},${y}`
   })
-  const pathD = `M ${coords.join(' L ')}`
   const isGrowing = values[values.length - 1] >= values[0]
   return (
     <svg viewBox="0 0 100 40" className="w-24 h-8" preserveAspectRatio="none">
@@ -59,17 +57,206 @@ function Sparkline({ snapshots }: { snapshots: CompetitorSnapshot[] }) {
   )
 }
 
+// ── Update Data modal ─────────────────────────────────────────────────────────
+function UpdateModal({
+  comp,
+  onSave,
+  onClose,
+}: {
+  comp: CompetitorAccount
+  onSave: (followers: number, engagementRate: number) => Promise<void>
+  onClose: () => void
+}) {
+  const latest = comp.snapshots[0]
+  const [followers, setFollowers] = useState(latest ? String(latest.followers) : '')
+  const [engagement, setEngagement] = useState(latest ? String(latest.estimatedEngagement) : '')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    const f = parseFloat(followers)
+    const e = parseFloat(engagement) || 0
+    if (isNaN(f) || f < 0) return
+    setSaving(true)
+    await onSave(f, e)
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-card border rounded-xl shadow-xl w-full max-w-sm p-6 space-y-5">
+        <div>
+          <h3 className="font-semibold text-base">Update Competitor Data</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            <span className="font-medium">@{comp.handle}</span> · {comp.platform}
+          </p>
+        </div>
+
+        <div className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          📋 Look up the current stats on {comp.platform} and enter them below. Data you enter is saved as a real snapshot.
+        </div>
+
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Followers</label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={followers}
+              onChange={(e) => setFollowers(e.target.value)}
+              placeholder="e.g. 24500"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Engagement Rate % <span className="text-muted-foreground font-normal">(optional)</span></label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={engagement}
+              onChange={(e) => setEngagement(e.target.value)}
+              placeholder="e.g. 3.2"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <p className="text-xs text-muted-foreground">Total interactions ÷ followers × 100</p>
+          </div>
+        </div>
+
+        <div className="flex gap-2 justify-end">
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button size="sm" onClick={handleSave} disabled={saving || !followers}>
+            {saving ? 'Saving…' : 'Save Snapshot'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Add competitor modal ──────────────────────────────────────────────────────
+function AddModal({
+  onAdd,
+  onClose,
+}: {
+  onAdd: (data: { platform: string; handle: string; displayName: string; followers: number | null; engagementRate: number | null }) => Promise<void>
+  onClose: () => void
+}) {
+  const [platform, setPlatform] = useState('INSTAGRAM')
+  const [handle, setHandle] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [followers, setFollowers] = useState('')
+  const [engagement, setEngagement] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault()
+    if (!handle.trim()) return
+    setAdding(true)
+    await onAdd({
+      platform,
+      handle: handle.trim(),
+      displayName: displayName.trim() || handle.trim(),
+      followers: followers ? parseFloat(followers) : null,
+      engagementRate: engagement ? parseFloat(engagement) : null,
+    })
+    setAdding(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="bg-card border rounded-xl shadow-xl w-full max-w-sm p-6 space-y-5">
+        <div>
+          <h3 className="font-semibold text-base">Track a Competitor</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">Add a social account to monitor over time.</p>
+        </div>
+
+        <form onSubmit={handleAdd} className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Platform</label>
+            <select
+              value={platform}
+              onChange={(e) => setPlatform(e.target.value)}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+            >
+              {PLATFORMS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Handle</label>
+            <input
+              type="text"
+              placeholder="@username"
+              value={handle}
+              onChange={(e) => setHandle(e.target.value)}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              required
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Display Name <span className="text-muted-foreground font-normal">(optional)</span></label>
+            <input
+              type="text"
+              placeholder="Brand Name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+
+          <div className="border-t pt-3 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Optionally enter their current stats to start tracking immediately.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Current Followers</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 50000"
+                  value={followers}
+                  onChange={(e) => setFollowers(e.target.value)}
+                  className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Engagement %</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  placeholder="e.g. 3.2"
+                  value={engagement}
+                  onChange={(e) => setEngagement(e.target.value)}
+                  className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end pt-1">
+            <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={adding}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={adding || !handle.trim()}>
+              {adding ? 'Adding…' : 'Add Competitor'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export function CompetitorTracker({ token }: { token: string }) {
   const { activeWorkspace } = useWorkspace()
   const [competitors, setCompetitors] = useState<CompetitorAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [platform, setPlatform] = useState('INSTAGRAM')
-  const [handle, setHandle] = useState('')
-  const [displayName, setDisplayName] = useState('')
-  const [addLoading, setAddLoading] = useState(false)
-  const [addError, setAddError] = useState<string | null>(null)
-  const [refreshLoading, setRefreshLoading] = useState<string | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [updateTarget, setUpdateTarget] = useState<CompetitorAccount | null>(null)
   const [removeLoading, setRemoveLoading] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -85,7 +272,6 @@ export function CompetitorTracker({ token }: { token: string }) {
     setLoading(true)
     setError(null)
     try {
-
       const res = await fetch(`${apiUrl}/api/v1/competitors?workspaceId=${activeWorkspace.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -97,60 +283,53 @@ export function CompetitorTracker({ token }: { token: string }) {
     } finally {
       setLoading(false)
     }
-  }, [activeWorkspace, apiUrl])
+  }, [activeWorkspace, apiUrl, token])
 
   useEffect(() => { fetchCompetitors() }, [fetchCompetitors])
 
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault()
-    if (!activeWorkspace || !handle.trim()) return
-    setAddLoading(true)
-    setAddError(null)
+  async function handleAdd(data: { platform: string; handle: string; displayName: string; followers: number | null; engagementRate: number | null }) {
+    if (!activeWorkspace) return
     try {
-
+      const body: Record<string, unknown> = { workspaceId: activeWorkspace.id, ...data }
+      if (data.followers !== null) body.followers = data.followers
+      if (data.engagementRate !== null) body.engagementRate = data.engagementRate
       const res = await fetch(`${apiUrl}/api/v1/competitors`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workspaceId: activeWorkspace.id, platform, handle: handle.trim(), displayName: displayName.trim() || handle.trim() }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) {
-        const body = (await res.json()) as { error?: string }
-        setAddError(body.error ?? 'Failed to add competitor')
+        const body2 = (await res.json()) as { error?: string }
+        showToast(body2.error ?? 'Failed to add competitor')
         return
       }
-      setHandle('')
-      setDisplayName('')
+      setShowAddModal(false)
       showToast('Competitor added!')
       fetchCompetitors()
     } catch {
-      setAddError('Network error')
-    } finally {
-      setAddLoading(false)
+      showToast('Network error')
     }
   }
 
-  async function handleRefresh(id: string) {
-    setRefreshLoading(id)
+  async function handleUpdate(comp: CompetitorAccount, followers: number, engagementRate: number) {
     try {
-
-      const res = await fetch(`${apiUrl}/api/v1/competitors/${id}/snapshot`, {
+      const res = await fetch(`${apiUrl}/api/v1/competitors/${comp.id}/snapshot`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ followers, engagementRate }),
       })
-      if (!res.ok) { showToast('Refresh failed'); return }
-      showToast('Data refreshed!')
+      if (!res.ok) { showToast('Failed to save snapshot'); return }
+      setUpdateTarget(null)
+      showToast('Snapshot saved!')
       fetchCompetitors()
     } catch {
       showToast('Network error')
-    } finally {
-      setRefreshLoading(null)
     }
   }
 
   async function handleRemove(id: string) {
     setRemoveLoading(id)
     try {
-
       const res = await fetch(`${apiUrl}/api/v1/competitors/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
@@ -177,51 +356,29 @@ export function CompetitorTracker({ token }: { token: string }) {
         </div>
       )}
 
-      {/* Add Competitor Form */}
-      <div className="rounded-xl border bg-card p-5 space-y-4">
-        <h2 className="font-semibold text-base">Track a Competitor</h2>
-        <form onSubmit={handleAdd} className="flex flex-wrap gap-3 items-end">
-          <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Platform</label>
-            <select
-              value={platform}
-              onChange={(e) => setPlatform(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground"
-            >
-              {PLATFORMS.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1 flex-1 min-w-36">
-            <label className="text-xs text-muted-foreground">Handle</label>
-            <input
-              type="text"
-              placeholder="@username"
-              value={handle}
-              onChange={(e) => setHandle(e.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground"
-              required
-            />
-          </div>
-          <div className="space-y-1 flex-1 min-w-36">
-            <label className="text-xs text-muted-foreground">Display Name (optional)</label>
-            <input
-              type="text"
-              placeholder="Brand Name"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-          <Button type="submit" disabled={addLoading || !handle.trim()} className="h-9">
-            {addLoading ? 'Adding…' : '+ Add Competitor'}
-          </Button>
-        </form>
-        {addError && <p className="text-xs text-destructive">{addError}</p>}
+      {showAddModal && (
+        <AddModal onAdd={handleAdd} onClose={() => setShowAddModal(false)} />
+      )}
+
+      {updateTarget && (
+        <UpdateModal
+          comp={updateTarget}
+          onSave={(f, e) => handleUpdate(updateTarget, f, e)}
+          onClose={() => setUpdateTarget(null)}
+        />
+      )}
+
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">
+            Manually track follower counts and engagement rates over time.
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setShowAddModal(true)}>+ Add Competitor</Button>
       </div>
 
-      {/* Competitor list */}
+      {/* Loading */}
       {loading && (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => <div key={i} className="h-28 rounded-xl bg-muted animate-pulse" />)}
@@ -238,7 +395,8 @@ export function CompetitorTracker({ token }: { token: string }) {
         <div className="rounded-xl border-2 border-dashed p-12 text-center space-y-3">
           <div className="text-4xl">🔍</div>
           <p className="font-semibold text-lg">No competitors tracked yet</p>
-          <p className="text-sm text-muted-foreground">Track your competitors to benchmark your growth</p>
+          <p className="text-sm text-muted-foreground">Add a competitor to start benchmarking your growth.</p>
+          <Button size="sm" onClick={() => setShowAddModal(true)}>+ Add Competitor</Button>
         </div>
       )}
 
@@ -247,9 +405,11 @@ export function CompetitorTracker({ token }: { token: string }) {
           {competitors.map((comp) => {
             const latest = comp.snapshots[0]
             const prev = comp.snapshots[1]
-            const followerDiff = latest && prev ? latest.followers - prev.followers : 0
-            const trend = followerDiff > 0 ? '↑' : followerDiff < 0 ? '↓' : '→'
-            const trendColor = followerDiff > 0 ? 'text-green-600' : followerDiff < 0 ? 'text-red-500' : 'text-muted-foreground'
+            const followerDiff = latest && prev ? latest.followers - prev.followers : null
+            const trend = followerDiff === null ? null : followerDiff > 0 ? '↑' : followerDiff < 0 ? '↓' : '→'
+            const trendColor = followerDiff === null ? '' : followerDiff > 0 ? 'text-green-600 dark:text-green-400' : followerDiff < 0 ? 'text-red-500' : 'text-muted-foreground'
+            const isManual = latest?.source === 'MANUAL'
+
             return (
               <div key={comp.id} className="rounded-xl border bg-card p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
@@ -266,26 +426,32 @@ export function CompetitorTracker({ token }: { token: string }) {
                 </div>
 
                 {latest ? (
-                  <div className="flex gap-4 text-sm">
+                  <div className="flex gap-4 text-sm items-end">
                     <div>
-                      <p className="text-xs text-muted-foreground">Followers</p>
-                      <p className="font-semibold">
+                      <p className="text-xs text-muted-foreground mb-0.5">Followers</p>
+                      <p className="font-semibold tabular-nums">
                         {latest.followers.toLocaleString()}
-                        <span className={`ml-1 text-xs ${trendColor}`}>{trend}</span>
-                        {followerDiff !== 0 && (
-                          <span className={`ml-0.5 text-xs ${trendColor}`}>
-                            {Math.abs(followerDiff).toLocaleString()}
+                        {trend && (
+                          <span className={`ml-1.5 text-xs font-normal ${trendColor}`}>
+                            {trend} {followerDiff !== null && Math.abs(followerDiff) > 0 && Math.abs(followerDiff).toLocaleString()}
                           </span>
                         )}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Engagement</p>
-                      <p className="font-semibold">{latest.estimatedEngagement.toFixed(2)}%</p>
+                    {latest.estimatedEngagement > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-0.5">Engagement</p>
+                        <p className="font-semibold">{latest.estimatedEngagement.toFixed(2)}%</p>
+                      </div>
+                    )}
+                    <div className="ml-auto">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isManual ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-muted text-muted-foreground'}`}>
+                        {isManual ? '✓ Real data' : 'No data yet'}
+                      </span>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">No snapshot data yet</p>
+                  <p className="text-xs text-muted-foreground italic">No data yet — click Update to add stats.</p>
                 )}
 
                 <div className="flex gap-2 pt-1">
@@ -293,10 +459,9 @@ export function CompetitorTracker({ token }: { token: string }) {
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs"
-                    onClick={() => handleRefresh(comp.id)}
-                    disabled={refreshLoading === comp.id}
+                    onClick={() => setUpdateTarget(comp)}
                   >
-                    {refreshLoading === comp.id ? 'Refreshing…' : 'Refresh'}
+                    Update Data
                   </Button>
                   <Button
                     size="sm"

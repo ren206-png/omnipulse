@@ -360,6 +360,7 @@ model CompetitorSnapshot {
   competitorAccount   CompetitorAccount  @relation(fields: [competitorAccountId], references: [id], onDelete: Cascade)
   followers           Int                @default(0)
   estimatedEngagement Float              @default(0)
+  source              String             @default("ESTIMATED")
   recordedAt          DateTime           @default(now())
   @@index([competitorAccountId, recordedAt])
 }
