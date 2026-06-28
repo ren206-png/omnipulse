@@ -14,4 +14,4 @@ EXPOSE 4000
 ENV NODE_ENV=production
 
 # Run migrations then start server
-CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/src/index.js"]

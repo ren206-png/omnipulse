@@ -8,4 +8,4 @@ cmds = ["npm install --legacy-peer-deps --ignore-scripts"]
 cmds = ["./node_modules/.bin/prisma generate", "npm run build"]
 
 [start]
-cmd = "./node_modules/.bin/prisma migrate deploy && node dist/index.js"
+cmd = "./node_modules/.bin/prisma migrate deploy && node dist/src/index.js"
