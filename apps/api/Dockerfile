@@ -9,9 +9,10 @@ RUN npm install --legacy-peer-deps --ignore-scripts
 COPY . .
 RUN ./node_modules/.bin/prisma generate
 RUN npm run build
+# Prisma generated files are at /app/generated but compiled imports expect /app/dist/generated
+RUN cp -r generated dist/generated
 
 EXPOSE 4000
 ENV NODE_ENV=production
 
-# Run migrations then start server
-CMD ["sh", "-c", "echo '=== ENV CHECK ===' && echo PORT=$PORT && echo NODE_ENV=$NODE_ENV && echo DB=${DATABASE_URL:0:30} && echo REDIS=${REDIS_URL:0:20} && echo JWT=${JWT_SECRET:0:8} && echo '=== STARTING ===' && node dist/src/index.js 2>&1"]
+CMD ["node", "dist/src/index.js"]
