@@ -32,6 +32,18 @@ import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
 import { sendWeeklyDigest } from './lib/digest.js'
 
+// Run DB migrations on startup (safe to run repeatedly)
+async function runMigrations() {
+  const { execSync } = await import('child_process')
+  try {
+    execSync('./node_modules/.bin/prisma migrate deploy', { stdio: 'inherit' })
+  } catch (e) {
+    console.error('Migration failed:', e)
+    process.exit(1)
+  }
+}
+await runMigrations()
+
 const app = express()
 
 app.use(cors({
