@@ -45,11 +45,12 @@ function BioPreview({ slug, title, bio, avatarUrl, theme, links }: {
   theme: string
   links: BioLink[]
 }) {
-  const themeConfig = {
+  const themes: Record<string, { bg: string; card: string; text: string; sub: string; btn: string; btnText: string }> = {
     light: { bg: 'bg-gradient-to-br from-gray-100 to-gray-200', card: 'bg-white', text: 'text-gray-900', sub: 'text-gray-500', btn: 'bg-gray-900', btnText: 'text-white' },
     dark: { bg: 'bg-gradient-to-br from-slate-900 to-slate-800', card: 'bg-slate-800', text: 'text-white', sub: 'text-slate-400', btn: 'bg-white', btnText: 'text-gray-900' },
     gradient: { bg: 'bg-gradient-to-br from-purple-600 to-blue-500', card: 'bg-white/10', text: 'text-white', sub: 'text-white/70', btn: 'bg-white/20 border border-white/30', btnText: 'text-white' },
-  }[theme] ?? themeConfig.light
+  }
+  const themeConfig = themes[theme] ?? themes.light
 
   const activeLinks = links.filter((l) => l.active)
 
