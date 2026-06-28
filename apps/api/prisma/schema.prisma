@@ -1,0 +1,366 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                   String                @id @default(cuid())
+  email                String                @unique
+  passwordHash         String
+  role                 Role                  @default(MEMBER)
+  createdAt            DateTime              @default(now())
+  workspaces           Workspace[]
+  workspaceMemberships WorkspaceMember[]
+  notifications        Notification[]
+  passwordResetToken   String?               @unique
+  passwordResetExpires DateTime?
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Workspace {
+  id                     String               @id @default(cuid())
+  name                   String
+  ownerId                String
+  owner                  User                 @relation(fields: [ownerId], references: [id])
+  socialAccounts         SocialAccount[]
+  posts                  ScheduledPost[]
+  members                WorkspaceMember[]
+  invitations            WorkspaceInvitation[]
+  templates              ContentTemplate[]
+  sharedReports          SharedReport[]
+  bioPage                BioPage?
+  inboxMessages          InboxMessage[]
+  activityLogs           ActivityLog[]
+  rssFeeds               RssFeed[]
+  webhooks               WebhookEndpoint[]
+  apiKeys                ApiKey[]
+  clientPortal           ClientPortal?
+  competitors            CompetitorAccount[]
+  plan                   Plan                 @default(FREE)
+  stripeCustomerId       String?              @unique
+  stripeSubscriptionId   String?              @unique
+  subscriptionStatus     String?
+  onboardingComplete     Boolean              @default(false)
+  brandName              String?
+  brandLogoUrl           String?
+  brandColor             String?              @default("#6366f1")
+  customDomain           String?              @unique
+}
+
+enum Plan {
+  FREE
+  PRO
+  AGENCY
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+
+  @@unique([workspaceId, userId])
+}
+
+model WorkspaceInvitation {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email       String
+  role        WorkspaceRole @default(MEMBER)
+  token       String        @unique @default(cuid())
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@unique([workspaceId, email])
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model SocialAccount {
+  id                String              @id @default(cuid())
+  workspaceId       String
+  workspace         Workspace           @relation(fields: [workspaceId], references: [id])
+  platform          Platform
+  accessToken       String
+  externalProfileId String
+  snapshots         AnalyticsSnapshot[]
+  inboxMessages     InboxMessage[]
+}
+
+enum Platform {
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+  X
+  GOOGLE
+}
+
+model ScheduledPost {
+  id                String      @id @default(cuid())
+  workspaceId       String
+  workspace         Workspace   @relation(fields: [workspaceId], references: [id])
+  content           String
+  mediaUrls         String[]
+  platforms         Platform[]
+  scheduledFor      DateTime
+  status            PostStatus  @default(DRAFT)
+  errorLog          String?
+  responseLog       String?
+  reviewNote        String?
+  submittedBy       String?
+  reviewedBy        String?
+  createdAt         DateTime    @default(now())
+  evergreen         Boolean     @default(false)
+  evergreenInterval Int?
+  evergreenParentId String?
+  queuePosition     Int?
+  utmSource         String?
+  utmMedium         String?
+  utmCampaign       String?
+  firstComment      String?
+  abVariantOf       String?
+  abTestActive      Boolean     @default(false)
+  metrics           PostMetric[]
+}
+
+model PostMetric {
+  id           String        @id @default(cuid())
+  postId       String
+  post         ScheduledPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform     Platform
+  likes        Int           @default(0)
+  comments     Int           @default(0)
+  shares       Int           @default(0)
+  reach        Int           @default(0)
+  impressions  Int           @default(0)
+  recordedAt   DateTime      @default(now())
+
+  @@unique([postId, platform])
+  @@index([postId])
+}
+
+enum PostStatus {
+  DRAFT
+  QUEUED
+  PENDING_REVIEW
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  FAILED
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String
+  title       String
+  body        String
+  link        String?
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+model SharedReport {
+  id          String    @id @default(cuid())
+  token       String    @unique @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  label       String?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  createdBy   String
+}
+
+model ContentTemplate {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  content     String
+  platforms   Platform[]
+  category    String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AnalyticsSnapshot {
+  id              String        @id @default(cuid())
+  socialAccountId String
+  socialAccount   SocialAccount @relation(fields: [socialAccountId], references: [id])
+  followers       Int
+  impressions     Int
+  engagementRate  Float
+  recordedAt      DateTime      @default(now())
+}
+
+model InboxMessage {
+  id              String             @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  socialAccountId String
+  socialAccount   SocialAccount      @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  platform        Platform
+  externalId      String
+  authorName      String
+  authorHandle    String?
+  content         String
+  type            InboxMessageType   @default(COMMENT)
+  status          InboxMessageStatus @default(UNREAD)
+  reply           String?
+  repliedAt       DateTime?
+  createdAt       DateTime           @default(now())
+
+  @@unique([socialAccountId, externalId])
+  @@index([workspaceId, status])
+}
+
+enum InboxMessageType {
+  COMMENT
+  MENTION
+  DM
+}
+
+enum InboxMessageStatus {
+  UNREAD
+  READ
+  REPLIED
+  DISMISSED
+}
+
+model BioPage {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  slug        String    @unique
+  title       String
+  bio         String?
+  avatarUrl   String?
+  theme       String    @default("light")
+  views       Int       @default(0)
+  links       BioLink[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model BioLink {
+  id        String   @id @default(cuid())
+  bioPageId String
+  bioPage   BioPage  @relation(fields: [bioPageId], references: [id], onDelete: Cascade)
+  title     String
+  url       String
+  icon      String?
+  clicks    Int      @default(0)
+  active    Boolean  @default(true)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  userEmail   String
+  action      String
+  targetId    String?
+  targetType  String?
+  details     String?
+  createdAt   DateTime  @default(now())
+  @@index([workspaceId, createdAt])
+}
+
+model RssFeed {
+  id            String     @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  url           String
+  name          String
+  platforms     Platform[]
+  active        Boolean    @default(true)
+  checkInterval Int        @default(60)
+  lastCheckedAt DateTime?
+  lastItemGuid  String?
+  createdAt     DateTime   @default(now())
+  @@unique([workspaceId, url])
+}
+
+model WebhookEndpoint {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  url         String
+  secret      String
+  events      String[]
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  @@index([workspaceId])
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  keyHash     String    @unique
+  keyPrefix   String
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  @@index([workspaceId])
+}
+
+model ClientPortal {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  token       String    @unique @default(cuid())
+  clientName  String?
+  clientEmail String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model CompetitorAccount {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  platform    Platform
+  handle      String
+  displayName String?
+  snapshots   CompetitorSnapshot[]
+  createdAt   DateTime  @default(now())
+  @@unique([workspaceId, platform, handle])
+}
+
+model CompetitorSnapshot {
+  id                  String             @id @default(cuid())
+  competitorAccountId String
+  competitorAccount   CompetitorAccount  @relation(fields: [competitorAccountId], references: [id], onDelete: Cascade)
+  followers           Int                @default(0)
+  estimatedEngagement Float              @default(0)
+  recordedAt          DateTime           @default(now())
+  @@index([competitorAccountId, recordedAt])
+}
