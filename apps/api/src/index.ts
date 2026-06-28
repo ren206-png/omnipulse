@@ -29,6 +29,7 @@ import clientPortalRouter from './routes/clientPortal.js'
 import digestRouter from './routes/digest.js'
 import competitorsRouter from './routes/competitors.js'
 import adminRouter from './routes/admin.js'
+import onboardingRouter from './routes/onboarding.js'
 import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
 import { sendWeeklyDigest } from './lib/digest.js'
@@ -84,6 +85,7 @@ app.use('/api/v1/client-portal', clientPortalRouter)
 app.use('/api/v1/digest', digestRouter)
 app.use('/api/v1/competitors', competitorsRouter)
 app.use('/api/v1/admin', adminRouter)
+app.use('/api/v1/onboarding', onboardingRouter)
 app.use('/uploads', express.static('public/uploads'))
 
 app.listen(env.PORT, () => {

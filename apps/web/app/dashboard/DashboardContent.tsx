@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useWorkspace } from './context/WorkspaceContext'
 import { PostPerformanceChart } from './PostPerformanceChart'
+import { OnboardingChecklist } from './OnboardingChecklist'
+import { BestTimesWidget } from './BestTimesWidget'
 import { startOfMonth, endOfMonth, isWithinInterval, format, formatDistanceToNow } from 'date-fns'
 
 interface PostMetric {
@@ -211,6 +213,9 @@ export function DashboardContent({ token }: { token: string }) {
 
   return (
     <>
+      {/* Onboarding checklist — auto-hides when dismissed or all done */}
+      <OnboardingChecklist token={token} />
+
       {/* Metric cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {loading ? (
@@ -325,6 +330,9 @@ export function DashboardContent({ token }: { token: string }) {
           </div>
         </div>
       )}
+
+      {/* Best times to post */}
+      <BestTimesWidget token={token} />
 
       {/* Performance chart */}
       <div className="space-y-3">
