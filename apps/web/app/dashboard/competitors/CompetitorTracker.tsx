@@ -59,7 +59,7 @@ function Sparkline({ snapshots }: { snapshots: CompetitorSnapshot[] }) {
   )
 }
 
-export function CompetitorTracker() {
+export function CompetitorTracker({ token }: { token: string }) {
   const { activeWorkspace } = useWorkspace()
   const [competitors, setCompetitors] = useState<CompetitorAccount[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,12 +75,6 @@ export function CompetitorTracker() {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
 
-  function getToken() {
-    if (typeof document === 'undefined') return ''
-    const match = document.cookie.match(/token=([^;]+)/)
-    return match ? match[1] : ''
-  }
-
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 3500)
@@ -91,7 +85,7 @@ export function CompetitorTracker() {
     setLoading(true)
     setError(null)
     try {
-      const token = getToken()
+
       const res = await fetch(`${apiUrl}/api/v1/competitors?workspaceId=${activeWorkspace.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -113,7 +107,7 @@ export function CompetitorTracker() {
     setAddLoading(true)
     setAddError(null)
     try {
-      const token = getToken()
+
       const res = await fetch(`${apiUrl}/api/v1/competitors`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -138,7 +132,7 @@ export function CompetitorTracker() {
   async function handleRefresh(id: string) {
     setRefreshLoading(id)
     try {
-      const token = getToken()
+
       const res = await fetch(`${apiUrl}/api/v1/competitors/${id}/snapshot`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -156,7 +150,7 @@ export function CompetitorTracker() {
   async function handleRemove(id: string) {
     setRemoveLoading(id)
     try {
-      const token = getToken()
+
       const res = await fetch(`${apiUrl}/api/v1/competitors/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },

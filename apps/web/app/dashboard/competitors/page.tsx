@@ -15,7 +15,7 @@ export default async function CompetitorsPage() {
           Monitor your competitors&apos; follower growth and engagement rates.
         </p>
       </div>
-      <CompetitorTracker />
+      <CompetitorTracker token={token} />
     </div>
   )
 }

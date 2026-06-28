@@ -123,7 +123,15 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
       const tokenData = await tokenRes.json() as { access_token?: string; open_id?: string }
       accessToken = tokenData.access_token ?? ''
       externalProfileId = tokenData.open_id ?? ''
-      profileName = externalProfileId
+      if (accessToken && externalProfileId) {
+        try {
+          const profileRes = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=display_name,username', {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          })
+          const profileData = await profileRes.json() as { data?: { user?: { display_name?: string; username?: string } } }
+          profileName = profileData.data?.user?.display_name ?? profileData.data?.user?.username ?? externalProfileId
+        } catch { profileName = externalProfileId }
+      } else { profileName = externalProfileId }
     } else if (platform === 'GOOGLE') {
       const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
