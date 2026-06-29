@@ -17,6 +17,9 @@ model User {
   notifications        Notification[]
   passwordResetToken   String?               @unique
   passwordResetExpires DateTime?
+  twoFactorSecret      String?
+  twoFactorEnabled     Boolean               @default(false)
+  twoFactorBackupCodes String[]
 }
 
 enum Role {

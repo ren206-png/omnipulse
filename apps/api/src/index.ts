@@ -42,6 +42,7 @@ import competitorsRouter from './routes/competitors.js'
 import adminRouter from './routes/admin.js'
 import onboardingRouter from './routes/onboarding.js'
 import queueSlotsRouter from './routes/queueSlots.js'
+import { twoFactorRouter } from './routes/twoFactor.js'
 import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
 import { sendWeeklyDigest } from './lib/digest.js'
@@ -99,6 +100,7 @@ app.use('/api/v1/competitors', competitorsRouter)
 app.use('/api/v1/admin', adminRouter)
 app.use('/api/v1/onboarding', onboardingRouter)
 app.use('/api/v1/queue-slots', queueSlotsRouter)
+app.use('/api/v1/2fa', twoFactorRouter)
 app.use('/uploads', express.static('public/uploads'))
 
 // Sentry error handler — must be after all routes

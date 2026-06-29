@@ -9,6 +9,12 @@ import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 import { rateLimit } from '../middleware/rateLimit.js'
 import { sendPasswordResetEmail } from '../lib/email.js'
+import { TOTP, Secret } from 'otpauth'
+
+function verifyTOTP(secret: string, token: string): boolean {
+  const totp = new TOTP({ secret: Secret.fromBase32(secret), algorithm: 'SHA1', digits: 6, period: 30 })
+  return totp.validate({ token, window: 1 }) !== null
+}
 
 const router = Router()
 
@@ -96,6 +102,17 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
       return
     }
 
+    // If 2FA is enabled, return a short-lived intermediate token instead
+    if (user.twoFactorEnabled) {
+      const twoFactorToken = jwt.sign(
+        { id: user.id, twoFactor: true },
+        env.JWT_SECRET,
+        { expiresIn: '5m' },
+      )
+      res.json({ requiresTwoFactor: true, twoFactorToken })
+      return
+    }
+
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       env.JWT_SECRET,
@@ -106,6 +123,64 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
     res.json({ token, user: { id: user.id, email: user.email, role: user.role } })
   } catch (err) {
     logger.error({ err }, 'Login error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Login failed')
+  }
+})
+
+// POST /api/v1/auth/2fa/verify-login — complete login when 2FA is enabled
+router.post('/2fa/verify-login', authLimiter, async (req: Request, res: Response): Promise<void> => {
+  const { twoFactorToken, code } = req.body as { twoFactorToken?: string; code?: string }
+  if (!twoFactorToken || !code) {
+    sendError(res, 400, 'MISSING_FIELDS', 'twoFactorToken and code are required')
+    return
+  }
+  try {
+    let payload: { id: string; twoFactor?: boolean }
+    try {
+      payload = jwt.verify(twoFactorToken, env.JWT_SECRET) as { id: string; twoFactor?: boolean }
+    } catch {
+      sendError(res, 401, 'INVALID_TOKEN', 'Invalid or expired two-factor token')
+      return
+    }
+    if (!payload.twoFactor) {
+      sendError(res, 400, 'INVALID_TOKEN', 'Token is not a two-factor token')
+      return
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+      select: { id: true, email: true, role: true, twoFactorSecret: true, twoFactorBackupCodes: true, twoFactorEnabled: true },
+    })
+    if (!user?.twoFactorEnabled || !user.twoFactorSecret) {
+      sendError(res, 400, 'NOT_ENABLED', '2FA is not enabled for this account')
+      return
+    }
+
+    // Accept TOTP code or a backup code
+    const validTotp = verifyTOTP(user.twoFactorSecret, code)
+    const backupIdx = user.twoFactorBackupCodes.indexOf(code.toUpperCase())
+    if (!validTotp && backupIdx === -1) {
+      sendError(res, 401, 'INVALID_CODE', 'Invalid or expired code')
+      return
+    }
+
+    // Consume backup code if used
+    if (backupIdx !== -1) {
+      const updated = [...user.twoFactorBackupCodes]
+      updated.splice(backupIdx, 1)
+      await prisma.user.update({ where: { id: user.id }, data: { twoFactorBackupCodes: updated } })
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      env.JWT_SECRET,
+      { expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] },
+    )
+
+    logger.info({ userId: user.id }, 'User logged in via 2FA')
+    res.json({ token, user: { id: user.id, email: user.email, role: user.role } })
+  } catch (err) {
+    logger.error({ err }, '2FA verify-login error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Login failed')
   }
 })

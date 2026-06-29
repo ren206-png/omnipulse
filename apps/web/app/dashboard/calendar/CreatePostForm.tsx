@@ -214,7 +214,7 @@ function SparkleIcon() {
 function makeVariants(masterContent: string): Record<VariantPlatform, PlatformVariant> {
   return Object.fromEntries(
     VARIANT_PLATFORMS.map((p) => [p, { platform: p, content: masterContent, hashtags: [], mediaUrls: [] }])
-  ) as Record<VariantPlatform, PlatformVariant>
+  ) as unknown as Record<VariantPlatform, PlatformVariant>
 }
 
 export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, onClose }: Props) {
@@ -234,20 +234,6 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   const activeVariantPlatforms = selectedPlatforms.filter((p): p is VariantPlatform =>
     (VARIANT_PLATFORMS as readonly string[]).includes(p)
   )
-
-  // Keep variants seeded with master content when master changes (only if user hasn't customised)
-  const handleContentChange = (newContent: string) => {
-    setContent(newContent)
-    setVariants((prev) => {
-      const updated = { ...prev }
-      for (const p of VARIANT_PLATFORMS) {
-        if (prev[p].content === content) {
-          updated[p] = { ...prev[p], content: newContent }
-        }
-      }
-      return updated
-    })
-  }
 
   function updateVariant(platform: VariantPlatform, patch: Partial<PlatformVariant>) {
     setVariants((prev) => ({ ...prev, [platform]: { ...prev[platform], ...patch } }))
@@ -357,6 +343,16 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
 
   const handleContentChange = (value: string) => {
     setContent(value)
+    // Keep variants seeded with master content when master changes (only if not yet customised)
+    setVariants((prev) => {
+      const updated = { ...prev }
+      for (const p of VARIANT_PLATFORMS) {
+        if (prev[p].content === content) {
+          updated[p] = { ...prev[p], content: value }
+        }
+      }
+      return updated
+    })
     // Auto-close score panel if content has changed significantly from what was scored
     if (scoreOpen && scoreContentRef.current) {
       const diff = Math.abs(value.length - scoreContentRef.current.length)
