@@ -25,6 +25,7 @@ const NAV_LINKS = [
   { href: '/dashboard/templates', label: 'Templates' },
   { href: '/dashboard/bio', label: 'Link in Bio' },
   { href: '/dashboard/analytics', label: 'Analytics' },
+  { href: '/dashboard/insights', label: '💡 Insights' },
   { href: '/dashboard/hashtags', label: 'Hashtags' },
   { href: '/dashboard/inbox', label: 'Inbox' },
   { href: '/dashboard/competitors', label: 'Competitors', icon: '🔍' },

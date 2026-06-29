@@ -154,4 +154,106 @@ router.post('/sync', async (req: Request, res: Response): Promise<void> => {
   res.json({ message: 'Sync started' })
 })
 
+// GET /api/v1/analytics/insights?workspaceId=&days=30
+// Returns aggregated content performance insights
+router.get('/insights', async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId, days = '30' } = req.query as { workspaceId?: string; days?: string }
+  if (!workspaceId) {
+    sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId query param is required')
+    return
+  }
+
+  try {
+    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    if (!workspace) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+
+    const daysNum = Math.min(Math.max(parseInt(days, 10) || 30, 7), 365)
+    const since = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000)
+
+    const posts = await (prisma.scheduledPost.findMany as Function)({
+      where: { workspaceId, status: 'PUBLISHED', scheduledFor: { gte: since } },
+      include: { metrics: true },
+      orderBy: { scheduledFor: 'desc' },
+    })
+
+    type Post = {
+      id: string; content: string; platforms: string[]; scheduledFor: Date
+      metrics: { platform: string; likes: number; comments: number; shares: number; reach: number }[]
+    }
+
+    const typedPosts = posts as Post[]
+
+    // Overall totals
+    let totalLikes = 0, totalComments = 0, totalShares = 0, totalReach = 0
+    for (const p of typedPosts) {
+      for (const m of p.metrics) {
+        totalLikes += m.likes; totalComments += m.comments; totalShares += m.shares; totalReach += m.reach
+      }
+    }
+
+    // Platform breakdown
+    const byPlatform: Record<string, { posts: number; likes: number; comments: number; shares: number; reach: number }> = {}
+    for (const p of typedPosts) {
+      for (const platform of p.platforms) {
+        if (!byPlatform[platform]) byPlatform[platform] = { posts: 0, likes: 0, comments: 0, shares: 0, reach: 0 }
+        byPlatform[platform].posts++
+        const m = p.metrics.find((x) => x.platform === platform)
+        if (m) {
+          byPlatform[platform].likes += m.likes
+          byPlatform[platform].comments += m.comments
+          byPlatform[platform].shares += m.shares
+          byPlatform[platform].reach += m.reach
+        }
+      }
+    }
+
+    // Content length buckets: short (<100), medium (100-280), long (>280)
+    const buckets = { short: { count: 0, engagement: 0 }, medium: { count: 0, engagement: 0 }, long: { count: 0, engagement: 0 } }
+    for (const p of typedPosts) {
+      const eng = p.metrics.reduce((sum, m) => sum + m.likes + m.comments + m.shares, 0)
+      const bucket = p.content.length < 100 ? 'short' : p.content.length <= 280 ? 'medium' : 'long'
+      buckets[bucket].count++
+      buckets[bucket].engagement += eng
+    }
+    const contentLength = Object.entries(buckets).map(([label, { count, engagement }]) => ({
+      label: label === 'short' ? 'Short (<100 chars)' : label === 'medium' ? 'Medium (100-280)' : 'Long (>280)',
+      count,
+      avgEngagement: count > 0 ? Math.round(engagement / count) : 0,
+    }))
+
+    // Top 5 posts by engagement
+    const topPosts = typedPosts
+      .map((p) => ({
+        id: p.id,
+        content: p.content.slice(0, 120) + (p.content.length > 120 ? '…' : ''),
+        platforms: p.platforms,
+        scheduledFor: p.scheduledFor,
+        engagement: p.metrics.reduce((sum, m) => sum + m.likes + m.comments + m.shares, 0),
+        reach: p.metrics.reduce((sum, m) => sum + m.reach, 0),
+      }))
+      .sort((a, b) => b.engagement - a.engagement)
+      .slice(0, 5)
+
+    // Posts per day (for sparkline / trend)
+    const byDay: Record<string, number> = {}
+    for (const p of typedPosts) {
+      const day = p.scheduledFor.toISOString().slice(0, 10)
+      byDay[day] = (byDay[day] ?? 0) + 1
+    }
+    const postTrend = Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count }))
+
+    res.json({
+      period: { days: daysNum, since },
+      summary: { totalPosts: typedPosts.length, totalLikes, totalComments, totalShares, totalReach },
+      platformBreakdown: Object.entries(byPlatform).map(([platform, stats]) => ({ platform, ...stats })),
+      contentLength,
+      topPosts,
+      postTrend,
+    })
+  } catch (err) {
+    logger.error({ err }, 'Insights fetch error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch insights')
+  }
+})
+
 export default router
