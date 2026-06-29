@@ -13,7 +13,7 @@ import { getNextAvailableSlot } from '../lib/queueScheduler.js'
 import { sendPostSubmittedEmail, sendPostApprovedEmail, sendPostRejectedEmail } from '../lib/email.js'
 
 const router = Router()
-const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE'] as const
+const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
 
 router.use(requireAuth)
 

@@ -64,7 +64,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     sendError(res, 400, 'INVALID_FIELD', `Invalid IANA timezone: "${timezone}"`); return
   }
 
-  const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE']
+  const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN']
   if (platform && !VALID_PLATFORMS.includes(platform)) {
     sendError(res, 400, 'INVALID_PLATFORM', `Invalid platform: "${platform}"`); return
   }
@@ -132,7 +132,7 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
       updates.timezone = timezone
     }
     if (platform !== undefined) {
-      const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE']
+      const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN']
       if (platform !== null && !VALID_PLATFORMS.includes(platform)) {
         sendError(res, 400, 'INVALID_PLATFORM', `Invalid platform: "${platform}"`); return
       }

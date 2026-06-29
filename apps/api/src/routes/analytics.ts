@@ -83,7 +83,7 @@ router.get('/best-times', async (req: Request, res: Response): Promise<void> => 
     }
 
     // Always show all supported platforms; merge workspace data with benchmarks
-    const ALL_PLATFORMS = ['INSTAGRAM', 'FACEBOOK', 'X', 'TIKTOK']
+    const ALL_PLATFORMS = ['INSTAGRAM', 'FACEBOOK', 'X', 'TIKTOK', 'LINKEDIN']
     const platforms = Array.from(new Set([...ALL_PLATFORMS, ...Object.keys(hoursByPlatform)]))
 
     const recommendations = platforms.map((platform) =>

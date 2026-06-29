@@ -1,10 +1,14 @@
 import 'dotenv/config'
 import { Worker } from 'bullmq'
+import IORedis from 'ioredis'
 import { prisma } from '../lib/prisma.js'
 import { logger } from '../lib/logger.js'
 import { redisConnection } from '../lib/queue.js'
 import { notify } from '../lib/notify.js'
 import { emitWebhook } from '../lib/webhookEmitter.js'
+import { decryptToken } from '../lib/tokenEncryption.js'
+import { isLinkedInTokenExpired, refreshLinkedInToken } from '../lib/linkedinToken.js'
+import { publishLinkedInText, publishLinkedInImage, publishLinkedInVideo } from '../lib/linkedinPublisher.js'
 
 async function publishToPlatform(
   post: { content: string; mediaUrls: string[] },
@@ -75,6 +79,44 @@ async function publishToPlatform(
   return `${platform}_manual_required`
 }
 
+// ── LinkedIn per-user daily rate limit (95 posts/day conservative) ───────────
+let _liRedis: IORedis | null = null
+function getLiRedis(): IORedis {
+  if (!_liRedis) {
+    _liRedis = new IORedis({
+      host: redisConnection.host,
+      port: redisConnection.port,
+      password: redisConnection.password,
+      db: redisConnection.db,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      lazyConnect: true,
+    })
+  }
+  return _liRedis
+}
+
+async function checkLinkedInRateLimit(userId: string): Promise<boolean> {
+  try {
+    const redis = getLiRedis()
+    const today = new Date().toISOString().slice(0, 10)
+    const count = await redis.get(`linkedin:posts:${userId}:${today}`)
+    return (parseInt(count ?? '0', 10)) < 95
+  } catch {
+    return true // fail open — don't block if Redis unavailable
+  }
+}
+
+async function incrementLinkedInRateLimit(userId: string): Promise<void> {
+  try {
+    const redis = getLiRedis()
+    const today = new Date().toISOString().slice(0, 10)
+    const key = `linkedin:posts:${userId}:${today}`
+    await redis.incr(key)
+    await redis.expire(key, 90000) // 25 hours TTL
+  } catch { /* non-critical */ }
+}
+
 const worker = new Worker(
   'publish-post',
   async (job) => {
@@ -91,6 +133,17 @@ const worker = new Worker(
     // Fetch social accounts for this workspace that match the post's platforms
     const accounts = await prisma.socialAccount.findMany({
       where: { workspaceId: post.workspaceId, platform: { in: post.platforms } },
+      select: {
+        id: true,
+        platform: true,
+        accessToken: true,
+        refreshToken: true,
+        tokenExpiresAt: true,
+        externalProfileId: true,
+        workspaceId: true,
+        linkedinPersonUrn: true,
+        linkedinOrganizationUrns: true,
+      },
     })
 
     const responseLog: Record<string, string> = {}
@@ -117,6 +170,115 @@ const worker = new Worker(
           : variant.content
         : post.content
       const mediaUrls = variant?.mediaUrls?.length > 0 ? variant.mediaUrls : post.mediaUrls
+      // ── LinkedIn: special dispatch path ────────────────────────────────────
+      if (platform === 'LINKEDIN') {
+        try {
+          // Guard: personUrn must be stored
+          const liAccount = account as typeof account & {
+            linkedinPersonUrn?: string | null
+            tokenExpiresAt?: Date | null
+            refreshToken?: string | null
+          }
+          if (!liAccount.linkedinPersonUrn) {
+            errors[platform] = 'linkedin_not_connected'
+            continue
+          }
+
+          // Guard: check + refresh token if near expiry
+          let rawToken = decryptToken(account.accessToken)
+          if (isLinkedInTokenExpired({
+            id: account.id,
+            accessToken: account.accessToken,
+            refreshToken: liAccount.refreshToken ?? null,
+            tokenExpiresAt: liAccount.tokenExpiresAt ?? null,
+            workspaceId: post.workspaceId,
+          })) {
+            const refreshed = await refreshLinkedInToken(
+              {
+                id: account.id,
+                accessToken: account.accessToken,
+                refreshToken: liAccount.refreshToken ?? null,
+                tokenExpiresAt: liAccount.tokenExpiresAt ?? null,
+                workspaceId: post.workspaceId,
+              },
+              post.submittedBy ?? null,
+            )
+            if (!refreshed) {
+              errors[platform] = 'linkedin_token_expired'
+              continue
+            }
+            rawToken = refreshed
+          }
+
+          // Guard: per-user rate limit (95/day)
+          const workspaceOwner = await prisma.workspace.findUnique({
+            where: { id: post.workspaceId },
+            select: { ownerId: true },
+          })
+          const ownerId = workspaceOwner?.ownerId ?? post.workspaceId
+          const withinLimit = await checkLinkedInRateLimit(ownerId)
+          if (!withinLimit) {
+            // Reschedule to same time tomorrow
+            const tomorrow = new Date(post.scheduledFor.getTime() + 24 * 60 * 60 * 1000)
+            await prisma.scheduledPost.update({
+              where: { id: post.id },
+              data: { status: 'SCHEDULED', scheduledFor: tomorrow },
+            })
+            if (post.submittedBy) {
+              await notify({
+                userId: post.submittedBy,
+                type: 'POST_FAILED',
+                title: 'LinkedIn daily limit reached',
+                body: 'LinkedIn daily post limit approaching. This post has been rescheduled to tomorrow at the same time.',
+                link: '/dashboard/calendar',
+              })
+            }
+            errors[platform] = 'linkedin_rate_limit_rescheduled'
+            continue
+          }
+
+          // Dispatch based on media type
+          const hasVideo = mediaUrls.some((u: string) => /\.(mp4|mov|avi|webm)$/i.test(u))
+          const hasImage = mediaUrls.length > 0 && !hasVideo
+
+          let result
+          if (hasVideo) {
+            result = await publishLinkedInVideo(
+              rawToken,
+              liAccount.linkedinPersonUrn,
+              content,
+              mediaUrls[0],
+            )
+          } else if (hasImage) {
+            result = await publishLinkedInImage(
+              rawToken,
+              liAccount.linkedinPersonUrn,
+              content,
+              mediaUrls[0],
+              content.slice(0, 120),
+            )
+          } else {
+            result = await publishLinkedInText(rawToken, liAccount.linkedinPersonUrn, content)
+          }
+
+          if (result.success) {
+            responseLog[platform] = result.postUrn
+            await incrementLinkedInRateLimit(ownerId)
+          } else if (result.error === 'rate_limit' && result.retryAfter) {
+            // Re-queue with Retry-After delay (max 3 auto-retries handled by BullMQ)
+            throw new Error(`LINKEDIN_RATE_LIMIT:${result.retryAfter}`)
+          } else {
+            errors[platform] = result.error
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          if (msg.startsWith('LINKEDIN_RATE_LIMIT:')) throw err // propagate for BullMQ retry
+          errors[platform] = msg
+        }
+        continue
+      }
+      // ── End LinkedIn ─────────────────────────────────────────────────────────
+
       try {
         const externalId = await publishToPlatform(
           { content, mediaUrls },

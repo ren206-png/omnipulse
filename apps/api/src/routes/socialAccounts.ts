@@ -5,9 +5,11 @@ import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 import { checkLimit } from '../lib/planLimits.js'
+import { encryptToken, decryptToken } from '../lib/tokenEncryption.js'
+import { notify } from '../lib/notify.js'
 
 const router = Router()
-const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE'] as const
+const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
 
 // OAuth endpoints — must be registered BEFORE the requireAuth middleware
 // GET /api/v1/social-accounts/oauth/connect?platform=INSTAGRAM&workspaceId=xxx
@@ -33,6 +35,13 @@ router.get('/oauth/connect', requireAuth, async (req: Request, res: Response): P
     X: `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${process.env.X_CLIENT_ID ?? 'X_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=tweet.read+tweet.write+users.read&state=${state}&code_challenge=${pkceVerifier}&code_challenge_method=plain`,
     TIKTOK: `https://www.tiktok.com/v2/auth/authorize/?client_key=${process.env.TIKTOK_CLIENT_KEY ?? 'TIKTOK_CLIENT_KEY'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user.info.basic,video.upload&response_type=code&state=${state}`,
     GOOGLE: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID ?? 'GOOGLE_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=https://www.googleapis.com/auth/youtube.upload&response_type=code&state=${state}`,
+    // LinkedIn: personal profile scope. Add pages=true param to also request org scope.
+    LINKEDIN: (() => {
+      const pagesFlow = (req.query as Record<string, string>).pages === 'true'
+      const scopes = ['openid', 'profile', 'email', 'w_member_social']
+      if (pagesFlow) scopes.push('w_organization_social', 'r_organization_social')
+      return `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${process.env.LINKEDIN_CLIENT_ID ?? 'LINKEDIN_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=${encodeURIComponent(scopes.join(' '))}`
+    })(),
   }
 
   const url = urls[platform]
@@ -182,6 +191,117 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
         externalProfileId = profile.id ?? ''
         profileName = profile.name ?? externalProfileId
       }
+    } else if (platform === 'LINKEDIN') {
+      // Step 1: Exchange code for tokens
+      const liVersion = process.env.LINKEDIN_API_VERSION ?? '202506'
+      const tokenRes = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code,
+          client_id: process.env.LINKEDIN_CLIENT_ID ?? '',
+          client_secret: process.env.LINKEDIN_CLIENT_SECRET ?? '',
+          redirect_uri: redirectUri,
+        }),
+      })
+      const tokenData = await tokenRes.json() as {
+        access_token?: string
+        refresh_token?: string
+        expires_in?: number
+        refresh_token_expires_in?: number
+        error?: string
+        error_description?: string
+      }
+      if (!tokenRes.ok || !tokenData.access_token) {
+        logger.error({ tokenData }, 'LinkedIn token exchange failed')
+        throw new Error(tokenData.error_description ?? tokenData.error ?? 'linkedin_token_failed')
+      }
+      const rawAccessToken = tokenData.access_token
+      const rawRefreshToken = tokenData.refresh_token ?? null
+
+      // Step 2: Fetch person URN via userinfo
+      const userInfoRes = await fetch('https://api.linkedin.com/v2/userinfo', {
+        headers: {
+          Authorization: `Bearer ${rawAccessToken}`,
+          'LinkedIn-Version': liVersion,
+          'X-Restli-Protocol-Version': '2.0.0',
+        },
+      })
+      const userInfo = await userInfoRes.json() as { sub?: string; name?: string; email?: string; error?: string }
+      if (!userInfo.sub) {
+        logger.error({ userInfo }, 'LinkedIn userinfo missing sub field')
+        throw new Error('linkedin_userinfo_failed')
+      }
+      const personUrn = `urn:li:person:${userInfo.sub}`
+      profileName = userInfo.name ?? userInfo.email ?? userInfo.sub
+      externalProfileId = profileName
+
+      // Step 3: Encrypt tokens before storage
+      accessToken = encryptToken(rawAccessToken)
+      const encryptedRefresh = rawRefreshToken ? encryptToken(rawRefreshToken) : null
+
+      // Step 4: Check if pages scope was requested — fetch org ACLs
+      let orgUrns: Array<{ urn: string; name: string }> | null = null
+      // We detect pages flow by checking if the token has org scope (best-effort)
+      const aclRes = await fetch('https://api.linkedin.com/v2/organizationAcls?q=roleAssignee', {
+        headers: {
+          Authorization: `Bearer ${rawAccessToken}`,
+          'LinkedIn-Version': liVersion,
+          'X-Restli-Protocol-Version': '2.0.0',
+        },
+      })
+      if (aclRes.ok) {
+        const aclData = await aclRes.json() as { elements?: Array<{ organization: string }> }
+        const orgRefs = aclData.elements?.map((e) => e.organization) ?? []
+        if (orgRefs.length > 0) {
+          // Fetch org names
+          orgUrns = []
+          for (const orgUrn of orgRefs) {
+            const orgId = orgUrn.split(':').pop()
+            const orgRes = await fetch(`https://api.linkedin.com/v2/organizations/${orgId}?fields=localizedName`, {
+              headers: { Authorization: `Bearer ${rawAccessToken}`, 'LinkedIn-Version': liVersion, 'X-Restli-Protocol-Version': '2.0.0' },
+            })
+            if (orgRes.ok) {
+              const orgData = await orgRes.json() as { localizedName?: string }
+              orgUrns.push({ urn: orgUrn, name: orgData.localizedName ?? orgUrn })
+            }
+          }
+        }
+      }
+
+      // Step 5: Upsert SocialAccount with LinkedIn-specific fields
+      const expiresAt = tokenData.expires_in ? new Date(Date.now() + tokenData.expires_in * 1000) : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+      const existingLi = await prisma.socialAccount.findFirst({ where: { workspaceId, platform: 'LINKEDIN' } })
+      if (existingLi) {
+        await prisma.socialAccount.update({
+          where: { id: existingLi.id },
+          data: {
+            accessToken,
+            refreshToken: encryptedRefresh,
+            tokenExpiresAt: expiresAt,
+            externalProfileId,
+            linkedinPersonUrn: personUrn,
+            ...(orgUrns !== null ? { linkedinOrganizationUrns: orgUrns } : {}),
+          },
+        })
+      } else {
+        await prisma.socialAccount.create({
+          data: {
+            workspaceId,
+            platform: 'LINKEDIN',
+            accessToken,
+            refreshToken: encryptedRefresh,
+            tokenExpiresAt: expiresAt,
+            externalProfileId,
+            linkedinPersonUrn: personUrn,
+            ...(orgUrns !== null ? { linkedinOrganizationUrns: orgUrns } : {}),
+          },
+        })
+      }
+      logger.info({ platform: 'LINKEDIN', workspaceId, personUrn, hasOrgs: (orgUrns?.length ?? 0) > 0 }, 'LinkedIn account connected')
+      res.redirect(`${webUrl}/dashboard/accounts?connected=LINKEDIN`)
+      return // early return — we handle upsert above
     }
 
     if (!accessToken) throw new Error('No access token received')
@@ -205,7 +325,8 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
     res.redirect(`${webUrl}/dashboard/accounts?connected=${platform}`)
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : 'oauth_failed'
-    const safeCode = ['no_ig_business_account'].includes(errMsg) ? errMsg : 'oauth_failed'
+    const knownCodes = ['no_ig_business_account', 'linkedin_token_failed', 'linkedin_userinfo_failed']
+    const safeCode = knownCodes.includes(errMsg) ? errMsg : 'oauth_failed'
     logger.error({ err }, 'OAuth callback error')
     res.redirect(`${(process.env.WEB_URL ?? 'http://localhost:3000')}/dashboard/accounts?error=${safeCode}`)
   }
@@ -227,7 +348,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     }
     const accounts = await prisma.socialAccount.findMany({
       where: { workspaceId },
-      select: { id: true, platform: true, externalProfileId: true },
+      select: { id: true, platform: true, externalProfileId: true, tokenExpiresAt: true },
       orderBy: { platform: 'asc' },
     })
     res.json({ accounts })

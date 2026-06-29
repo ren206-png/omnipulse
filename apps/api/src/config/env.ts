@@ -34,4 +34,11 @@ export const env = {
   API_URL: process.env.API_URL ?? process.env.APP_URL ?? 'http://localhost:4000',
   ADMIN_EMAIL: process.env.ADMIN_EMAIL ?? '',
   SENTRY_DSN: process.env.SENTRY_DSN ?? '',
+  // LinkedIn OAuth
+  LINKEDIN_CLIENT_ID: process.env.LINKEDIN_CLIENT_ID ?? '',
+  LINKEDIN_CLIENT_SECRET: process.env.LINKEDIN_CLIENT_SECRET ?? '',
+  LINKEDIN_REDIRECT_URI: process.env.LINKEDIN_REDIRECT_URI ?? '',
+  LINKEDIN_API_VERSION: process.env.LINKEDIN_API_VERSION ?? '202506',
+  // Token encryption (AES-256-GCM) — 32-byte hex key
+  TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY ?? '',
 }

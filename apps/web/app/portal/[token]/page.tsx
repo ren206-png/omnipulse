@@ -4,6 +4,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   TIKTOK: 'TikTok',
   X: 'X (Twitter)',
   GOOGLE: 'Google',
+  LINKEDIN: 'LinkedIn',
 }
 
 const STATUS_COLORS: Record<string, string> = {

@@ -106,3 +106,83 @@ No new API dependencies. Timezone math uses Node's built-in `Intl` API.
 4. **`getNextAvailableSlot` uses UTC date comparison**: Slots are resolved in the slot's timezone using the `Intl` API. This works correctly for Node 18+. Verify Railway/production Node version is ≥ 18 (it should be).
 
 5. **Drag to same day**: Dropping a post on its current day is a no-op (detected via `isSameDay`). Intra-day time changes still require the edit dialog.
+
+---
+
+## Feature 10 — LinkedIn Integration (Full Platform)
+
+**Date:** 2026-06-29
+
+### Overview
+Full LinkedIn integration as the 5th publishing platform, covering OAuth 2.0, post dispatch (text/image/video), token encryption, rate limiting, and frontend UI.
+
+### Backend
+
+**Environment variables added** (`apps/api/src/config/env.ts`):
+- `LINKEDIN_CLIENT_ID` — LinkedIn app client ID
+- `LINKEDIN_CLIENT_SECRET` — LinkedIn app client secret
+- `LINKEDIN_REDIRECT_URI` — OAuth callback URL (e.g. `https://api.omnipulse.app/api/v1/social-accounts/oauth/callback`)
+- `LINKEDIN_API_VERSION` — e.g. `202504`
+- `TOKEN_ENCRYPTION_KEY` — 64-char hex (32 bytes) for AES-256-GCM token encryption
+
+**New library: `apps/api/src/lib/tokenEncryption.ts`**
+- AES-256-GCM encryption for OAuth access/refresh tokens
+- Format: `"iv:tag:ciphertext"` (all base64)
+- Passthrough mode if `TOKEN_ENCRYPTION_KEY` not set (dev fallback)
+- `decryptToken()` handles plaintext passthrough for existing tokens
+
+**New library: `apps/api/src/lib/linkedinToken.ts`**
+- `isLinkedInTokenExpired(account)` — true if `tokenExpiresAt` is within 7 days
+- `refreshLinkedInToken(account, userId)` — uses refresh token grant to renew; marks account expired and notifies user on failure
+
+**New library: `apps/api/src/lib/linkedinPublisher.ts`**
+- All requests include: `Authorization`, `LinkedIn-Version`, `X-Restli-Protocol-Version: 2.0.0`
+- `publishLinkedInText(accessToken, personUrn, content)` → extracts post URN from `x-restli-id` header
+- `publishLinkedInImage(...)` → two-step: initialize upload → PUT binary → poll AVAILABLE → create post
+- `publishLinkedInVideo(...)` → four-step: initialize → chunked PUT (4 MB) → finalize → poll AVAILABLE → create post
+- `pollUntilAvailable(fetcher, maxAttempts, baseDelayMs)` — exponential backoff helper
+- Return type: `PublishResult = { success: true; postUrn } | { success: false; error; retryAfter?; details? }`
+
+**Schema changes** (`apps/api/prisma/schema.prisma`):
+- Added `LINKEDIN` to `Platform` enum
+- Added to `SocialAccount`: `refreshToken`, `tokenExpiresAt`, `linkedinPersonUrn`, `linkedinOrganizationUrns (Json)`
+- Migration files: `...0004_add_refresh_token_and_expiry...`, `...0005_add_linkedin_to_platform`
+
+**OAuth route** (`apps/api/src/routes/socialAccounts.ts`):
+- LinkedIn connect URL uses `openid profile email w_member_social` scopes
+- Callback: exchanges code → gets userinfo → fetches org ACLs → encrypts tokens → upserts `SocialAccount`
+- Returns `tokenExpiresAt` in GET response for frontend expiry badge
+
+**Publisher worker** (`apps/api/src/workers/publishPost.worker.ts`):
+- LinkedIn dispatch block runs before generic platform handler
+- Redis rate-limiting: key `linkedin:posts:{userId}:{YYYY-MM-DD}`, limit 95/day
+- Stale token: attempts refresh before publish; reschedules 1 hour later if refresh fails
+- Dispatches to `publishLinkedInText/Image/Video` based on `mediaUrls`
+
+### Frontend
+
+**`packages/types/src/index.ts`**: Added `LINKEDIN = 'LINKEDIN'` to Platform enum
+
+**`apps/web/app/dashboard/accounts/AccountsClient.tsx`**:
+- Added LinkedIn to `PLATFORMS` array
+- `PLATFORM_CONFIG.LINKEDIN`: color `#0A66C2`, OAuth-based connection
+- LinkedIn SVG path added to `PlatformIcon`
+- Token expiry warning badge in `PlatformCard`: shown when `tokenExpiresAt` ≤ 7 days
+
+**`apps/web/app/dashboard/calendar/CreatePostForm.tsx`**:
+- LinkedIn added to `VARIANT_PLATFORMS` with 3000-char limit
+- Character counter with amber warning at ≥2800, red error at >3000
+
+**`apps/web/app/dashboard/calendar/PostPreview.tsx`**:
+- `LinkedInPreview` component mimicking LinkedIn post card UI
+- LinkedIn added to validPlatforms filter and `renderPreview` switch
+
+**Other updated files** (emoji/color maps):
+- `BestTimesWidget.tsx`, `DashboardContent.tsx`, `InsightsClient.tsx`, `QueueSlotsManager.tsx`, `portal/[token]/page.tsx`
+
+### LinkedIn App Setup (required)
+1. Create app at [developer.linkedin.com](https://developer.linkedin.com)
+2. Add products: **Share on LinkedIn**, **Sign In with LinkedIn using OpenID Connect**
+3. Authorized redirect URL: `LINKEDIN_REDIRECT_URI` from env
+4. Copy Client ID + Secret to env
+5. For Company Pages: request **Marketing Developer Platform** access (separate approval)

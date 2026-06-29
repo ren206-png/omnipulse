@@ -6,7 +6,7 @@ import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 
 const router = Router()
-const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE'] as const
+const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
 
 router.use(requireAuth)
 

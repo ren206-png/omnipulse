@@ -19,7 +19,7 @@ interface Props {
 }
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
-const ALL_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE']
+const ALL_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN']
 
 export function RssFeeds({ token }: Props) {
   const { activeWorkspace } = useWorkspace()

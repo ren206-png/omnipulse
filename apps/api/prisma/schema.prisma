@@ -103,7 +103,12 @@ model SocialAccount {
   workspace         Workspace           @relation(fields: [workspaceId], references: [id])
   platform          Platform
   accessToken       String
+  refreshToken      String?
+  tokenExpiresAt    DateTime?
   externalProfileId String
+  // LinkedIn-specific: person URN and optional organization URNs (JSON array)
+  linkedinPersonUrn          String?
+  linkedinOrganizationUrns   Json?
   snapshots         AnalyticsSnapshot[]
   inboxMessages     InboxMessage[]
 }
@@ -114,6 +119,7 @@ enum Platform {
   TIKTOK
   X
   GOOGLE
+  LINKEDIN
 }
 
 model ScheduledPost {

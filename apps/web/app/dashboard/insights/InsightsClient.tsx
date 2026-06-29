@@ -11,10 +11,11 @@ const PLATFORM_COLORS: Record<string, string> = {
   X: '#000000',
   TIKTOK: '#010101',
   GOOGLE: '#ea4335',
+  LINKEDIN: '#0A66C2',
 }
 
 const PLATFORM_EMOJI: Record<string, string> = {
-  INSTAGRAM: '📸', FACEBOOK: '👤', X: '🐦', TIKTOK: '🎵', GOOGLE: '▶️',
+  INSTAGRAM: '📸', FACEBOOK: '👤', X: '🐦', TIKTOK: '🎵', GOOGLE: '▶️', LINKEDIN: '💼',
 }
 
 type Insights = {

@@ -9,7 +9,7 @@ interface PostPreviewProps {
   scheduledFor: string
 }
 
-type Platform = 'INSTAGRAM' | 'X' | 'FACEBOOK' | 'TIKTOK' | 'GOOGLE'
+type Platform = 'INSTAGRAM' | 'X' | 'FACEBOOK' | 'TIKTOK' | 'GOOGLE' | 'LINKEDIN'
 
 const PLATFORM_LABELS: Record<Platform, string> = {
   INSTAGRAM: 'Instagram',
@@ -17,6 +17,7 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   FACEBOOK: 'Facebook',
   TIKTOK: 'TikTok',
   GOOGLE: 'Google',
+  LINKEDIN: 'LinkedIn',
 }
 
 const PLATFORM_ICONS: Record<Platform, string> = {
@@ -25,6 +26,7 @@ const PLATFORM_ICONS: Record<Platform, string> = {
   FACEBOOK: '👥',
   TIKTOK: '🎵',
   GOOGLE: '🔍',
+  LINKEDIN: '💼',
 }
 
 function InstagramPreview({ content, mediaUrls }: { content: string; mediaUrls: string[] }) {
@@ -219,9 +221,46 @@ function GooglePreview({ content }: { content: string }) {
   )
 }
 
+function LinkedInPreview({ content, mediaUrls }: { content: string; mediaUrls: string[] }) {
+  const charsLeft = 3000 - content.length
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1b1f23] w-full font-sans overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2.5 p-3">
+        <div className="w-10 h-10 rounded-full bg-[#0A66C2] flex items-center justify-center text-white font-bold text-sm shrink-0">YB</div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm text-gray-900 dark:text-white leading-none mb-0.5">Your Brand</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Just now • 🌐</p>
+        </div>
+        <span className="text-gray-400 text-lg">•••</span>
+      </div>
+      <div className="px-3 pb-2">
+        <p className="text-sm text-gray-900 dark:text-white whitespace-pre-wrap leading-relaxed line-clamp-5">
+          {content || <span className="text-gray-400 italic">Start typing your post…</span>}
+        </p>
+        {content.length > 0 && (
+          <span className={`text-xs tabular-nums mt-1 block ${charsLeft < 0 ? 'text-red-500 font-bold' : charsLeft < 200 ? 'text-amber-500' : 'text-gray-400'}`}>
+            {charsLeft} chars left
+          </span>
+        )}
+      </div>
+      {mediaUrls[0] && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={mediaUrls[0]} alt="" className="w-full object-cover aspect-video" />
+      )}
+      <div className="flex divide-x divide-gray-100 dark:divide-gray-700 border-t border-gray-100 dark:border-gray-700">
+        {['👍 Like', '💬 Comment', '↗ Share'].map((action) => (
+          <button key={action} className="flex-1 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+            {action}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function PostPreview({ content, mediaUrls, platforms, scheduledFor }: PostPreviewProps) {
   const validPlatforms = platforms.filter((p): p is Platform =>
-    ['INSTAGRAM', 'X', 'FACEBOOK', 'TIKTOK', 'GOOGLE'].includes(p)
+    ['INSTAGRAM', 'X', 'FACEBOOK', 'TIKTOK', 'GOOGLE', 'LINKEDIN'].includes(p)
   )
 
   const [activeTab, setActiveTab] = useState<Platform>(validPlatforms[0] ?? 'INSTAGRAM')
@@ -235,6 +274,7 @@ export default function PostPreview({ content, mediaUrls, platforms, scheduledFo
       case 'FACEBOOK':  return <FacebookPreview  content={content} mediaUrls={mediaUrls} />
       case 'TIKTOK':    return <TikTokPreview    content={content} mediaUrls={mediaUrls} />
       case 'GOOGLE':    return <GooglePreview    content={content} />
+      case 'LINKEDIN':  return <LinkedInPreview  content={content} mediaUrls={mediaUrls} />
     }
   }
 

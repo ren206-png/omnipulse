@@ -61,7 +61,7 @@ function formatTime(t: string): string {
 }
 
 const PLATFORM_ICONS: Record<string, string> = {
-  FACEBOOK: '👤', INSTAGRAM: '📸', TIKTOK: '🎵', X: '🐦', GOOGLE: '▶️',
+  FACEBOOK: '👤', INSTAGRAM: '📸', TIKTOK: '🎵', X: '🐦', GOOGLE: '▶️', LINKEDIN: '💼',
 }
 
 export function QueueSlotsManager({ token }: { token: string }) {
@@ -194,7 +194,7 @@ export function QueueSlotsManager({ token }: { token: string }) {
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="">All platforms</option>
-                {['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X'].map((p) => (
+                {['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'LINKEDIN'].map((p) => (
                   <option key={p} value={p}>{PLATFORM_ICONS[p]} {p.charAt(0) + p.slice(1).toLowerCase()}</option>
                 ))}
               </select>

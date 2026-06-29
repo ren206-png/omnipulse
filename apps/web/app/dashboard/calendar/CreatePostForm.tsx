@@ -12,11 +12,11 @@ import { MediaLibraryModal } from '../media/MediaLibraryModal'
 import { PostPreviewCard } from './PostPreviewCard'
 import PostPreview from './PostPreview'
 
-const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE'] as const
+const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
 type Platform = (typeof PLATFORMS)[number]
 
 // Platforms that support per-platform content variants
-const VARIANT_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X'] as const
+const VARIANT_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'LINKEDIN'] as const
 type VariantPlatform = (typeof VARIANT_PLATFORMS)[number]
 
 const PLATFORM_CHAR_LIMITS: Record<Platform, number> = {
@@ -25,6 +25,7 @@ const PLATFORM_CHAR_LIMITS: Record<Platform, number> = {
   INSTAGRAM: 2200,
   TIKTOK:    2200,
   GOOGLE:    1500,
+  LINKEDIN:  3000,
 }
 
 const PLATFORM_ICONS: Record<VariantPlatform, string> = {
@@ -32,6 +33,7 @@ const PLATFORM_ICONS: Record<VariantPlatform, string> = {
   INSTAGRAM: '📸',
   TIKTOK:    '🎵',
   X:         '🐦',
+  LINKEDIN:  '💼',
 }
 
 interface PlatformVariant {
@@ -63,9 +65,12 @@ function PlatformVariantTabs({
 
   const variant = variants[tab]
   const isX = tab === 'X'
+  const isLinkedIn = tab === 'LINKEDIN'
   const charCount = variant.content.length
   const xWarn  = isX && charCount >= 240
   const xError = isX && charCount > 280
+  const liWarn  = isLinkedIn && charCount >= 2800
+  const liError = isLinkedIn && charCount > 3000
 
   function addHashtag() {
     const raw = hashtagInput.trim().replace(/^#/, '')
@@ -107,6 +112,7 @@ function PlatformVariantTabs({
           {tab === 'INSTAGRAM' && 'Add hashtags to boost Instagram reach.'}
           {tab === 'TIKTOK' && 'Note: video content must be uploaded separately via TikTok.'}
           {tab === 'FACEBOOK' && 'Customise your Facebook post content.'}
+          {tab === 'LINKEDIN' && 'LinkedIn post — text, single image, or single video supported.'}
         </p>
 
         {/* Content textarea */}
@@ -117,7 +123,7 @@ function PlatformVariantTabs({
           placeholder={`${tab.charAt(0) + tab.slice(1).toLowerCase()} post content…`}
           className={cn(
             'text-sm resize-none',
-            xError && 'border-destructive focus-visible:ring-destructive',
+            (xError || liError) && 'border-destructive focus-visible:ring-destructive',
           )}
         />
 
@@ -130,6 +136,19 @@ function PlatformVariantTabs({
             )}>
               {charCount} / 280
               {xError && ' — exceeds limit'}
+            </span>
+          </div>
+        )}
+
+        {/* LinkedIn character counter */}
+        {isLinkedIn && (
+          <div className="flex justify-end">
+            <span className={cn(
+              'text-xs tabular-nums',
+              liError ? 'text-destructive font-semibold' : liWarn ? 'text-amber-500' : 'text-muted-foreground',
+            )}>
+              {charCount} / 3000
+              {liError && ' — may be truncated in some feeds'}
             </span>
           </div>
         )}

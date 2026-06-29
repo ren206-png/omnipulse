@@ -4,6 +4,7 @@ export enum Platform {
   TIKTOK = 'TIKTOK',
   X = 'X',
   GOOGLE = 'GOOGLE',
+  LINKEDIN = 'LINKEDIN',
 }
 
 export enum Role {
