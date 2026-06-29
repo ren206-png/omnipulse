@@ -138,6 +138,20 @@ model ScheduledPost {
   abVariantOf       String?
   abTestActive      Boolean     @default(false)
   metrics           PostMetric[]
+  platformVariants  PlatformVariant[]
+}
+
+model PlatformVariant {
+  id        String        @id @default(cuid())
+  postId    String
+  post      ScheduledPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform  Platform
+  content   String
+  hashtags  String[]
+  mediaUrls String[]
+  createdAt DateTime      @default(now())
+
+  @@unique([postId, platform])
 }
 
 model PostMetric {

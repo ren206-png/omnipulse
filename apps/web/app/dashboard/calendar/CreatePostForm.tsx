@@ -15,6 +15,10 @@ import PostPreview from './PostPreview'
 const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE'] as const
 type Platform = (typeof PLATFORMS)[number]
 
+// Platforms that support per-platform content variants
+const VARIANT_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X'] as const
+type VariantPlatform = (typeof VARIANT_PLATFORMS)[number]
+
 const PLATFORM_CHAR_LIMITS: Record<Platform, number> = {
   X:         280,
   FACEBOOK:  63206,
@@ -22,6 +26,159 @@ const PLATFORM_CHAR_LIMITS: Record<Platform, number> = {
   TIKTOK:    2200,
   GOOGLE:    1500,
 }
+
+const PLATFORM_ICONS: Record<VariantPlatform, string> = {
+  FACEBOOK:  '👤',
+  INSTAGRAM: '📸',
+  TIKTOK:    '🎵',
+  X:         '🐦',
+}
+
+interface PlatformVariant {
+  platform: VariantPlatform
+  content: string
+  hashtags: string[]
+  mediaUrls: string[]
+}
+
+// ── Per-platform variant tabs panel ────────────────────────────────────────
+function PlatformVariantTabs({
+  masterContent,
+  activePlatforms,
+  variants,
+  onChange,
+}: {
+  masterContent: string
+  activePlatforms: VariantPlatform[]
+  variants: Record<VariantPlatform, PlatformVariant>
+  onChange: (platform: VariantPlatform, updated: Partial<PlatformVariant>) => void
+}) {
+  const [activeTab, setActiveTab] = useState<VariantPlatform>(activePlatforms[0] ?? 'FACEBOOK')
+  const [hashtagInput, setHashtagInput] = useState('')
+
+  // Keep active tab valid when platforms change
+  const tab = activePlatforms.includes(activeTab) ? activeTab : activePlatforms[0]
+
+  if (activePlatforms.length === 0) return null
+
+  const variant = variants[tab]
+  const isX = tab === 'X'
+  const charCount = variant.content.length
+  const xWarn  = isX && charCount >= 240
+  const xError = isX && charCount > 280
+
+  function addHashtag() {
+    const raw = hashtagInput.trim().replace(/^#/, '')
+    if (!raw) return
+    if (!variant.hashtags.includes(raw)) {
+      onChange(tab, { hashtags: [...variant.hashtags, raw] })
+    }
+    setHashtagInput('')
+  }
+
+  function removeHashtag(tag: string) {
+    onChange(tab, { hashtags: variant.hashtags.filter((h) => h !== tag) })
+  }
+
+  return (
+    <div className="rounded-lg border bg-muted/20 overflow-hidden">
+      {/* Tab bar */}
+      <div className="flex border-b bg-background">
+        {activePlatforms.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => setActiveTab(p)}
+            className={cn(
+              'flex-1 px-3 py-2 text-xs font-medium border-b-2 transition-colors',
+              p === tab
+                ? 'border-primary text-foreground bg-background'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {PLATFORM_ICONS[p]} {p.charAt(0) + p.slice(1).toLowerCase()}
+          </button>
+        ))}
+      </div>
+
+      <div className="p-3 space-y-2">
+        <p className="text-[11px] text-muted-foreground">
+          {tab === 'X' && 'Customise your X post. 280 character limit enforced.'}
+          {tab === 'INSTAGRAM' && 'Add hashtags to boost Instagram reach.'}
+          {tab === 'TIKTOK' && 'Note: video content must be uploaded separately via TikTok.'}
+          {tab === 'FACEBOOK' && 'Customise your Facebook post content.'}
+        </p>
+
+        {/* Content textarea */}
+        <Textarea
+          value={variant.content}
+          onChange={(e) => onChange(tab, { content: e.target.value })}
+          rows={4}
+          placeholder={`${tab.charAt(0) + tab.slice(1).toLowerCase()} post content…`}
+          className={cn(
+            'text-sm resize-none',
+            xError && 'border-destructive focus-visible:ring-destructive',
+          )}
+        />
+
+        {/* X character counter */}
+        {isX && (
+          <div className="flex justify-end">
+            <span className={cn(
+              'text-xs tabular-nums',
+              xError ? 'text-destructive font-semibold' : xWarn ? 'text-amber-500' : 'text-muted-foreground',
+            )}>
+              {charCount} / 280
+              {xError && ' — exceeds limit'}
+            </span>
+          </div>
+        )}
+
+        {/* Instagram hashtag input */}
+        {tab === 'INSTAGRAM' && (
+          <div className="space-y-1.5">
+            <div className="flex gap-1.5">
+              <Input
+                value={hashtagInput}
+                onChange={(e) => setHashtagInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addHashtag() } }}
+                placeholder="Add hashtag (without #)"
+                className="h-8 text-xs flex-1"
+              />
+              <button
+                type="button"
+                onClick={addHashtag}
+                className="px-3 h-8 text-xs rounded-md border bg-background hover:bg-accent transition-colors"
+              >
+                Add
+              </button>
+            </div>
+            {variant.hashtags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {variant.hashtags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs"
+                  >
+                    #{tag}
+                    <button
+                      type="button"
+                      onClick={() => removeHashtag(tag)}
+                      className="text-primary/60 hover:text-primary ml-0.5"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+// ───────────────────────────────────────────────────────────────────────────
 
 const TONES = [
   { value: 'casual',       label: 'Casual' },
@@ -54,6 +211,12 @@ function SparkleIcon() {
   )
 }
 
+function makeVariants(masterContent: string): Record<VariantPlatform, PlatformVariant> {
+  return Object.fromEntries(
+    VARIANT_PLATFORMS.map((p) => [p, { platform: p, content: masterContent, hashtags: [], mediaUrls: [] }])
+  ) as Record<VariantPlatform, PlatformVariant>
+}
+
 export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, onClose }: Props) {
   const [content, setContent] = useState('')
   const [mediaUrls, setMediaUrls] = useState<string[]>([''])
@@ -64,6 +227,31 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const [firstComment, setFirstComment] = useState('')
   const [advancedOpen, setAdvancedOpen] = useState(false)
+
+  // Per-platform variant state
+  const [variantsOpen, setVariantsOpen] = useState(false)
+  const [variants, setVariants] = useState<Record<VariantPlatform, PlatformVariant>>(makeVariants(''))
+  const activeVariantPlatforms = selectedPlatforms.filter((p): p is VariantPlatform =>
+    (VARIANT_PLATFORMS as readonly string[]).includes(p)
+  )
+
+  // Keep variants seeded with master content when master changes (only if user hasn't customised)
+  const handleContentChange = (newContent: string) => {
+    setContent(newContent)
+    setVariants((prev) => {
+      const updated = { ...prev }
+      for (const p of VARIANT_PLATFORMS) {
+        if (prev[p].content === content) {
+          updated[p] = { ...prev[p], content: newContent }
+        }
+      }
+      return updated
+    })
+  }
+
+  function updateVariant(platform: VariantPlatform, patch: Partial<PlatformVariant>) {
+    setVariants((prev) => ({ ...prev, [platform]: { ...prev[platform], ...patch } }))
+  }
 
   // Best times state
   const [bestRecs, setBestRecs] = useState<Array<{ platform: string; topHours: number[]; heatmap: Array<{ hour: number; label: string }> }>>([])
@@ -127,7 +315,7 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   }, [templatesOpen, templatesLoaded, workspaceId, token])
 
   function useTemplate(tpl: { content: string; platforms: string[] }) {
-    setContent(tpl.content)
+    handleContentChange(tpl.content)
     if (tpl.platforms.length > 0) {
       setSelectedPlatforms(tpl.platforms as Platform[])
     }
@@ -340,7 +528,7 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
 
   function useTranslation() {
     if (!translated) return
-    setContent(translated)
+    handleContentChange(translated)
     setTranslated(null)
     setTranslateOpen(false)
   }
@@ -495,7 +683,7 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   }
 
   function useVariation(text: string) {
-    setContent(text)
+    handleContentChange(text)
     setGeneratedVariations([])
     setAiOpen(false)
     setAiPrompt('')
@@ -535,6 +723,12 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
           ...(utmMedium.trim() && { utmMedium: utmMedium.trim() }),
           ...(utmCampaign.trim() && { utmCampaign: utmCampaign.trim() }),
           ...(firstComment.trim() && { firstComment: firstComment.trim() }),
+          platformVariants: activeVariantPlatforms.map((p) => ({
+            platform: p,
+            content: variants[p].content.trim() || content.trim(),
+            hashtags: variants[p].hashtags,
+            mediaUrls: variants[p].mediaUrls,
+          })),
         }),
       })
       const body = (await res.json()) as { error?: string; requiresReview?: boolean }
@@ -893,6 +1087,36 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
           rows={4}
           className={cn(charWarning && content.length > charLimit && 'border-destructive')}
         />
+
+        {/* Per-platform content customiser */}
+        {activeVariantPlatforms.length > 0 && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setVariantsOpen((o) => !o)}
+              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>
+              </svg>
+              {variantsOpen ? 'Hide' : 'Customise'} per-platform content
+              <span className="text-muted-foreground font-normal">
+                ({activeVariantPlatforms.length} platform{activeVariantPlatforms.length !== 1 ? 's' : ''})
+              </span>
+            </button>
+            {variantsOpen && (
+              <div className="mt-2">
+                <PlatformVariantTabs
+                  masterContent={content}
+                  activePlatforms={activeVariantPlatforms}
+                  variants={variants}
+                  onChange={updateVariant}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Score panel */}
         {scoreError && !scoring && (

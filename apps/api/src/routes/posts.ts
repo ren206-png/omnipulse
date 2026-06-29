@@ -42,7 +42,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const posts = await (prisma.scheduledPost.findMany as Function)({
       where: { workspaceId },
       orderBy: { scheduledFor: 'asc' },
-      include: { metrics: true },
+      include: { metrics: true, platformVariants: true },
     })
     res.json({ posts })
   } catch (err) {
@@ -189,15 +189,91 @@ router.get('/ical', async (req: Request, res: Response): Promise<void> => {
   }
 })
 
+// GET /api/v1/posts/calendar?workspaceId=&startDate=&endDate=
+router.get('/calendar', async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId, startDate, endDate } = req.query as { workspaceId?: string; startDate?: string; endDate?: string }
+  if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId required'); return }
+
+  const start = startDate ? new Date(startDate) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const end   = endDate   ? new Date(endDate)   : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+
+  const role = await getWorkspaceRole(workspaceId, req.user!.id)
+  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+
+  try {
+    const posts = await (prisma.scheduledPost.findMany as Function)({
+      where: { workspaceId, scheduledFor: { gte: start, lte: end } },
+      orderBy: { scheduledFor: 'asc' },
+      select: {
+        id: true,
+        content: true,
+        scheduledFor: true,
+        platforms: true,
+        status: true,
+        mediaUrls: true,
+        platformVariants: true,
+      },
+    })
+    res.json({ posts })
+  } catch (err) {
+    logger.error({ err }, 'Calendar fetch error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch calendar posts')
+  }
+})
+
 // POST /api/v1/posts/schedule
+// Shared type for platform variant input
+interface PlatformVariantInput {
+  platform: string
+  content: string
+  hashtags?: string[]
+  mediaUrls?: string[]
+}
+
+// Validate and normalise platformVariants from request body.
+// Returns an error string if invalid, or the cleaned array if valid.
+function validateVariants(raw: unknown): { variants: PlatformVariantInput[]; error?: never } | { error: string; variants?: never } {
+  if (!raw) return { variants: [] }
+  if (!Array.isArray(raw)) return { error: 'platformVariants must be an array' }
+  const ALLOWED = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X']
+  const seen = new Set<string>()
+  const out: PlatformVariantInput[] = []
+  for (const v of raw) {
+    if (typeof v !== 'object' || !v) continue
+    const item = v as Record<string, unknown>
+    if (typeof item.platform !== 'string' || !ALLOWED.includes(item.platform)) {
+      return { error: `platformVariants: invalid platform "${item.platform}". Allowed: ${ALLOWED.join(', ')}` }
+    }
+    if (typeof item.content !== 'string' || !item.content.trim()) {
+      return { error: `platformVariants: content is required for platform ${item.platform}` }
+    }
+    if (item.platform === 'X' && item.content.length > 280) {
+      return { error: `X platform content exceeds 280 characters (got ${item.content.length})` }
+    }
+    // Deduplicate — keep last occurrence
+    seen.add(item.platform)
+    const existing = out.findIndex((e) => e.platform === item.platform)
+    const entry: PlatformVariantInput = {
+      platform: item.platform,
+      content: (item.content as string).trim(),
+      hashtags: Array.isArray(item.hashtags) ? (item.hashtags as string[]) : [],
+      mediaUrls: Array.isArray(item.mediaUrls) ? (item.mediaUrls as string[]) : [],
+    }
+    if (existing >= 0) out[existing] = entry
+    else out.push(entry)
+  }
+  return { variants: out }
+}
+
 router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
-  const { workspaceId, content, mediaUrls, platforms, scheduledFor, firstComment } = req.body as {
+  const { workspaceId, content, mediaUrls, platforms, scheduledFor, firstComment, platformVariants } = req.body as {
     workspaceId?: string
     content?: string
     mediaUrls?: string[]
     platforms?: string[]
     scheduledFor?: string
     firstComment?: string
+    platformVariants?: unknown
   }
 
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
@@ -211,6 +287,9 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
   const scheduledDate = new Date(scheduledFor)
   if (isNaN(scheduledDate.getTime())) { sendError(res, 400, 'INVALID_DATE', 'scheduledFor must be a valid ISO 8601 datetime'); return }
   if (scheduledDate.getTime() <= Date.now()) { sendError(res, 400, 'DATE_IN_PAST', 'scheduledFor must be in the future'); return }
+
+  const { variants, error: variantError } = validateVariants(platformVariants)
+  if (variantError) { sendError(res, 400, 'INVALID_VARIANT', variantError); return }
 
   const role = await getWorkspaceRole(workspaceId, req.user!.id)
   if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
@@ -236,7 +315,18 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
         status,
         submittedBy: req.user!.id,
         ...(firstComment?.trim() ? { firstComment: firstComment.trim() } : {}),
+        ...(variants!.length > 0 ? {
+          platformVariants: {
+            create: variants!.map((v) => ({
+              platform: v.platform,
+              content: v.content,
+              hashtags: v.hashtags ?? [],
+              mediaUrls: v.mediaUrls ?? [],
+            })),
+          },
+        } : {}),
       },
+      include: { platformVariants: true },
     })
 
     let jobId: string | undefined
@@ -511,7 +601,11 @@ router.post('/:id/reject', async (req: Request, res: Response): Promise<void> =>
 // PATCH /api/v1/posts/:id
 router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params
-  const { content, scheduledFor } = req.body as { content?: string; scheduledFor?: string }
+  const { content, scheduledFor, platformVariants } = req.body as {
+    content?: string
+    scheduledFor?: string
+    platformVariants?: unknown
+  }
 
   try {
     const post = await prisma.scheduledPost.findUnique({ where: { id } })
@@ -539,7 +633,30 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
       updates.scheduledFor = d
     }
 
-    const updated = await prisma.scheduledPost.update({ where: { id }, data: updates })
+    // Upsert platformVariants if provided
+    if (platformVariants !== undefined) {
+      const { variants, error: variantError } = validateVariants(platformVariants)
+      if (variantError) { sendError(res, 400, 'INVALID_VARIANT', variantError); return }
+      // Delete existing variants for this post, then recreate (clean upsert)
+      await (prisma.platformVariant.deleteMany as Function)({ where: { postId: id } })
+      if (variants!.length > 0) {
+        await (prisma.platformVariant.createMany as Function)({
+          data: variants!.map((v) => ({
+            postId: id,
+            platform: v.platform,
+            content: v.content,
+            hashtags: v.hashtags ?? [],
+            mediaUrls: v.mediaUrls ?? [],
+          })),
+        })
+      }
+    }
+
+    const updated = await (prisma.scheduledPost.update as Function)({
+      where: { id },
+      data: updates,
+      include: { platformVariants: true },
+    })
     logger.info({ postId: id }, 'Post updated')
     res.json({ post: updated })
   } catch (err) {

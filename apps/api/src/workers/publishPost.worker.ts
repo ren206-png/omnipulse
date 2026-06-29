@@ -80,7 +80,10 @@ const worker = new Worker(
   async (job) => {
     const { postId } = job.data as { postId: string }
 
-    const post = await prisma.scheduledPost.findUnique({ where: { id: postId } })
+    const post = await (prisma.scheduledPost.findUnique as Function)({
+      where: { id: postId },
+      include: { platformVariants: true },
+    })
     if (!post) {
       throw new Error(`ScheduledPost ${postId} not found`)
     }
@@ -93,15 +96,30 @@ const worker = new Worker(
     const responseLog: Record<string, string> = {}
     const errors: Record<string, string> = {}
 
+    // Build a lookup of platform → variant (falls back to master content)
+    type Variant = { platform: string; content: string; hashtags: string[]; mediaUrls: string[] }
+    const variantMap: Record<string, Variant> = {}
+    for (const v of (post.platformVariants ?? []) as Variant[]) {
+      variantMap[v.platform] = v
+    }
+
     for (const platform of post.platforms) {
       const account = accounts.find((a) => a.platform === platform)
       if (!account) {
         errors[platform] = 'No connected account found for this platform'
         continue
       }
+      // Use platform-specific content if available; append hashtags if any
+      const variant = variantMap[platform]
+      const content = variant
+        ? variant.hashtags.length > 0
+          ? `${variant.content}\n\n${variant.hashtags.map((h: string) => h.startsWith('#') ? h : `#${h}`).join(' ')}`
+          : variant.content
+        : post.content
+      const mediaUrls = variant?.mediaUrls?.length > 0 ? variant.mediaUrls : post.mediaUrls
       try {
         const externalId = await publishToPlatform(
-          { content: post.content, mediaUrls: post.mediaUrls },
+          { content, mediaUrls },
           { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
         )
         responseLog[platform] = externalId
