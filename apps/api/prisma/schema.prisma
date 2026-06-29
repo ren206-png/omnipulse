@@ -44,6 +44,7 @@ model Workspace {
   apiKeys                ApiKey[]
   clientPortal           ClientPortal?
   competitors            CompetitorAccount[]
+  queueSlots             QueueSlot[]
   plan                   Plan                 @default(FREE)
   stripeCustomerId       String?              @unique
   stripeSubscriptionId   String?              @unique
@@ -379,4 +380,19 @@ model CompetitorSnapshot {
   source              String             @default("ESTIMATED")
   recordedAt          DateTime           @default(now())
   @@index([competitorAccountId, recordedAt])
+}
+
+model QueueSlot {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int       // 0=Sunday … 6=Saturday
+  timeOfDay   String    // "HH:MM" 24-hour
+  timezone    String    // IANA timezone string e.g. "America/New_York"
+  platform    Platform? // optional — null means applies to all platforms
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([workspaceId, isActive])
 }

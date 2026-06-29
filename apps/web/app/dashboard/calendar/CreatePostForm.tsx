@@ -689,6 +689,45 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
     setAiPrompt('')
   }
 
+  const [queueLoading, setQueueLoading] = useState(false)
+
+  const handleQueueSchedule = async () => {
+    setError(null)
+    if (!content.trim()) { setError('Content is required'); return }
+    if (selectedPlatforms.length === 0) { setError('Select at least one platform'); return }
+    setQueueLoading(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+      const res = await fetch(`${apiUrl}/api/v1/posts/queue-schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          workspaceId,
+          content: content.trim(),
+          mediaUrls: mediaUrls.filter((u) => u.trim().length > 0),
+          platforms: selectedPlatforms,
+          ...(firstComment.trim() && { firstComment: firstComment.trim() }),
+          platformVariants: activeVariantPlatforms.map((p) => ({
+            platform: p,
+            content: variants[p].content.trim() || content.trim(),
+            hashtags: variants[p].hashtags,
+            mediaUrls: variants[p].mediaUrls,
+          })),
+        }),
+      })
+      const body = await res.json() as { message?: string; scheduledFor?: string; requiresReview?: boolean }
+      if (!res.ok) {
+        setError(body.message ?? 'Failed to add to queue')
+        return
+      }
+      onSuccess(body.requiresReview ?? false)
+    } catch {
+      setError('Network error — please try again')
+    } finally {
+      setQueueLoading(false)
+    }
+  }
+
   const handleSubmit = async () => {
     setError(null)
     if (!content.trim()) { setError('Content is required'); return }
@@ -1583,9 +1622,17 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
         </div>
       )}
 
-      <div className="flex justify-end gap-2 pt-1">
-        <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
-        <Button onClick={handleSubmit} disabled={loading || content.length > charLimit}>
+      <div className="flex justify-end gap-2 pt-1 flex-wrap">
+        <Button variant="outline" onClick={onClose} disabled={loading || queueLoading}>Cancel</Button>
+        <Button
+          variant="outline"
+          onClick={handleQueueSchedule}
+          disabled={loading || queueLoading || content.length > charLimit}
+          title="Find next open queue slot and schedule automatically"
+        >
+          {queueLoading ? 'Finding slot…' : '📋 Add to Queue'}
+        </Button>
+        <Button onClick={handleSubmit} disabled={loading || queueLoading || content.length > charLimit}>
           {loading ? 'Scheduling…' : 'Schedule Post'}
         </Button>
       </div>

@@ -9,6 +9,7 @@ import { PLAN_LIMITS } from '../lib/plans.js'
 import type { Plan } from '../lib/plans.js'
 import { checkLimit } from '../lib/planLimits.js'
 import { notify, notifyMany, getWorkspaceAdmins } from '../lib/notify.js'
+import { getNextAvailableSlot } from '../lib/queueScheduler.js'
 
 const router = Router()
 const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE'] as const
@@ -347,6 +348,108 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
   } catch (err) {
     logger.error({ err }, 'Schedule post error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to schedule post')
+  }
+})
+
+// POST /api/v1/posts/queue-schedule
+// Takes a post payload, finds next open queue slot, and creates the post.
+router.post('/queue-schedule', async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId, content, mediaUrls, platforms, firstComment, platformVariants } = req.body as {
+    workspaceId?: string
+    content?: string
+    mediaUrls?: string[]
+    platforms?: string[]
+    firstComment?: string
+    platformVariants?: unknown
+  }
+
+  if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
+  if (!content || content.trim().length === 0) { sendError(res, 400, 'MISSING_FIELD', 'content is required'); return }
+  if (!platforms || !Array.isArray(platforms) || platforms.length === 0) { sendError(res, 400, 'MISSING_FIELD', 'platforms array is required'); return }
+
+  const invalidPlatforms = platforms.filter((p) => !VALID_PLATFORMS.includes(p as typeof VALID_PLATFORMS[number]))
+  if (invalidPlatforms.length > 0) { sendError(res, 400, 'INVALID_PLATFORM', `Invalid platforms: ${invalidPlatforms.join(', ')}`); return }
+
+  const { variants, error: variantError } = validateVariants(platformVariants)
+  if (variantError) { sendError(res, 400, 'INVALID_VARIANT', variantError); return }
+
+  const role = await getWorkspaceRole(workspaceId, req.user!.id)
+  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+
+  try {
+    // Load active queue slots for this workspace
+    const activeSlots = await (prisma.queueSlot.findMany as Function)({
+      where: { workspaceId, isActive: true },
+    })
+
+    if (activeSlots.length === 0) {
+      sendError(res, 422, 'NO_QUEUE_SLOTS', 'No queue slots configured. Add at least one slot before using the queue.')
+      return
+    }
+
+    // Load existing scheduled timestamps to check conflicts
+    const existingPosts = await prisma.scheduledPost.findMany({
+      where: { workspaceId, status: { in: ['SCHEDULED', 'QUEUED'] } },
+      select: { scheduledFor: true },
+    })
+    const occupied = new Set(existingPosts.map((p) => p.scheduledFor.toISOString()))
+
+    const nextSlot = getNextAvailableSlot(activeSlots, occupied)
+
+    if (!nextSlot) {
+      sendError(res, 409, 'NO_AVAILABLE_SLOT', 'No open queue slots available in the next 8 weeks.')
+      return
+    }
+
+    const { allowed, limit, current } = await checkLimit(prisma, workspaceId, 'scheduledPosts')
+    if (!allowed) {
+      sendError(res, 403, 'PLAN_LIMIT', `Plan limit reached: ${current}/${limit} posts this month.`)
+      return
+    }
+
+    const isPrivileged = role === 'OWNER' || role === 'ADMIN'
+    const status = isPrivileged ? 'SCHEDULED' : 'PENDING_REVIEW'
+
+    const post = await (prisma.scheduledPost.create as Function)({
+      data: {
+        workspaceId,
+        content: content.trim(),
+        mediaUrls: mediaUrls ?? [],
+        platforms: platforms as (typeof VALID_PLATFORMS[number])[],
+        scheduledFor: nextSlot,
+        status,
+        submittedBy: req.user!.id,
+        ...(firstComment?.trim() ? { firstComment: firstComment.trim() } : {}),
+        ...(variants!.length > 0 ? {
+          platformVariants: {
+            create: variants!.map((v) => ({
+              platform: v.platform,
+              content: v.content,
+              hashtags: v.hashtags ?? [],
+              mediaUrls: v.mediaUrls ?? [],
+            })),
+          },
+        } : {}),
+      },
+      include: { platformVariants: true },
+    })
+
+    let jobId: string | undefined
+    if (isPrivileged) {
+      const delay = nextSlot.getTime() - Date.now()
+      const job = await publishPostQueue.add(
+        'publish-post',
+        { postId: post.id },
+        { delay, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+      )
+      jobId = job.id
+      logger.info({ postId: post.id, scheduledFor: nextSlot, jobId }, 'Queue-scheduled post enqueued')
+    }
+
+    res.status(201).json({ post, jobId, scheduledFor: nextSlot, requiresReview: !isPrivileged })
+  } catch (err) {
+    logger.error({ err }, 'Queue schedule error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to queue-schedule post')
   }
 })
 
