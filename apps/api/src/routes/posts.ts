@@ -10,6 +10,7 @@ import type { Plan } from '../lib/plans.js'
 import { checkLimit } from '../lib/planLimits.js'
 import { notify, notifyMany, getWorkspaceAdmins } from '../lib/notify.js'
 import { getNextAvailableSlot } from '../lib/queueScheduler.js'
+import { sendPostSubmittedEmail, sendPostApprovedEmail, sendPostRejectedEmail } from '../lib/email.js'
 
 const router = Router()
 const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE'] as const
@@ -599,6 +600,29 @@ router.post('/:id/submit-review', async (req: Request, res: Response): Promise<v
       link: '/dashboard/approvals',
     })))
 
+    // Email admins/owners (fire-and-forget)
+    void (async () => {
+      try {
+        const [submitter, workspace, adminUsers] = await Promise.all([
+          prisma.user.findUnique({ where: { id: req.user!.id }, select: { email: true } }),
+          prisma.workspace.findUnique({ where: { id: post.workspaceId }, select: { name: true } }),
+          prisma.user.findMany({ where: { id: { in: submitterIds } }, select: { email: true } }),
+        ])
+        const appUrl = process.env.WEB_URL ?? 'http://localhost:3000'
+        await Promise.all(adminUsers.map((u) =>
+          sendPostSubmittedEmail({
+            to: u.email,
+            submitterEmail: submitter?.email ?? 'A team member',
+            postContent: post.content,
+            workspaceName: workspace?.name ?? 'your workspace',
+            approvalsUrl: `${appUrl}/dashboard/approvals`,
+          })
+        ))
+      } catch (e) {
+        logger.error({ e }, 'Failed to send post-submitted emails')
+      }
+    })()
+
     res.json({ post: updated })
   } catch (err) {
     logger.error({ err }, 'Submit review error')
@@ -649,6 +673,14 @@ router.post('/:id/approve', async (req: Request, res: Response): Promise<void> =
         body: `Your post has been approved and is now scheduled: "${post.content.slice(0, 60)}${post.content.length > 60 ? '…' : ''}"`,
         link: '/dashboard/calendar',
       })
+
+      // Email the submitter (fire-and-forget)
+      void prisma.user.findUnique({ where: { id: post.submittedBy }, select: { email: true } }).then((u) => {
+        if (u) {
+          const appUrl = process.env.WEB_URL ?? 'http://localhost:3000'
+          return sendPostApprovedEmail({ to: u.email, postContent: post.content, calendarUrl: `${appUrl}/dashboard/calendar` })
+        }
+      }).catch((e) => logger.error({ e }, 'Failed to send post-approved email'))
     }
 
     res.json({ post: updated, jobId: job.id })
@@ -692,6 +724,14 @@ router.post('/:id/reject', async (req: Request, res: Response): Promise<void> =>
           : `Your post was sent back for revisions: "${post.content.slice(0, 60)}${post.content.length > 60 ? '…' : ''}"`,
         link: '/dashboard/calendar',
       })
+
+      // Email the submitter (fire-and-forget)
+      void prisma.user.findUnique({ where: { id: post.submittedBy }, select: { email: true } }).then((u) => {
+        if (u) {
+          const appUrl = process.env.WEB_URL ?? 'http://localhost:3000'
+          return sendPostRejectedEmail({ to: u.email, postContent: post.content, note: note?.trim(), calendarUrl: `${appUrl}/dashboard/calendar` })
+        }
+      }).catch((e) => logger.error({ e }, 'Failed to send post-rejected email'))
     }
 
     res.json({ post: updated })

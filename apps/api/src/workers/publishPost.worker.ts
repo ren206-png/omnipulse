@@ -142,7 +142,7 @@ const worker = new Worker(
 
     // Seed initial metrics (0s) — the analytics-sync worker will fill real numbers later
     await (prisma as unknown as { postMetric: { createMany: (args: unknown) => Promise<unknown> } }).postMetric.createMany({
-      data: post.platforms.map((platform) => ({
+      data: post.platforms.map((platform: string) => ({
         postId,
         platform,
         likes: 0,
