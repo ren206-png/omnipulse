@@ -33,4 +33,5 @@ export const env = {
   APP_URL: process.env.APP_URL ?? 'http://localhost:3000',
   API_URL: process.env.API_URL ?? process.env.APP_URL ?? 'http://localhost:4000',
   ADMIN_EMAIL: process.env.ADMIN_EMAIL ?? '',
+  SENTRY_DSN: process.env.SENTRY_DSN ?? '',
 }

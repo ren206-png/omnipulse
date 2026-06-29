@@ -1,10 +1,21 @@
 import './config/env.js'
 import 'dotenv/config'
+import * as Sentry from '@sentry/node'
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import { logger } from './lib/logger.js'
 import { env } from './config/env.js'
+
+// Init Sentry before anything else (no-ops if SENTRY_DSN is not set)
+if (env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: env.SENTRY_DSN,
+    environment: env.NODE_ENV,
+    tracesSampleRate: env.NODE_ENV === 'production' ? 0.2 : 1.0,
+  })
+  logger.info('Sentry initialized')
+}
 import authRouter from './routes/auth.js'
 import workspacesRouter from './routes/workspaces.js'
 import postsRouter from './routes/posts.js'
@@ -87,6 +98,19 @@ app.use('/api/v1/competitors', competitorsRouter)
 app.use('/api/v1/admin', adminRouter)
 app.use('/api/v1/onboarding', onboardingRouter)
 app.use('/uploads', express.static('public/uploads'))
+
+// Sentry error handler — must be after all routes
+if (env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app)
+}
+
+// Global unhandled error fallback
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  logger.error({ err }, 'Unhandled error')
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Something went wrong' })
+  }
+})
 
 app.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, `OmniPulse API listening on port ${env.PORT}`)
