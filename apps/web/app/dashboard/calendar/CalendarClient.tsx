@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import {
   startOfMonth,
   endOfMonth,
@@ -10,6 +10,18 @@ import {
   addMonths,
   subMonths,
 } from 'date-fns'
+import {
+  DndContext,
+  DragOverlay,
+  useDraggable,
+  useDroppable,
+  type DragStartEvent,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -44,6 +56,68 @@ interface Props {
   token: string
   activeWorkspaceId?: string
 }
+
+// ── Drag-and-drop sub-components ──────────────────────────────────────────
+
+function DroppableDay({
+  day,
+  isToday,
+  isPast,
+  onClick,
+  children,
+}: {
+  day: Date
+  isToday: boolean
+  isPast: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: day.toISOString() })
+  return (
+    <div
+      ref={setNodeRef}
+      onClick={onClick}
+      className={cn(
+        'bg-background min-h-[80px] p-1.5 cursor-pointer hover:bg-accent/50 transition-colors',
+        isToday && 'ring-1 ring-inset ring-primary',
+        isPast && 'opacity-40',
+        isOver && !isPast && 'bg-primary/10 ring-1 ring-inset ring-primary/40',
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
+function DraggablePostDot({ post, isDragging }: { post: { id: string; status: string; content: string }; isDragging: boolean }) {
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: post.id })
+  const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined
+
+  const statusDotClass: Record<string, string> = {
+    DRAFT:          'bg-muted-foreground',
+    PENDING_REVIEW: 'bg-yellow-500',
+    APPROVED:       'bg-teal-500',
+    SCHEDULED:      'bg-blue-500',
+    PUBLISHED:      'bg-green-500',
+    FAILED:         'bg-red-500',
+  }
+
+  return (
+    <span
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        'inline-block w-2.5 h-2.5 rounded-full cursor-grab active:cursor-grabbing touch-none transition-opacity',
+        statusDotClass[post.status] ?? 'bg-muted-foreground',
+        isDragging && 'opacity-30',
+      )}
+      title={`${post.status}: ${post.content.slice(0, 60)} — drag to reschedule`}
+    />
+  )
+}
+// ──────────────────────────────────────────────────────────────────────────
 
 const STATUS_DOT: Record<Post['status'], string> = {
   DRAFT:          'bg-muted-foreground',
@@ -92,6 +166,11 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
   const [evergreenPostId, setEvergreenPostId] = useState<string | null>(null)
   const [evergreenDays, setEvergreenDays] = useState('30')
   const [evergreenLoading, setEvergreenLoading] = useState(false)
+
+  // Drag-and-drop state
+  const [draggingPostId, setDraggingPostId] = useState<string | null>(null)
+  const dragInFlight = useRef(false)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
 
   const fetchPosts = useCallback(async () => {
     setFetchError(null)
@@ -262,6 +341,71 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
     ? selectedDate < new Date(new Date().setHours(0, 0, 0, 0))
     : false
 
+  // ── Drag-and-drop handlers ──────────────────────────────────────────────
+  function handleDragStart(event: DragStartEvent) {
+    setDraggingPostId(String(event.active.id))
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const postId = String(event.active.id)
+    const targetDayIso = event.over?.id ? String(event.over.id) : null
+
+    setDraggingPostId(null)
+
+    if (!targetDayIso || dragInFlight.current) return
+
+    const post = posts.find((p) => p.id === postId)
+    if (!post) return
+
+    // Cannot drag published/failed posts
+    if (post.status === 'PUBLISHED' || post.status === 'FAILED') return
+
+    const targetDay = new Date(targetDayIso)
+
+    // Reject past dates client-side
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    if (targetDay < today) {
+      setToastMessage('Cannot schedule a post in the past.')
+      setToastOpen(true)
+      return
+    }
+
+    // No-op if same day
+    if (isSameDay(new Date(post.scheduledFor), targetDay)) return
+
+    // Keep the original time, just change the date
+    const originalDate = new Date(post.scheduledFor)
+    const newDate = new Date(targetDay)
+    newDate.setHours(originalDate.getHours(), originalDate.getMinutes(), 0, 0)
+
+    // Optimistic update
+    const originalScheduledFor = post.scheduledFor
+    setPosts((prev) =>
+      prev.map((p) => p.id === postId ? { ...p, scheduledFor: newDate.toISOString() } : p)
+    )
+
+    dragInFlight.current = true
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/posts/${postId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ scheduledFor: newDate.toISOString() }),
+      })
+      if (!res.ok) throw new Error('Update failed')
+    } catch {
+      // Rollback on failure
+      setPosts((prev) =>
+        prev.map((p) => p.id === postId ? { ...p, scheduledFor: originalScheduledFor } : p)
+      )
+      setToastMessage('Failed to reschedule post — change reverted.')
+      setToastOpen(true)
+    } finally {
+      dragInFlight.current = false
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -301,7 +445,8 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
         ))}
       </div>
 
-      {/* Calendar grid */}
+      {/* Calendar grid — wrapped in DndContext for drag-and-drop */}
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden border">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
           <div key={d} className="bg-muted px-2 py-1 text-xs font-medium text-center text-muted-foreground">
@@ -318,14 +463,12 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
           const isToday = isSameDay(day, new Date())
           const isPast = day < new Date(new Date().setHours(0, 0, 0, 0)) && !isToday
           return (
-            <div
+            <DroppableDay
               key={day.toISOString()}
+              day={day}
+              isToday={isToday}
+              isPast={isPast}
               onClick={() => handleDayClick(day)}
-              className={cn(
-                'bg-background min-h-[80px] p-1.5 cursor-pointer hover:bg-accent/50 transition-colors',
-                isToday && 'ring-1 ring-inset ring-primary',
-                isPast && 'opacity-40',
-              )}
             >
               <span className={cn(
                 'text-xs font-medium',
@@ -336,19 +479,33 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
 
               {dayPosts.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {dayPosts.map((p) => (
-                    <span
-                      key={p.id}
-                      className={cn('inline-block w-2 h-2 rounded-full', STATUS_DOT[p.status])}
-                      title={`${STATUS_LABEL[p.status]}: ${p.content.slice(0, 60)}`}
-                    />
-                  ))}
+                  {dayPosts.map((p) => {
+                    const isDraggable = p.status !== 'PUBLISHED' && p.status !== 'FAILED'
+                    return isDraggable ? (
+                      <DraggablePostDot key={p.id} post={p} isDragging={draggingPostId === p.id} />
+                    ) : (
+                      <span
+                        key={p.id}
+                        className={cn('inline-block w-2 h-2 rounded-full', STATUS_DOT[p.status])}
+                        title={`${STATUS_LABEL[p.status]}: ${p.content.slice(0, 60)}`}
+                      />
+                    )
+                  })}
                 </div>
               )}
-            </div>
+            </DroppableDay>
           )
         })}
       </div>
+
+      {/* Drag overlay — ghost card while dragging */}
+      <DragOverlay>
+        {draggingPostId ? (
+          <div className="w-3 h-3 rounded-full bg-primary opacity-80 shadow-lg cursor-grabbing" />
+        ) : null}
+      </DragOverlay>
+
+      </DndContext>
 
       {/* Day detail dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => {
