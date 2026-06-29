@@ -213,6 +213,9 @@ interface Props {
   token: string
   onSuccess: (requiresReview?: boolean) => void
   onClose: () => void
+  initialContent?: string
+  initialPlatforms?: string[]
+  initialMediaUrls?: string[]
 }
 
 function defaultTime(): string {
@@ -236,10 +239,10 @@ function makeVariants(masterContent: string): Record<VariantPlatform, PlatformVa
   ) as unknown as Record<VariantPlatform, PlatformVariant>
 }
 
-export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, onClose }: Props) {
-  const [content, setContent] = useState('')
-  const [mediaUrls, setMediaUrls] = useState<string[]>([''])
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([])
+export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, onClose, initialContent = '', initialPlatforms = [], initialMediaUrls = [] }: Props) {
+  const [content, setContent] = useState(initialContent)
+  const [mediaUrls, setMediaUrls] = useState<string[]>(initialMediaUrls.length > 0 ? initialMediaUrls : [''])
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>(initialPlatforms.filter((p): p is Platform => (PLATFORMS as readonly string[]).includes(p)))
   const [timeValue, setTimeValue] = useState(defaultTime)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)

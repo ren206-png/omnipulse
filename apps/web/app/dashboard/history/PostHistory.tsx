@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { useWorkspace } from '../context/WorkspaceContext'
 
 const STATUS_FILTERS = ['ALL', 'DRAFT', 'SCHEDULED', 'PUBLISHED', 'FAILED'] as const
-const PLATFORM_FILTERS = ['ALL', 'FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE'] as const
+const PLATFORM_FILTERS = ['ALL', 'FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
 
 const PLATFORM_COLORS: Record<string, string> = {
   FACEBOOK: 'bg-blue-100 text-blue-700',
@@ -16,6 +17,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   TIKTOK: 'bg-slate-100 text-slate-700',
   X: 'bg-gray-100 text-gray-700',
   GOOGLE: 'bg-orange-100 text-orange-700',
+  LINKEDIN: 'bg-sky-100 text-sky-700',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -73,6 +75,7 @@ function SkeletonCard() {
 
 export function PostHistory({ token }: { token: string }) {
   const { activeWorkspace } = useWorkspace()
+  const router = useRouter()
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
 
   const [search, setSearch] = useState('')
@@ -142,6 +145,18 @@ export function PostHistory({ token }: { token: string }) {
   useEffect(() => {
     setPage(1)
   }, [status, platform])
+
+  function reusePost(post: Post) {
+    const params = new URLSearchParams({
+      reuse: '1',
+      content: post.content,
+      platforms: post.platforms.join(','),
+    })
+    if (post.mediaUrls.length > 0) {
+      params.set('mediaUrls', post.mediaUrls.join(','))
+    }
+    router.push(`/dashboard/calendar?${params.toString()}`)
+  }
 
   function clearFilters() {
     setSearch('')
@@ -223,14 +238,28 @@ export function PostHistory({ token }: { token: string }) {
       {/* Empty state */}
       {!loading && !error && posts.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
-          <div className="text-4xl">📭</div>
-          <p className="font-medium">No posts found</p>
-          <p className="text-sm text-muted-foreground">Try adjusting your search or filters.</p>
-          {hasFilters && (
-            <Button variant="outline" size="sm" onClick={clearFilters}>
-              Clear Filters
-            </Button>
-          )}
+          <div className="text-5xl">{hasFilters ? '🔍' : '📭'}</div>
+          <p className="font-semibold text-lg">{hasFilters ? 'No matching posts' : 'No posts yet'}</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            {hasFilters
+              ? 'Try adjusting your search or filters to find what you\'re looking for.'
+              : 'Once you schedule or publish posts, they\'ll appear here with engagement metrics.'}
+          </p>
+          <div className="flex gap-2 flex-wrap justify-center">
+            {hasFilters && (
+              <Button variant="outline" size="sm" onClick={clearFilters}>
+                Clear Filters
+              </Button>
+            )}
+            {!hasFilters && (
+              <a
+                href="/dashboard/calendar"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                📅 Schedule a Post
+              </a>
+            )}
+          </div>
         </div>
       )}
 
@@ -272,14 +301,24 @@ export function PostHistory({ token }: { token: string }) {
               {/* Content preview */}
               <p className="text-sm line-clamp-2 leading-relaxed">{post.content}</p>
 
-              {/* Engagement metrics */}
-              {(post.metrics.likes > 0 || post.metrics.comments > 0 || post.metrics.shares > 0) && (
-                <div className="flex gap-4 text-xs text-muted-foreground">
-                  <span>❤️ {post.metrics.likes.toLocaleString()} likes</span>
-                  <span>💬 {post.metrics.comments.toLocaleString()} comments</span>
-                  <span>🔁 {post.metrics.shares.toLocaleString()} shares</span>
-                </div>
-              )}
+              {/* Engagement metrics + reuse */}
+              <div className="flex items-center justify-between gap-2">
+                {(post.metrics.likes > 0 || post.metrics.comments > 0 || post.metrics.shares > 0) ? (
+                  <div className="flex gap-4 text-xs text-muted-foreground">
+                    <span>❤️ {post.metrics.likes.toLocaleString()} likes</span>
+                    <span>💬 {post.metrics.comments.toLocaleString()} comments</span>
+                    <span>🔁 {post.metrics.shares.toLocaleString()} shares</span>
+                  </div>
+                ) : <div />}
+                <button
+                  type="button"
+                  onClick={() => reusePost(post)}
+                  className="text-xs text-muted-foreground hover:text-primary border border-border hover:border-primary/40 rounded-md px-2 py-0.5 transition-colors flex items-center gap-1 shrink-0"
+                  title="Reuse this post"
+                >
+                  ♻️ Reuse
+                </button>
+              </div>
             </div>
           ))}
         </div>

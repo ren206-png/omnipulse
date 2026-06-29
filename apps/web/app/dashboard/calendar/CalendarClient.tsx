@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   startOfMonth,
   endOfMonth,
@@ -146,12 +147,48 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
       '_blank',
     )
   }
+  const searchParams = useSearchParams()
+  const reuseContent = searchParams.get('content') ?? ''
+  const reusePlatforms = useMemo(() => {
+    const raw = searchParams.get('platforms') ?? ''
+    return raw ? raw.split(',').filter(Boolean) : []
+  }, [searchParams])
+  const reuseMediaUrls = useMemo(() => {
+    const raw = searchParams.get('mediaUrls') ?? ''
+    return raw ? raw.split(',').filter(Boolean) : []
+  }, [searchParams])
+  const isReuse = searchParams.get('reuse') === '1'
+
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [posts, setPosts] = useState<Post[]>([])
   const [fetchError, setFetchError] = useState<string | null>(null)
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [selectedDate, setSelectedDate] = useState<Date | null>(() => {
+    // If arriving via "Reuse", auto-select tomorrow
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('reuse') === '1') {
+        const tomorrow = new Date()
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        tomorrow.setHours(0, 0, 0, 0)
+        return tomorrow
+      }
+    }
+    return null
+  })
+  const [dialogOpen, setDialogOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      return params.get('reuse') === '1'
+    }
+    return false
+  })
+  const [showCreateForm, setShowCreateForm] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      return params.get('reuse') === '1'
+    }
+    return false
+  })
   const [toastOpen, setToastOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
   const [formKey, setFormKey] = useState(0)
@@ -745,6 +782,9 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
                 token={token}
                 onSuccess={handlePostSuccess}
                 onClose={() => setDialogOpen(false)}
+                initialContent={isReuse ? reuseContent : undefined}
+                initialPlatforms={isReuse ? reusePlatforms : undefined}
+                initialMediaUrls={isReuse ? reuseMediaUrls : undefined}
               />
             </>
           )}

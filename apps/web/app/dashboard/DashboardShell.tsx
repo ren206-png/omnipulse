@@ -27,6 +27,7 @@ const NAV_LINKS = [
   { href: '/dashboard/analytics', label: 'Analytics' },
   { href: '/dashboard/insights', label: '💡 Insights' },
   { href: '/dashboard/hashtags', label: 'Hashtags' },
+  { href: '/dashboard/image-editor', label: '🖼️ Image Editor' },
   { href: '/dashboard/inbox', label: 'Inbox' },
   { href: '/dashboard/competitors', label: 'Competitors', icon: '🔍' },
   { href: '/dashboard/trends', label: 'Trends', icon: '📈' },
