@@ -46,6 +46,9 @@ import { twoFactorRouter } from './routes/twoFactor.js'
 import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
 import { sendWeeklyDigest } from './lib/digest.js'
+import { startGuardianWorker } from './workers/guardian.worker.js'
+import { prisma } from './lib/prisma.js'
+import IORedis from 'ioredis'
 
 // Run DB migrations on startup (safe to run repeatedly)
 async function runMigrations() {
@@ -72,7 +75,28 @@ app.use(cookieParser())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-app.get('/health', (_req, res) => res.json({ status: 'ok' }))
+app.get('/health', async (_req, res) => {
+  let db = 'ok'
+  let redis = 'ok'
+
+  try {
+    await prisma.$queryRaw`SELECT 1`
+  } catch {
+    db = 'error'
+  }
+
+  try {
+    const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379'
+    const client = new IORedis(redisUrl, { connectTimeout: 3000, lazyConnect: true, enableReadyCheck: false })
+    await client.ping()
+    await client.quit()
+  } catch {
+    redis = 'error'
+  }
+
+  const status = db === 'ok' && redis === 'ok' ? 'ok' : 'degraded'
+  res.status(status === 'ok' ? 200 : 503).json({ status, db, redis, ts: new Date().toISOString() })
+})
 
 app.use('/api/v1/auth', authRouter)
 app.use('/api/v1/workspaces', workspacesRouter)
@@ -120,6 +144,8 @@ app.listen(env.PORT, () => {
   logger.info({ port: env.PORT }, `OmniPulse API listening on port ${env.PORT}`)
 })
 startEvergreenWorker()
+// Guardian — self-healing system (scans every 5 min for zombie posts)
+startGuardianWorker().catch((err) => logger.error({ err }, 'Failed to start guardian worker'))
 // Sync analytics every 6 hours
 setInterval(() => { syncAnalytics().catch(() => {}) }, 6 * 60 * 60 * 1000)
 // Weekly digest — every Monday 9am UTC

@@ -406,6 +406,17 @@ worker.on('ready', () => {
   logger.info('BullMQ worker registered: publish-post')
 })
 
+// Crash protection — exit so Railway / PM2 auto-restarts this process
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, '[publishPost] uncaughtException — exiting for restart')
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, '[publishPost] unhandledRejection — exiting for restart')
+  process.exit(1)
+})
+
 worker.on('failed', (job, err) => {
   logger.error({ jobId: job?.id, err }, 'publish-post job failed permanently')
 })
