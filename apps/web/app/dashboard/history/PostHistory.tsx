@@ -52,6 +52,13 @@ interface HistoryResponse {
   totalPages: number
 }
 
+type RepurposeVariant = {
+  platform: string
+  content: string
+  hashtags: string[]
+  mediaUrls: string[]
+}
+
 function SkeletonCard() {
   return (
     <div className="rounded-lg border bg-card p-4 space-y-3 animate-pulse">
@@ -91,6 +98,14 @@ export function PostHistory({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null)
   const [retryingPostId, setRetryingPostId] = useState<string | null>(null)
   const [retryMessage, setRetryMessage] = useState<string | null>(null)
+
+  // Repurpose modal state
+  const [repurposePost, setRepurposePost] = useState<Post | null>(null)
+  const [repurposeLoading, setRepurposeLoading] = useState(false)
+  const [repurposeError, setRepurposeError] = useState<string | null>(null)
+  const [repurposeVariants, setRepurposeVariants] = useState<RepurposeVariant[]>([])
+  const [repurposeTab, setRepurposeTab] = useState(0)
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -180,6 +195,43 @@ export function PostHistory({ token }: { token: string }) {
       params.set('mediaUrls', post.mediaUrls.join(','))
     }
     router.push(`/dashboard/calendar?${params.toString()}`)
+  }
+
+  async function handleRepurpose(post: Post) {
+    setRepurposePost(post)
+    setRepurposeVariants([])
+    setRepurposeError(null)
+    setRepurposeTab(0)
+    setRepurposeLoading(true)
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/ai/multiply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          content: post.content,
+          platforms: post.platforms,
+          workspaceId: activeWorkspace?.id,
+        }),
+      })
+      const data = (await res.json()) as { variants?: RepurposeVariant[]; error?: string }
+      if (!res.ok) {
+        setRepurposeError(data.error ?? 'Failed to repurpose')
+        return
+      }
+      setRepurposeVariants(data.variants ?? [])
+    } catch {
+      setRepurposeError('Network error')
+    } finally {
+      setRepurposeLoading(false)
+    }
+  }
+
+  async function copyVariant(idx: number) {
+    const variant = repurposeVariants[idx]
+    if (!variant) return
+    await navigator.clipboard.writeText(variant.content)
+    setCopiedIdx(idx)
+    setTimeout(() => setCopiedIdx(null), 2000)
   }
 
   function clearFilters() {
@@ -358,6 +410,15 @@ export function PostHistory({ token }: { token: string }) {
                       {retryingPostId === post.id ? '⏳ Retrying…' : '🔄 Retry'}
                     </button>
                   )}
+                  {post.status === 'PUBLISHED' && (
+                    <button
+                      type="button"
+                      onClick={() => handleRepurpose(post)}
+                      className="text-xs px-2 py-1 rounded bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/30 dark:text-violet-300 transition-colors"
+                    >
+                      Repurpose ✨
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => reusePost(post)}
@@ -395,6 +456,129 @@ export function PostHistory({ token }: { token: string }) {
           >
             Next
           </Button>
+        </div>
+      )}
+
+      {/* Repurpose Modal */}
+      {repurposePost && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
+              <h2 className="font-semibold text-base">Repurpose with AI ✨</h2>
+              <button
+                type="button"
+                onClick={() => setRepurposePost(null)}
+                className="text-muted-foreground hover:text-foreground transition-colors text-lg leading-none"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Loading state */}
+            {repurposeLoading && (
+              <div className="flex flex-col items-center justify-center py-16 gap-3">
+                <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                <p className="text-sm text-muted-foreground">Generating platform variants…</p>
+              </div>
+            )}
+
+            {/* Error state */}
+            {!repurposeLoading && repurposeError && (
+              <div className="flex flex-col items-center justify-center py-12 gap-4 px-5">
+                <p className="text-sm text-destructive text-center">{repurposeError}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleRepurpose(repurposePost)}
+                >
+                  Try Again
+                </Button>
+              </div>
+            )}
+
+            {/* Results */}
+            {!repurposeLoading && !repurposeError && repurposeVariants.length > 0 && (
+              <>
+                {/* Platform tabs */}
+                <div className="flex gap-1 p-3 border-b overflow-x-auto shrink-0">
+                  {repurposeVariants.map((v, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setRepurposeTab(i)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
+                        repurposeTab === i
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted hover:bg-accent',
+                      )}
+                    >
+                      {v.platform}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Active variant content */}
+                {repurposeVariants[repurposeTab] && (
+                  <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                    {/* Content */}
+                    <div className="relative">
+                      <div className="bg-muted rounded p-3 text-sm whitespace-pre-wrap leading-relaxed">
+                        {repurposeVariants[repurposeTab].content}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => copyVariant(repurposeTab)}
+                        className="absolute top-2 right-2 text-xs px-2 py-1 rounded bg-background border border-border hover:bg-accent transition-colors"
+                      >
+                        {copiedIdx === repurposeTab ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+
+                    {/* Hashtags */}
+                    {repurposeVariants[repurposeTab].hashtags.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {repurposeVariants[repurposeTab].hashtags.map((tag, i) => (
+                          <span
+                            key={i}
+                            className="text-xs px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 font-medium"
+                          >
+                            {tag.startsWith('#') ? tag : `#${tag}`}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Footer */}
+                <div className="px-5 py-4 border-t shrink-0">
+                  <Button
+                    className="w-full"
+                    onClick={() =>
+                      router.push(
+                        `/dashboard/calendar?repurpose=1&content=${encodeURIComponent(repurposePost.content)}`,
+                      )
+                    }
+                  >
+                    Schedule All Variants
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {/* Empty variants (no error, not loading) */}
+            {!repurposeLoading && !repurposeError && repurposeVariants.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 px-5">
+                <p className="text-sm text-muted-foreground text-center">No variants generated. Try again.</p>
+                <Button size="sm" variant="outline" onClick={() => handleRepurpose(repurposePost)}>
+                  Retry
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
