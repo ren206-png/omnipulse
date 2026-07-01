@@ -5,6 +5,8 @@ import fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
 import { requireAuth } from '../middleware/auth.js'
 import { env } from '../config/env.js'
+import { prisma } from '../lib/prisma.js'
+import { sendError } from '../lib/apiError.js'
 
 const router = Router()
 
@@ -94,6 +96,77 @@ router.post(
     res.status(201).json({ asset })
   },
 )
+
+// POST /api/v1/media/upload — alias for file upload (used by media library)
+router.post(
+  '/upload',
+  requireAuth,
+  upload.single('file'),
+  (req: Request, res: Response): void => {
+    if (!req.file) { res.status(400).json({ error: 'file required' }); return }
+    const url = `${env.API_URL}/uploads/${req.file.filename}`
+    res.status(201).json({ url, filename: req.file.filename, mimeType: req.file.mimetype, size: req.file.size })
+  },
+)
+
+// GET /api/v1/media/library?workspaceId=...&tag=...&search=...
+router.get('/library', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId, tag, search } = req.query as { workspaceId?: string; tag?: string; search?: string }
+  if (!workspaceId) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId required'); return }
+  try {
+    const assets = await (prisma as any).mediaAsset.findMany({
+      where: {
+        workspaceId,
+        ...(tag ? { tags: { has: tag } } : {}),
+        ...(search ? { filename: { contains: search, mode: 'insensitive' } } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    })
+    res.json({ assets })
+  } catch {
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch media library')
+  }
+})
+
+// POST /api/v1/media/library — save asset metadata after upload
+router.post('/library', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId, url, filename, mimeType, size, tags } = req.body as {
+    workspaceId?: string; url?: string; filename?: string; mimeType?: string; size?: number; tags?: string[]
+  }
+  if (!workspaceId || !url || !filename) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId, url, filename required'); return }
+  try {
+    const asset = await (prisma as any).mediaAsset.create({
+      data: { workspaceId, url, filename, mimeType: mimeType ?? 'application/octet-stream', size: size ?? 0, tags: tags ?? [] },
+    })
+    res.status(201).json({ asset })
+  } catch {
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to save media asset')
+  }
+})
+
+// PATCH /api/v1/media/library/:id — update tags
+router.patch('/library/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params
+  const { tags } = req.body as { tags?: string[] }
+  try {
+    const asset = await (prisma as any).mediaAsset.update({ where: { id }, data: { tags: tags ?? [] } })
+    res.json({ asset })
+  } catch {
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to update asset')
+  }
+})
+
+// DELETE /api/v1/media/library/:id
+router.delete('/library/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params
+  try {
+    await (prisma as any).mediaAsset.delete({ where: { id } })
+    res.json({ success: true })
+  } catch {
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to delete asset')
+  }
+})
 
 // DELETE /api/v1/media/:id
 router.delete('/:id', requireAuth, (req: Request, res: Response): void => {

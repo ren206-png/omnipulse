@@ -54,6 +54,7 @@ const NAV_GROUPS = [
     links: [
       { href: '/dashboard/hashtags', label: 'Hashtags', icon: '#️⃣' },
       { href: '/dashboard/image-editor', label: 'Image Editor', icon: '🖼️' },
+      { href: '/dashboard/media', label: 'Media Library', icon: '🖼️' },
       { href: '/dashboard/bio', label: 'Link in Bio', icon: '🔗' },
     ],
   },
