@@ -473,7 +473,7 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
       )}
 
       {/* Legend */}
-      <div className="flex gap-4 text-xs text-muted-foreground">
+      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         {(Object.entries(STATUS_LABEL) as [Post['status'], string][]).map(([status, label]) => (
           <div key={status} className="flex items-center gap-1.5">
             <span className={cn('inline-block w-2 h-2 rounded-full', STATUS_DOT[status])} />
@@ -484,7 +484,8 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
 
       {/* Calendar grid — wrapped in DndContext for drag-and-drop */}
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden border">
+      <div className="overflow-x-auto -mx-1 px-1">
+      <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden border min-w-[560px]">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
           <div key={d} className="bg-muted px-2 py-1 text-xs font-medium text-center text-muted-foreground">
             {d}
@@ -533,6 +534,7 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
             </DroppableDay>
           )
         })}
+      </div>
       </div>
 
       {/* Drag overlay — ghost card while dragging */}
