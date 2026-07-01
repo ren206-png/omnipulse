@@ -6,10 +6,19 @@ import { sendError } from '../lib/apiError.js'
 const router = Router()
 router.use(requireAuth)
 
+async function checkCampaignAccess(workspaceId: string, userId: string): Promise<boolean> {
+  const [ws, member] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { ownerId: true } }),
+    prisma.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId } } }),
+  ])
+  return !!(ws && (ws.ownerId === userId || member))
+}
+
 // GET /api/v1/campaigns?workspaceId=...
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }
   if (!workspaceId) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId required'); return }
+  if (!await checkCampaignAccess(workspaceId, req.user!.id)) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
   try {
     const campaigns = await (prisma as any).campaign.findMany({
       where: { workspaceId },
@@ -26,6 +35,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId, name, color } = req.body as { workspaceId?: string; name?: string; color?: string }
   if (!workspaceId || !name?.trim()) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId and name required'); return }
+  if (!await checkCampaignAccess(workspaceId, req.user!.id)) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
   try {
     const campaign = await (prisma as any).campaign.create({
       data: { workspaceId, name: name.trim(), color: color ?? '#6366f1' },
@@ -42,6 +52,9 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params
   const { name, color } = req.body as { name?: string; color?: string }
   try {
+    const existing = await (prisma as any).campaign.findUnique({ where: { id }, select: { workspaceId: true } })
+    if (!existing) { sendError(res, 404, 'NOT_FOUND', 'Campaign not found'); return }
+    if (!await checkCampaignAccess(existing.workspaceId, req.user!.id)) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     const campaign = await (prisma as any).campaign.update({
       where: { id },
       data: {
@@ -50,7 +63,8 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
       },
     })
     res.json({ campaign })
-  } catch {
+  } catch (err: any) {
+    if (err?.code === 'P2025') { sendError(res, 404, 'NOT_FOUND', 'Campaign not found'); return }
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to update campaign')
   }
 })
@@ -59,9 +73,13 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params
   try {
+    const existing = await (prisma as any).campaign.findUnique({ where: { id }, select: { workspaceId: true } })
+    if (!existing) { sendError(res, 404, 'NOT_FOUND', 'Campaign not found'); return }
+    if (!await checkCampaignAccess(existing.workspaceId, req.user!.id)) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     await (prisma as any).campaign.delete({ where: { id } })
     res.json({ success: true })
-  } catch {
+  } catch (err: any) {
+    if (err?.code === 'P2025') { sendError(res, 404, 'NOT_FOUND', 'Campaign not found'); return }
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to delete campaign')
   }
 })

@@ -12,6 +12,15 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId, q, types = 'posts,templates,media', limit = '20' } = req.query as Record<string, string>
   if (!workspaceId || !q?.trim()) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId and q required'); return }
 
+  // Verify caller belongs to this workspace
+  const member = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId: req.user!.id } },
+  })
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  if (!member && workspace?.ownerId !== req.user!.id) {
+    sendError(res, 403, 'FORBIDDEN', 'Access denied'); return
+  }
+
   const query = q.trim()
   const typeList = types.split(',').map(t => t.trim())
   const lim = Math.min(parseInt(limit, 10) || 20, 50)

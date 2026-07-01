@@ -472,7 +472,7 @@ router.post('/generate-image', async (req: Request, res: Response): Promise<void
 })
 
 // POST /api/v1/ai/translate
-router.post('/translate', async (req: Request, res: Response): Promise<void> => {
+router.post('/translate', aiLimiter, async (req: Request, res: Response): Promise<void> => {
   const { text, targetLanguage } = req.body as { text?: string; targetLanguage?: string }
   if (!text || !targetLanguage) { sendError(res, 400, 'MISSING_PARAMS', 'text and targetLanguage required'); return }
   try {
@@ -577,7 +577,7 @@ Return exactly 6 trends.`,
 })
 
 // POST /api/v1/ai/draft-reply
-router.post('/draft-reply', async (req: Request, res: Response): Promise<void> => {
+router.post('/draft-reply', aiLimiter, async (req: Request, res: Response): Promise<void> => {
   const { message, platform, tone = 'friendly', brandName } = req.body as { message?: string; platform?: string; tone?: string; brandName?: string }
   if (!message) { sendError(res, 400, 'MISSING_MESSAGE', 'message required'); return }
   try {
@@ -743,7 +743,7 @@ router.post('/safety-scan/override', async (req: Request, res: Response): Promis
 // ─── POST /api/v1/ai/caption-suggestion ──────────────────────────────────────
 // Generate a caption from a product image URL.
 // The image must already be uploaded and have a publicly accessible URL.
-router.post('/caption-suggestion', async (req: Request, res: Response): Promise<void> => {
+router.post('/caption-suggestion', aiLimiter, async (req: Request, res: Response): Promise<void> => {
   if (!env.ANTHROPIC_API_KEY) {
     sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server')
     return
@@ -921,7 +921,7 @@ router.get('/repurpose/suggestions', async (req: Request, res: Response): Promis
 })
 
 // POST /api/v1/ai/coach — conversational post rewriting
-router.post('/coach', async (req: Request, res: Response): Promise<void> => {
+router.post('/coach', aiLimiter, async (req: Request, res: Response): Promise<void> => {
   const { content, instruction, platform } = req.body as {
     content?: string
     instruction?: string
@@ -970,7 +970,7 @@ router.get('/brand-voice', async (req: Request, res: Response): Promise<void> =>
   try {
     const posts = await prisma.scheduledPost.findMany({
       where: { workspaceId, status: 'PUBLISHED' },
-      orderBy: { publishedAt: 'desc' },
+      orderBy: { scheduledFor: 'desc' },
       take: 30,
       select: { content: true },
     })
@@ -1067,7 +1067,7 @@ router.post('/brand-voice/generate', aiLimiter, async (req: Request, res: Respon
   try {
     const posts = await prisma.scheduledPost.findMany({
       where: { workspaceId, status: 'PUBLISHED' },
-      orderBy: { publishedAt: 'desc' },
+      orderBy: { scheduledFor: 'desc' },
       take: 20,
       select: { content: true },
     })
@@ -1238,7 +1238,7 @@ function scorePost(content: string, platform: string): {
   return { score, grade, breakdown }
 }
 
-router.post('/score', async (req: Request, res: Response): Promise<void> => {
+router.post('/score', aiLimiter, async (req: Request, res: Response): Promise<void> => {
   const { content, platform, workspaceId } = req.body as { content?: string; platform?: string; workspaceId?: string }
   if (!content?.trim()) { sendError(res, 400, 'MISSING_CONTENT', 'content is required'); return }
   if (!platform?.trim()) { sendError(res, 400, 'MISSING_PLATFORM', 'platform is required'); return }

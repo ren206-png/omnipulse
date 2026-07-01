@@ -6,10 +6,19 @@ import { sendError } from '../lib/apiError.js'
 const router = Router()
 router.use(requireAuth)
 
+async function checkLinkAccess(workspaceId: string, userId: string): Promise<boolean> {
+  const [ws, member] = await Promise.all([
+    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { ownerId: true } }),
+    prisma.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId } } }),
+  ])
+  return !!(ws && (ws.ownerId === userId || member))
+}
+
 // GET /api/v1/links?workspaceId=...
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }
   if (!workspaceId) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId required'); return }
+  if (!await checkLinkAccess(workspaceId, req.user!.id)) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
   try {
     const links = await (prisma as any).shortLink.findMany({
       where: { workspaceId },
@@ -34,6 +43,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId and originalUrl required')
     return
   }
+  if (!await checkLinkAccess(workspaceId, req.user!.id)) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
 
   // Build final URL with UTM params baked in
   let finalUrl = originalUrl.trim()
@@ -78,6 +88,9 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params
   try {
+    const link = await (prisma as any).shortLink.findUnique({ where: { id }, select: { workspaceId: true } })
+    if (!link) { sendError(res, 404, 'NOT_FOUND', 'Link not found'); return }
+    if (!await checkLinkAccess(link.workspaceId, req.user!.id)) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     await (prisma as any).shortLink.delete({ where: { id } })
     res.json({ success: true })
   } catch {
