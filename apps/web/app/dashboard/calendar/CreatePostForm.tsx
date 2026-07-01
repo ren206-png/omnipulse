@@ -251,6 +251,12 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   const [loading, setLoading] = useState(false)
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const [firstComment, setFirstComment] = useState('')
+
+  // Campaign state
+  const [campaignId, setCampaignId] = useState<string | null>(null)
+  const [campaigns, setCampaigns] = useState<Array<{ id: string; name: string; color: string }>>([])
+  const [campaignInput, setCampaignInput] = useState('')
+  const [creatingCampaign, setCreatingCampaign] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [hookLibraryOpen, setHookLibraryOpen] = useState(false)
 
@@ -373,6 +379,39 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   const [templates, setTemplates] = useState<Array<{ id: string; name: string; content: string; platforms: string[]; category: string | null }>>([])
   const [templatesLoaded, setTemplatesLoaded] = useState(false)
   const [templateSearch, setTemplateSearch] = useState('')
+
+  // Load campaigns once on mount
+  useEffect(() => {
+    if (!workspaceId) return
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    fetch(`${apiUrl}/api/v1/campaigns?workspaceId=${workspaceId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then((d: { campaigns?: Array<{ id: string; name: string; color: string }> }) => {
+        if (d.campaigns) setCampaigns(d.campaigns)
+      })
+      .catch(() => {})
+  }, [workspaceId, token])
+
+  async function handleCreateCampaign() {
+    if (!campaignInput.trim() || !workspaceId) return
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/campaigns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ workspaceId, name: campaignInput.trim() }),
+      })
+      const data = await res.json() as { campaign?: { id: string; name: string; color: string } }
+      if (data.campaign) {
+        setCampaigns(prev => [...prev, data.campaign!])
+        setCampaignId(data.campaign.id)
+        setCampaignInput('')
+        setCreatingCampaign(false)
+      }
+    } catch { /* non-critical */ }
+  }
 
   useEffect(() => {
     if (!templatesOpen || templatesLoaded) return
@@ -1074,6 +1113,7 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
           ...(utmMedium.trim() && { utmMedium: utmMedium.trim() }),
           ...(utmCampaign.trim() && { utmCampaign: utmCampaign.trim() }),
           ...(firstComment.trim() && { firstComment: firstComment.trim() }),
+          ...(campaignId && { campaignId }),
           platformVariants: activeVariantPlatforms.map((p) => ({
             platform: p,
             content: variants[p].content.trim() || content.trim(),
@@ -2072,6 +2112,49 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
 
         {advancedOpen && (
           <div className="border-t p-3 space-y-3 bg-muted/20">
+
+            {/* Campaign */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Campaign</Label>
+              {campaignId ? (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border font-medium"
+                    style={{ borderColor: campaigns.find(c => c.id === campaignId)?.color, color: campaigns.find(c => c.id === campaignId)?.color }}>
+                    <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: campaigns.find(c => c.id === campaignId)?.color }} />
+                    {campaigns.find(c => c.id === campaignId)?.name}
+                  </span>
+                  <button type="button" onClick={() => setCampaignId(null)} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Remove</button>
+                </div>
+              ) : creatingCampaign ? (
+                <div className="flex gap-1.5">
+                  <input
+                    className="flex-1 h-8 text-xs border rounded px-2 bg-background outline-none focus:ring-1 focus:ring-ring"
+                    placeholder="Campaign name…"
+                    value={campaignInput}
+                    onChange={e => setCampaignInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleCreateCampaign(); if (e.key === 'Escape') setCreatingCampaign(false) }}
+                    autoFocus
+                  />
+                  <button type="button" onClick={handleCreateCampaign} className="px-2.5 h-8 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">Create</button>
+                  <button type="button" onClick={() => setCreatingCampaign(false)} className="px-2 h-8 text-xs rounded border text-muted-foreground hover:text-foreground transition-colors">✕</button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {campaigns.map(c => (
+                    <button key={c.id} type="button" onClick={() => setCampaignId(c.id)}
+                      className="text-xs px-2.5 py-1 rounded-full border hover:opacity-80 transition-opacity font-medium"
+                      style={{ borderColor: c.color, color: c.color }}>
+                      {c.name}
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => setCreatingCampaign(true)}
+                    className="text-xs px-2.5 py-1 rounded-full border border-dashed text-muted-foreground hover:text-foreground hover:border-foreground transition-colors">
+                    + New campaign
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs">First Comment</Label>
               <Textarea

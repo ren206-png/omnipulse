@@ -92,3 +92,46 @@ export async function detectAndFix(): Promise<GuardianReport> {
 
   return report
 }
+
+export async function remindPendingReviews(): Promise<void> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000) // 24 hours ago
+
+  const stalePosts = await prisma.scheduledPost.findMany({
+    where: {
+      status: 'PENDING_REVIEW',
+      createdAt: { lte: cutoff },
+    },
+    select: {
+      id: true,
+      workspaceId: true,
+      content: true,
+      platforms: true,
+      submittedBy: true,
+    },
+  })
+
+  if (stalePosts.length === 0) return
+
+  logger.info({ count: stalePosts.length }, '[Guardian] Sending approval reminder notifications')
+
+  for (const post of stalePosts) {
+    try {
+      const adminIds = await getWorkspaceAdmins(post.workspaceId)
+      const truncated = post.content.slice(0, 60) + (post.content.length > 60 ? '…' : '')
+
+      await Promise.all(
+        adminIds.map((userId) =>
+          notify({
+            userId,
+            type: 'POST_SUBMITTED_REVIEW',
+            title: '⏰ Post awaiting your review',
+            body: `A post has been waiting for approval for over 24 hours: "${truncated}"`,
+            link: '/dashboard/approvals',
+          }),
+        ),
+      )
+    } catch (err) {
+      logger.error({ err, postId: post.id }, '[Guardian] Failed to send approval reminder')
+    }
+  }
+}

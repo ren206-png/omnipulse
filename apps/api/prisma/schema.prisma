@@ -48,6 +48,7 @@ model Workspace {
   clientPortal           ClientPortal?
   competitors            CompetitorAccount[]
   queueSlots             QueueSlot[]
+  campaigns              Campaign[]
   plan                   Plan                 @default(FREE)
   stripeCustomerId       String?              @unique
   stripeSubscriptionId   String?              @unique
@@ -154,6 +155,8 @@ model ScheduledPost {
   metrics              PostMetric[]
   platformVariants     PlatformVariant[]
   comments             PostComment[]
+  campaignId           String?
+  campaign             Campaign?             @relation(fields: [campaignId], references: [id], onDelete: SetNull)
 }
 
 model PostComment {
@@ -422,4 +425,17 @@ model QueueSlot {
   updatedAt   DateTime  @updatedAt
 
   @@index([workspaceId, isActive])
+}
+
+model Campaign {
+  id          String          @id @default(cuid())
+  workspaceId String
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  color       String          @default("#6366f1")
+  posts       ScheduledPost[]
+  createdAt   DateTime        @default(now())
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
 }

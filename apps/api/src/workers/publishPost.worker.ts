@@ -11,6 +11,69 @@ import { isLinkedInTokenExpired, refreshLinkedInToken } from '../lib/linkedinTok
 import { publishLinkedInText, publishLinkedInImage, publishLinkedInVideo } from '../lib/linkedinPublisher.js'
 import { scheduleEngagementCheck } from './engagementAlert.worker.js'
 
+async function postFirstComment(
+  platform: string,
+  externalId: string,
+  accessToken: string,
+  comment: string,
+): Promise<void> {
+  try {
+    if (platform === 'X') {
+      const res = await fetch('https://api.twitter.com/2/tweets', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: comment.substring(0, 280), reply: { in_reply_to_tweet_id: externalId } }),
+      })
+      if (!res.ok) {
+        const err = await res.json() as { detail?: string }
+        logger.warn({ platform, externalId, err: err.detail }, 'First comment failed on X')
+      }
+    } else if (platform === 'FACEBOOK') {
+      const res = await fetch(`https://graph.facebook.com/${externalId}/comments?access_token=${accessToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: comment }),
+      })
+      if (!res.ok) {
+        const err = await res.json() as { error?: { message?: string } }
+        logger.warn({ platform, externalId, err: err.error?.message }, 'First comment failed on Facebook')
+      }
+    } else if (platform === 'INSTAGRAM') {
+      const res = await fetch(`https://graph.facebook.com/v20.0/${externalId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: comment, access_token: accessToken }),
+      })
+      if (!res.ok) {
+        const err = await res.json() as { error?: { message?: string } }
+        logger.warn({ platform, externalId, err: err.error?.message }, 'First comment failed on Instagram')
+      }
+    } else if (platform === 'LINKEDIN') {
+      // LinkedIn comments API uses the post URN
+      // externalId is the post URN e.g. "urn:li:share:123"
+      const res = await fetch(`https://api.linkedin.com/rest/socialActions/${encodeURIComponent(externalId)}/comments`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'X-Restli-Protocol-Version': '2.0.0',
+          'LinkedIn-Version': '202406',
+        },
+        body: JSON.stringify({
+          actor: 'urn:li:person:me',
+          message: { text: comment },
+        }),
+      })
+      if (!res.ok) {
+        logger.warn({ platform, externalId, status: res.status }, 'First comment failed on LinkedIn')
+      }
+    }
+  } catch (err) {
+    // First comment is non-critical — log and continue
+    logger.warn({ err, platform, externalId }, 'First comment exception — skipping')
+  }
+}
+
 async function publishToPlatform(
   post: { content: string; mediaUrls: string[] },
   account: { platform: string; accessToken: string; externalProfileId: string },
@@ -302,6 +365,21 @@ const worker = new Worker(
         errorLog: hasErrors ? JSON.stringify(errors) : null,
       },
     })
+
+    // Post first comment on each platform that published successfully
+    if (post.firstComment?.trim() && Object.keys(responseLog).length > 0) {
+      for (const [platform, externalId] of Object.entries(responseLog)) {
+        if (!externalId || externalId.includes('_manual_required')) continue
+        const account = accounts.find((a) => a.platform === platform)
+        if (!account) continue
+        // For LinkedIn, use the raw decrypted token
+        const accessToken = platform === 'LINKEDIN'
+          ? decryptToken(account.accessToken)
+          : account.accessToken
+        await postFirstComment(platform, externalId, accessToken, post.firstComment)
+      }
+      logger.info({ postId, platforms: Object.keys(responseLog) }, 'First comment posted')
+    }
 
     // Seed initial metrics (0s) — the analytics-sync worker will fill real numbers later
     await (prisma as unknown as { postMetric: { createMany: (args: unknown) => Promise<unknown> } }).postMetric.createMany({

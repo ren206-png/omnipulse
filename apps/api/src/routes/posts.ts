@@ -44,7 +44,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     const posts = await (prisma.scheduledPost.findMany as Function)({
       where: { workspaceId },
       orderBy: { scheduledFor: 'asc' },
-      include: { metrics: true, platformVariants: true },
+      include: { metrics: true, platformVariants: true, campaign: { select: { id: true, name: true, color: true } } },
     })
     res.json({ posts })
   } catch (err) {
@@ -268,7 +268,7 @@ function validateVariants(raw: unknown): { variants: PlatformVariantInput[]; err
 }
 
 router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
-  const { workspaceId, content, mediaUrls, platforms, scheduledFor, firstComment, platformVariants, recurrenceFreq, recurrenceEndsAt } = req.body as {
+  const { workspaceId, content, mediaUrls, platforms, scheduledFor, firstComment, platformVariants, recurrenceFreq, recurrenceEndsAt, campaignId } = req.body as {
     workspaceId?: string
     content?: string
     mediaUrls?: string[]
@@ -278,6 +278,7 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
     platformVariants?: unknown
     recurrenceFreq?: string
     recurrenceEndsAt?: string
+    campaignId?: string
   }
 
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
@@ -319,6 +320,7 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
         status,
         submittedBy: req.user!.id,
         ...(firstComment?.trim() ? { firstComment: firstComment.trim() } : {}),
+        ...(campaignId ? { campaignId } : {}),
         ...(recurrenceFreq && ['daily','weekdays','weekly','monthly'].includes(recurrenceFreq)
           ? { recurrenceFreq } : {}),
         ...(recurrenceEndsAt ? { recurrenceEndsAt: new Date(recurrenceEndsAt) } : {}),
@@ -360,13 +362,14 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
 // POST /api/v1/posts/queue-schedule
 // Takes a post payload, finds next open queue slot, and creates the post.
 router.post('/queue-schedule', async (req: Request, res: Response): Promise<void> => {
-  const { workspaceId, content, mediaUrls, platforms, firstComment, platformVariants } = req.body as {
+  const { workspaceId, content, mediaUrls, platforms, firstComment, platformVariants, campaignId } = req.body as {
     workspaceId?: string
     content?: string
     mediaUrls?: string[]
     platforms?: string[]
     firstComment?: string
     platformVariants?: unknown
+    campaignId?: string
   }
 
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
@@ -426,6 +429,7 @@ router.post('/queue-schedule', async (req: Request, res: Response): Promise<void
         status,
         submittedBy: req.user!.id,
         ...(firstComment?.trim() ? { firstComment: firstComment.trim() } : {}),
+        ...(campaignId ? { campaignId } : {}),
         ...(variants!.length > 0 ? {
           platformVariants: {
             create: variants!.map((v) => ({

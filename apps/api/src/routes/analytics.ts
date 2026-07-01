@@ -297,4 +297,52 @@ router.get('/platform-comparison', async (req: Request, res: Response): Promise<
   res.json({ comparison, insight, days: parseInt(days, 10) })
 })
 
+// GET /api/v1/analytics/hashtag-performance
+router.get('/hashtag-performance', async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId, days = '30' } = req.query as { workspaceId?: string; days?: string }
+  if (!workspaceId) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId required'); return }
+
+  const since = new Date(Date.now() - parseInt(days, 10) * 24 * 60 * 60 * 1000)
+
+  const posts = await prisma.scheduledPost.findMany({
+    where: { workspaceId, status: 'PUBLISHED', scheduledFor: { gte: since } },
+    include: { metrics: true },
+    orderBy: { scheduledFor: 'desc' },
+    take: 100,
+  })
+
+  const hashtagMap: Record<string, { count: number; totalEngagement: number; totalReach: number }> = {}
+
+  for (const post of posts) {
+    const tags = (post.content.match(/#[\wÀ-ɏ-]+/g) ?? []).map((h: string) => h.toLowerCase())
+    if (tags.length === 0) continue
+
+    const totalEngagement = post.metrics.reduce((sum, m) => sum + m.likes + m.comments + m.shares, 0)
+    const totalReach = post.metrics.reduce((sum, m) => sum + m.reach, 0)
+    // Distribute engagement credit evenly across hashtags in the post
+    const engPerTag = totalEngagement / tags.length
+    const reachPerTag = totalReach / tags.length
+
+    for (const tag of tags) {
+      if (!hashtagMap[tag]) hashtagMap[tag] = { count: 0, totalEngagement: 0, totalReach: 0 }
+      hashtagMap[tag].count++
+      hashtagMap[tag].totalEngagement += engPerTag
+      hashtagMap[tag].totalReach += reachPerTag
+    }
+  }
+
+  const hashtags = Object.entries(hashtagMap)
+    .map(([tag, s]) => ({
+      tag,
+      uses: s.count,
+      avgEngagement: Math.round(s.totalEngagement / s.count),
+      avgReach: Math.round(s.totalReach / s.count),
+      totalEngagement: Math.round(s.totalEngagement),
+    }))
+    .sort((a, b) => b.avgEngagement - a.avgEngagement)
+    .slice(0, 30)
+
+  res.json({ hashtags, postsAnalyzed: posts.length, days: parseInt(days, 10) })
+})
+
 export default router
