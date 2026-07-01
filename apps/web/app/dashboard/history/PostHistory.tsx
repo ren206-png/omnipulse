@@ -99,6 +99,11 @@ export function PostHistory({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null)
   const [retryingPostId, setRetryingPostId] = useState<string | null>(null)
   const [retryMessage, setRetryMessage] = useState<string | null>(null)
+  const [duplicatingPostId, setDuplicatingPostId] = useState<string | null>(null)
+  const [duplicateToast, setDuplicateToast] = useState<string | null>(null)
+
+  // Bulk selection state
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   // Repurpose modal state
   const [repurposePost, setRepurposePost] = useState<Post | null>(null)
@@ -186,6 +191,32 @@ export function PostHistory({ token }: { token: string }) {
     }
   }
 
+  async function duplicatePost(post: Post) {
+    setDuplicatingPostId(post.id)
+    setDuplicateToast(null)
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/posts/${post.id}/duplicate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string }
+        setDuplicateToast(body.error ?? 'Failed to duplicate post')
+        return
+      }
+      const data = (await res.json()) as { post: { id: string } }
+      setDuplicateToast('Duplicated! Opening draft…')
+      setTimeout(() => {
+        setDuplicateToast(null)
+        router.push(`/dashboard/calendar?postId=${data.post.id}`)
+      }, 1000)
+    } catch {
+      setDuplicateToast('Network error — please try again')
+    } finally {
+      setDuplicatingPostId(null)
+    }
+  }
+
   function reusePost(post: Post) {
     const params = new URLSearchParams({
       reuse: '1',
@@ -244,6 +275,80 @@ export function PostHistory({ token }: { token: string }) {
   }
 
   const hasFilters = debouncedSearch || status !== 'ALL' || platform !== 'ALL'
+
+  // Bulk selection helpers
+  const allIds = posts.map((p) => p.id)
+  const allSelected = allIds.length > 0 && allIds.every((id) => selected.has(id))
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(allIds))
+    }
+  }
+
+  function toggleSelectPost(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selected)
+    try {
+      await Promise.all(
+        ids.map((id) =>
+          fetch(`${apiUrl}/api/v1/posts/${id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        )
+      )
+      setPosts((prev) => prev.filter((p) => !selected.has(p.id)))
+      setSelected(new Set())
+    } catch {
+      setError('Failed to delete some posts — please try again')
+    }
+  }
+
+  async function handleBulkReschedule() {
+    const ids = Array.from(selected)
+    try {
+      const updatedPosts = await Promise.all(
+        ids.map(async (id) => {
+          const post = posts.find((p) => p.id === id)
+          if (!post) return null
+          const newScheduledFor = post.scheduledFor
+            ? new Date(new Date(post.scheduledFor).getTime() + 86400000).toISOString()
+            : new Date(Date.now() + 86400000).toISOString()
+          const res = await fetch(`${apiUrl}/api/v1/posts/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ scheduledFor: newScheduledFor }),
+          })
+          if (!res.ok) return null
+          return { id, scheduledFor: newScheduledFor }
+        })
+      )
+      setPosts((prev) =>
+        prev.map((p) => {
+          const updated = updatedPosts.find((u) => u?.id === p.id)
+          if (updated) return { ...p, scheduledFor: updated.scheduledFor }
+          return p
+        })
+      )
+      setSelected(new Set())
+    } catch {
+      setError('Failed to reschedule some posts — please try again')
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -310,6 +415,18 @@ export function PostHistory({ token }: { token: string }) {
         </div>
       )}
 
+      {/* Duplicate toast */}
+      {duplicateToast && (
+        <div className={cn(
+          'rounded-lg border px-4 py-3 text-sm',
+          duplicateToast.startsWith('Duplicated')
+            ? 'border-green-300 bg-green-50 text-green-700'
+            : 'border-destructive/30 bg-destructive/10 text-destructive',
+        )}>
+          {duplicateToast.startsWith('Duplicated') ? `✅ ${duplicateToast}` : duplicateToast}
+        </div>
+      )}
+
       {/* Error state */}
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -356,9 +473,30 @@ export function PostHistory({ token }: { token: string }) {
       {/* Post list */}
       {!loading && posts.length > 0 && (
         <div className="space-y-3">
+          {/* Select All row */}
+          <div className="flex items-center gap-2 px-1">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              className="h-4 w-4 rounded border-border cursor-pointer"
+              aria-label="Select all posts"
+            />
+            <span className="text-xs text-muted-foreground">Select all</span>
+          </div>
+
           {posts.map((post) => (
-            <div key={post.id} className="rounded-lg border bg-card p-4 space-y-2.5">
-              {/* Header row: platforms + status + date */}
+            <div key={post.id} className={cn("rounded-lg border bg-card p-4 space-y-2.5", selected.has(post.id) && "border-primary/50 bg-primary/5")}>
+              {/* Header row: checkbox + platforms + status + date */}
+              <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={selected.has(post.id)}
+                onChange={() => toggleSelectPost(post.id)}
+                className="h-4 w-4 mt-0.5 rounded border-border cursor-pointer shrink-0"
+                aria-label={`Select post`}
+              />
+              <div className="flex-1 space-y-2.5">
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="flex gap-1.5 flex-wrap">
                   {post.platforms.map((p) => (
@@ -400,7 +538,7 @@ export function PostHistory({ token }: { token: string }) {
                 <p className="text-sm line-clamp-2 leading-relaxed">{post.content}</p>
               )}
 
-              {/* Engagement metrics + reuse */}
+              {/* Engagement metrics + actions */}
               <div className="flex items-center justify-between gap-2">
                 {(post.metrics.likes > 0 || post.metrics.comments > 0 || post.metrics.shares > 0) ? (
                   <div className="flex gap-4 text-xs text-muted-foreground">
@@ -432,6 +570,15 @@ export function PostHistory({ token }: { token: string }) {
                   )}
                   <button
                     type="button"
+                    onClick={() => duplicatePost(post)}
+                    disabled={duplicatingPostId === post.id}
+                    className="text-xs text-muted-foreground hover:text-sky-600 border border-border hover:border-sky-400/60 rounded-md px-2 py-0.5 transition-colors flex items-center gap-1 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Duplicate this post as a draft"
+                  >
+                    {duplicatingPostId === post.id ? '⏳ Duplicating…' : '📋 Duplicate'}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => reusePost(post)}
                     className="text-xs text-muted-foreground hover:text-primary border border-border hover:border-primary/40 rounded-md px-2 py-0.5 transition-colors flex items-center gap-1 shrink-0"
                     title="Reuse this post"
@@ -440,8 +587,26 @@ export function PostHistory({ token }: { token: string }) {
                   </button>
                 </div>
               </div>
+              </div>{/* end flex-1 */}
+              </div>{/* end flex items-start */}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Bulk Action Bar */}
+      {selected.size > 0 && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-card border rounded-xl shadow-lg px-4 py-3">
+          <span className="text-sm font-medium">{selected.size} selected</span>
+          <button onClick={handleBulkDelete} className="text-sm px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground">
+            🗑️ Delete
+          </button>
+          <button onClick={handleBulkReschedule} className="text-sm px-3 py-1.5 rounded-lg bg-primary text-primary-foreground">
+            📅 Reschedule +1 day
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-sm px-3 py-1.5 rounded-lg bg-muted">
+            ✕ Clear
+          </button>
         </div>
       )}
 

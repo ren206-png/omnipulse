@@ -119,4 +119,26 @@ router.get(
   },
 )
 
+// GET /api/v1/notifications/preferences - return default preferences (client stores overrides in localStorage)
+router.get('/preferences', requireAuth, (req: Request, res: Response): void => {
+  res.json({
+    preferences: {
+      postPublished: true,
+      postFailed: true,
+      postPendingReview: true,
+      approvalDecision: true,
+      engagementAlert: true,
+      followerMilestone: true,
+      weeklyDigest: true,
+      teamMemberJoined: true,
+      mentionInComment: true,
+    },
+  })
+})
+
+// POST /api/v1/notifications/preferences - acknowledge preference save (future backend storage)
+router.post('/preferences', requireAuth, (req: Request, res: Response): void => {
+  res.json({ ok: true })
+})
+
 export default router

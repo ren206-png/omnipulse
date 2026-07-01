@@ -2,6 +2,12 @@ import Link from 'next/link'
 
 const SETTINGS_SECTIONS = [
   {
+    href: '/dashboard/settings/notifications',
+    icon: '🔔',
+    title: 'Notifications',
+    desc: 'Control what alerts you receive',
+  },
+  {
     href: '/dashboard/settings/security',
     icon: '🔐',
     title: 'Security',

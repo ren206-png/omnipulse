@@ -209,6 +209,7 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
   const [evergreenPostId, setEvergreenPostId] = useState<string | null>(null)
   const [evergreenDays, setEvergreenDays] = useState('30')
   const [evergreenLoading, setEvergreenLoading] = useState(false)
+  const [duplicatingPostId, setDuplicatingPostId] = useState<string | null>(null)
 
   // Post collaboration comments state
   const [commentsPostId, setCommentsPostId] = useState<string | null>(null)
@@ -448,6 +449,36 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
       setToastOpen(true)
     } finally {
       setEvergreenLoading(false)
+    }
+  }
+
+  async function handleDuplicate(postId: string) {
+    setDuplicatingPostId(postId)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/posts/${postId}/duplicate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        setToastMessage(body.error ?? 'Failed to duplicate post')
+        setToastOpen(true)
+        return
+      }
+      const data = (await res.json()) as { post: Post }
+      fetchPosts()
+      setToastMessage('Duplicated! Opening draft…')
+      setToastOpen(true)
+      setTimeout(() => {
+        setDialogOpen(false)
+        window.location.href = `/dashboard/calendar?postId=${data.post.id}`
+      }, 1000)
+    } catch {
+      setToastMessage('Network error — could not duplicate post')
+      setToastOpen(true)
+    } finally {
+      setDuplicatingPostId(null)
     }
   }
 
@@ -1000,6 +1031,15 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
                                   </Button>
                                 </>
                               )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                onClick={() => handleDuplicate(p.id)}
+                                disabled={duplicatingPostId === p.id}
+                              >
+                                {duplicatingPostId === p.id ? '⏳ Duplicating…' : '📋 Duplicate'}
+                              </Button>
                               {confirmDeleteId === p.id ? (
                                 <>
                                   <Button

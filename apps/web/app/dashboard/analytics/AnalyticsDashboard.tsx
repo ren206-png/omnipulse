@@ -320,6 +320,30 @@ export function AnalyticsDashboard({ workspaceId, token }: Props) {
   const [syncing, setSyncing] = useState(false)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
 
+  // Platform breakdown + summary data for full-report export
+  const [platformBreakdown, setPlatformBreakdown] = useState<PlatformStatExport[]>([])
+  const [analyticsSummary, setAnalyticsSummary] = useState<InsightsSummary['summary'] | null>(null)
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    fetch(`${apiUrl}/api/v1/analytics/platform-comparison?workspaceId=${workspaceId}&days=30`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((d: { comparison: PlatformStatExport[] }) => setPlatformBreakdown(d.comparison ?? []))
+      .catch(() => {/* silent */})
+  }, [workspaceId, token])
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    fetch(`${apiUrl}/api/v1/analytics/insights?workspaceId=${workspaceId}&days=30`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((d: InsightsSummary) => setAnalyticsSummary(d.summary ?? null))
+      .catch(() => {/* silent */})
+  }, [workspaceId, token])
+
   const fetchAnalytics = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -568,7 +592,12 @@ export function AnalyticsDashboard({ workspaceId, token }: Props) {
       </div>
 
       {/* Top Posts */}
-      <TopPostsSection workspaceId={workspaceId} token={token} />
+      <TopPostsSection
+        workspaceId={workspaceId}
+        token={token}
+        platformBreakdown={platformBreakdown}
+        analyticsSummary={analyticsSummary}
+      />
 
       {/* Shareable Reports */}
       <ReportsPanel workspaceId={workspaceId} token={token} />
@@ -586,6 +615,26 @@ interface TopPost {
   metrics: { platform: string; likes: number; comments: number; shares: number; reach: number }[]
 }
 
+interface PlatformStatExport {
+  platform: string
+  posts: number
+  likes: number
+  comments: number
+  shares: number
+  avgReach: number
+  avgEngagement: number
+}
+
+function downloadCSV(csv: string, filename: string) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 function exportTopPostsCSV(posts: TopPost[]) {
   const header = ['Content', 'Platforms', 'Date', 'Likes', 'Comments', 'Shares', 'Reach']
   const rows = posts.map((p) => {
@@ -601,16 +650,79 @@ function exportTopPostsCSV(posts: TopPost[]) {
     ].join(',')
   })
   const csv = [header.join(','), ...rows].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `top-posts-${format(new Date(), 'yyyy-MM-dd')}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadCSV(csv, `top-posts-${format(new Date(), 'yyyy-MM-dd')}.csv`)
 }
 
-function TopPostsSection({ workspaceId, token }: { workspaceId: string; token: string }) {
+function exportPlatformCSV(breakdown: PlatformStatExport[]) {
+  const header = ['Platform', 'Posts', 'Likes', 'Comments', 'Shares', 'Avg Reach', 'Avg Engagement']
+  const rows = breakdown.map((p) =>
+    [p.platform, p.posts, p.likes, p.comments, p.shares, p.avgReach, p.avgEngagement].join(',')
+  )
+  const csv = [header.join(','), ...rows].join('\n')
+  downloadCSV(csv, `platform-stats-${format(new Date(), 'yyyy-MM-dd')}.csv`)
+}
+
+function exportFullReportCSV(
+  summary: InsightsSummary['summary'],
+  breakdown: PlatformStatExport[],
+  topPosts: TopPost[],
+) {
+  const date = format(new Date(), 'yyyy-MM-dd')
+
+  // Section 1: Summary
+  const summaryRows = [
+    ['Summary'],
+    ['Total Posts', 'Total Likes', 'Total Comments', 'Total Shares', 'Total Reach'],
+    [summary.totalPosts, summary.totalLikes, summary.totalComments, summary.totalShares, summary.totalReach],
+  ]
+
+  // Section 2: Platform Breakdown
+  const platformHeader = ['Platform', 'Posts', 'Likes', 'Comments', 'Shares', 'Avg Reach', 'Avg Engagement']
+  const platformRows = breakdown.map((p) =>
+    [p.platform, p.posts, p.likes, p.comments, p.shares, p.avgReach, p.avgEngagement]
+  )
+
+  // Section 3: Top Posts
+  const postsHeader = ['Content', 'Platforms', 'Date', 'Likes', 'Comments', 'Shares', 'Reach']
+  const postsRows = topPosts.map((p) => {
+    const likes    = p.metrics.reduce((s, m) => s + m.likes, 0)
+    const comments = p.metrics.reduce((s, m) => s + m.comments, 0)
+    const shares   = p.metrics.reduce((s, m) => s + m.shares, 0)
+    const reach    = p.metrics.reduce((s, m) => s + m.reach, 0)
+    return [
+      `"${p.content.replace(/"/g, '""')}"`,
+      p.platforms.join('|'),
+      format(new Date(p.scheduledFor), 'yyyy-MM-dd'),
+      likes, comments, shares, reach,
+    ]
+  })
+
+  const allSections = [
+    ...summaryRows.map((r) => r.join(',')),
+    '',
+    ['Platform Breakdown'].join(','),
+    platformHeader.join(','),
+    ...platformRows.map((r) => r.join(',')),
+    '',
+    ['Top Posts'].join(','),
+    postsHeader.join(','),
+    ...postsRows.map((r) => r.join(',')),
+  ]
+
+  downloadCSV(allSections.join('\n'), `omnipulse-report-${date}.csv`)
+}
+
+function TopPostsSection({
+  workspaceId,
+  token,
+  platformBreakdown,
+  analyticsSummary,
+}: {
+  workspaceId: string
+  token: string
+  platformBreakdown: PlatformStatExport[]
+  analyticsSummary: InsightsSummary['summary'] | null
+}) {
   const [posts, setPosts] = useState<TopPost[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -639,15 +751,39 @@ function TopPostsSection({ workspaceId, token }: { workspaceId: string; token: s
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Top Posts</h2>
         {posts.length > 0 && (
-          <button
-            onClick={() => exportTopPostsCSV(posts)}
-            className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Export CSV
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => exportTopPostsCSV(posts)}
+              className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Export CSV
+            </button>
+            {platformBreakdown.length > 0 && (
+              <button
+                onClick={() => exportPlatformCSV(platformBreakdown)}
+                className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                📊 Export Platform Stats
+              </button>
+            )}
+            {analyticsSummary && (
+              <button
+                onClick={() => exportFullReportCSV(analyticsSummary, platformBreakdown, posts)}
+                className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                📈 Export Full Report
+              </button>
+            )}
+          </div>
         )}
       </div>
       <div className="rounded-xl border bg-card shadow-sm overflow-hidden">

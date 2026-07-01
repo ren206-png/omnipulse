@@ -385,7 +385,7 @@ export function DashboardShell({
         </div>
         <MobileBottomNav />
         <ToastViewport />
-        <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
+        <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} token={token} />
       </ToastProvider>
     </WorkspaceProvider>
   )

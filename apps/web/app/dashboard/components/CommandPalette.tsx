@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useWorkspace } from '../context/WorkspaceContext'
 
 type NavItem = {
   type: 'nav'
@@ -19,7 +20,16 @@ type ActionItem = {
   href: string
 }
 
-type Item = NavItem | ActionItem
+type SearchResultItem = {
+  type: 'search-result'
+  id: string
+  label: string
+  description: string
+  icon: string
+  href: string
+}
+
+type Item = NavItem | ActionItem | SearchResultItem
 
 const NAV_ITEMS: NavItem[] = [
   { type: 'nav', label: 'Dashboard', href: '/dashboard', icon: '🏠' },
@@ -46,6 +56,7 @@ const NAV_ITEMS: NavItem[] = [
 ]
 
 const ACTION_ITEMS: ActionItem[] = [
+  { type: 'action', label: 'Search everything…', action: 'global-search', icon: '🔍', description: 'Search posts, templates, and media', href: '/dashboard/search' },
   { type: 'action', label: 'New Post', action: 'new-post', icon: '✍️', description: 'Open post composer', href: '/dashboard/queue' },
   { type: 'action', label: 'Bulk Import CSV', action: 'bulk-import', icon: '📥', description: 'Import posts from CSV', href: '/dashboard/bulk-import' },
   { type: 'action', label: 'View Analytics', action: 'analytics', icon: '📊', description: 'See performance metrics', href: '/dashboard/analytics' },
@@ -54,15 +65,23 @@ const ACTION_ITEMS: ActionItem[] = [
 export function CommandPalette({
   open,
   onOpenChange,
+  token,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
+  token?: string
 }) {
   const router = useRouter()
+  const { activeWorkspace } = useWorkspace()
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
 
   // Global keyboard listener for ⌘K / Ctrl+K
   useEffect(() => {
@@ -81,10 +100,52 @@ export function CommandPalette({
     if (open) {
       setQuery('')
       setSelectedIndex(0)
+      setSearchResults([])
       // Defer focus so the DOM is visible
       requestAnimationFrame(() => inputRef.current?.focus())
     }
   }, [open])
+
+  // Debounced live search
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    const q = query.trim()
+    if (!q || !activeWorkspace?.id || !token) {
+      setSearchResults([])
+      setSearchLoading(false)
+      return
+    }
+
+    setSearchLoading(true)
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ workspaceId: activeWorkspace.id, q, limit: '10' })
+        const res = await fetch(`${apiUrl}/api/v1/search?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) throw new Error('Search failed')
+        const data = await res.json()
+        const items: SearchResultItem[] = (data.results ?? []).map((r: { id: string; type: string; title: string; subtitle: string; icon: string; href: string }) => ({
+          type: 'search-result' as const,
+          id: r.id,
+          label: r.title,
+          description: r.subtitle,
+          icon: r.icon,
+          href: r.href,
+        }))
+        setSearchResults(items)
+      } catch {
+        setSearchResults([])
+      } finally {
+        setSearchLoading(false)
+      }
+    }, 400)
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [query, activeWorkspace?.id, token, apiUrl])
 
   const q = query.toLowerCase().trim()
 
@@ -96,7 +157,10 @@ export function CommandPalette({
     !q || item.label.toLowerCase().includes(q) || item.description.toLowerCase().includes(q)
   )
 
-  const allItems: Item[] = [...filteredActions, ...filteredNav]
+  // When there's a query, show live search results + "Search everything" shortcut; else show actions + nav
+  const allItems: Item[] = q
+    ? [...searchResults, ...filteredActions, ...filteredNav]
+    : [...filteredActions, ...filteredNav]
 
   const navigate = useCallback(
     (item: Item) => {
@@ -140,7 +204,7 @@ export function CommandPalette({
   // Reset selected index when results change
   useEffect(() => {
     setSelectedIndex(0)
-  }, [query])
+  }, [query, searchResults])
 
   // Scroll selected item into view
   useEffect(() => {
@@ -183,9 +247,44 @@ export function CommandPalette({
 
         {/* Results */}
         <div ref={listRef} className="max-h-80 overflow-y-auto">
-          {allItems.length === 0 && (
+          {allItems.length === 0 && !searchLoading && (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
               No results for &ldquo;{query}&rdquo;
+            </div>
+          )}
+
+          {searchLoading && (
+            <div className="px-4 py-3 text-sm text-muted-foreground flex items-center gap-2">
+              <span className="animate-spin">⏳</span> Searching…
+            </div>
+          )}
+
+          {/* Live search results */}
+          {!searchLoading && searchResults.length > 0 && (
+            <div>
+              <div className="px-4 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Results
+              </div>
+              {searchResults.map((item) => {
+                const idx = globalIndex++
+                const isSelected = idx === selectedIndex
+                return (
+                  <div
+                    key={`sr-${item.id}`}
+                    data-selected={isSelected}
+                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer text-sm${isSelected ? ' bg-accent' : ''}`}
+                    onClick={() => navigate(item)}
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                  >
+                    <span className="text-base leading-none shrink-0">{item.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{item.label}</div>
+                      <div className="text-xs text-muted-foreground truncate">{item.description}</div>
+                    </div>
+                    <span className="text-muted-foreground text-xs shrink-0">→</span>
+                  </div>
+                )
+              })}
             </div>
           )}
 

@@ -1110,6 +1110,61 @@ router.patch('/:id/evergreen', async (req: Request, res: Response): Promise<void
   }
 })
 
+// POST /api/v1/posts/:id/duplicate — create a DRAFT copy of a post
+router.post('/:id/duplicate', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params
+  try {
+    const original = await (prisma.scheduledPost.findUnique as Function)({
+      where: { id },
+      include: { platformVariants: true },
+    })
+    if (!original) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
+
+    const role = await getWorkspaceRole(original.workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+
+    // scheduledFor: original + 1 day; if that's in the past, use now + 1 day
+    const oneDayMs = 24 * 60 * 60 * 1000
+    const baseDate = original.scheduledFor.getTime() > Date.now()
+      ? original.scheduledFor
+      : new Date()
+    const scheduledFor = new Date(baseDate.getTime() + oneDayMs)
+
+    const newPost = await (prisma.scheduledPost.create as Function)({
+      data: {
+        workspaceId: original.workspaceId,
+        content: original.content,
+        platforms: original.platforms,
+        mediaUrls: original.mediaUrls,
+        scheduledFor,
+        status: 'DRAFT',
+        submittedBy: req.user!.id,
+        ...(original.utmSource ? { utmSource: original.utmSource } : {}),
+        ...(original.utmMedium ? { utmMedium: original.utmMedium } : {}),
+        ...(original.utmCampaign ? { utmCampaign: original.utmCampaign } : {}),
+        ...(original.firstComment ? { firstComment: original.firstComment } : {}),
+        ...((original.platformVariants as { platform: string; content: string; hashtags: string[]; mediaUrls: string[] }[]).length > 0 ? {
+          platformVariants: {
+            create: (original.platformVariants as { platform: string; content: string; hashtags: string[]; mediaUrls: string[] }[]).map((v) => ({
+              platform: v.platform,
+              content: v.content,
+              hashtags: v.hashtags ?? [],
+              mediaUrls: v.mediaUrls ?? [],
+            })),
+          },
+        } : {}),
+      },
+      include: { platformVariants: true },
+    })
+
+    logger.info({ originalPostId: id, newPostId: newPost.id }, 'Post duplicated')
+    res.status(201).json({ post: newPost })
+  } catch (err) {
+    logger.error({ err }, 'Duplicate post error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to duplicate post')
+  }
+})
+
 // POST /api/v1/posts/:id/ab-test  — create a variant of a post
 router.post('/:id/ab-test', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params

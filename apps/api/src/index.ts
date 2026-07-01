@@ -47,6 +47,7 @@ import { twoFactorRouter } from './routes/twoFactor.js'
 import campaignsRouter from './routes/campaigns.js'
 import listeningRouter from './routes/listening.js'
 import linksRouter from './routes/links.js'
+import searchRouter from './routes/search.js'
 import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
 import { sendWeeklyDigest } from './lib/digest.js'
@@ -149,6 +150,7 @@ app.use('/api/v1/2fa', twoFactorRouter)
 app.use('/api/v1/campaigns', campaignsRouter)
 app.use('/api/v1/listening', listeningRouter)
 app.use('/api/v1/links', linksRouter)
+app.use('/api/v1/search', searchRouter)
 app.use('/uploads', express.static('public/uploads'))
 
 // Sentry error handler — must be after all routes
