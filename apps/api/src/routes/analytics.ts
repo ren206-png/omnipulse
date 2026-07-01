@@ -256,4 +256,45 @@ router.get('/insights', async (req: Request, res: Response): Promise<void> => {
   }
 })
 
+// GET /api/v1/analytics/platform-comparison
+router.get('/platform-comparison', async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId, days = '30' } = req.query as { workspaceId?: string; days?: string }
+  if (!workspaceId) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId required'); return }
+
+  const since = new Date(Date.now() - parseInt(days, 10) * 24 * 60 * 60 * 1000)
+
+  const metrics = await (prisma as any).postMetric.findMany({
+    where: {
+      post: { workspaceId, status: 'PUBLISHED', scheduledFor: { gte: since } },
+    },
+    select: { platform: true, likes: true, comments: true, shares: true, reach: true },
+  })
+
+  const byPlatform: Record<string, { likes: number; comments: number; shares: number; reach: number; count: number }> = {}
+  for (const m of metrics) {
+    if (!byPlatform[m.platform]) byPlatform[m.platform] = { likes: 0, comments: 0, shares: 0, reach: 0, count: 0 }
+    byPlatform[m.platform].likes += m.likes
+    byPlatform[m.platform].comments += m.comments
+    byPlatform[m.platform].shares += m.shares
+    byPlatform[m.platform].reach += m.reach
+    byPlatform[m.platform].count++
+  }
+
+  const comparison = Object.entries(byPlatform).map(([platform, s]) => ({
+    platform,
+    posts: s.count,
+    totalEngagement: s.likes + s.comments + s.shares,
+    avgEngagement: s.count > 0 ? Math.round((s.likes + s.comments + s.shares) / s.count) : 0,
+    avgReach: s.count > 0 ? Math.round(s.reach / s.count) : 0,
+    likes: s.likes, comments: s.comments, shares: s.shares,
+  })).sort((a, b) => b.avgEngagement - a.avgEngagement)
+
+  const best = comparison[0]?.platform ?? null
+  const insight = best
+    ? `Your ${best} posts get the most engagement on average. Consider posting there more frequently.`
+    : 'Publish posts across multiple platforms to unlock comparison insights.'
+
+  res.json({ comparison, insight, days: parseInt(days, 10) })
+})
+
 export default router

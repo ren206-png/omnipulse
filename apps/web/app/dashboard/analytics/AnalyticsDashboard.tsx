@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { ReportsPanel } from './ReportsPanel'
+import { PlatformComparisonWidget } from './PlatformComparisonWidget'
 
 interface HourScore {
   hour: number
@@ -424,6 +425,9 @@ export function AnalyticsDashboard({ workspaceId, token }: Props) {
 
       {/* KPI Summary */}
       <InsightsSummarySection workspaceId={workspaceId} token={token} />
+
+      {/* Platform Performance Comparison */}
+      <PlatformComparisonWidget token={token} />
 
       {/* Best Times — always visible regardless of account data */}
       <BestTimesSection workspaceId={workspaceId} token={token} />

@@ -1399,7 +1399,13 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
       {/* Content with live character counter */}
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <Label>Content</Label>
+          <div className="flex items-center gap-2">
+            <Label>Content</Label>
+            <button type="button" onClick={() => setHookLibraryOpen((o) => !o)}
+              className="text-xs text-violet-600 hover:text-violet-700 dark:text-violet-400 font-medium">
+              🎣 Hook Library
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -1446,6 +1452,12 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
             </span>
           </div>
         </div>
+        {hookLibraryOpen && (
+          <HookLibrary
+            onInsert={(text) => setContent((prev) => text + (prev ? '\n\n' + prev : ''))}
+            onClose={() => setHookLibraryOpen(false)}
+          />
+        )}
         <Textarea
           placeholder="Write your post, or generate one with AI above."
           value={content}
