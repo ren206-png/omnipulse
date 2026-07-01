@@ -47,6 +47,7 @@ import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
 import { sendWeeklyDigest } from './lib/digest.js'
 import { startGuardianWorker } from './workers/guardian.worker.js'
+import { engagementAlertWorker } from './workers/engagementAlert.worker.js'
 import { prisma } from './lib/prisma.js'
 import IORedis from 'ioredis'
 
@@ -146,6 +147,8 @@ app.listen(env.PORT, () => {
 startEvergreenWorker()
 // Guardian — self-healing system (scans every 5 min for zombie posts)
 startGuardianWorker().catch((err) => logger.error({ err }, 'Failed to start guardian worker'))
+// Engagement Alert worker — notifies on standout/underperforming posts 2h after publish
+void engagementAlertWorker
 // Sync analytics every 6 hours
 setInterval(() => { syncAnalytics().catch(() => {}) }, 6 * 60 * 60 * 1000)
 // Weekly digest — every Monday 9am UTC

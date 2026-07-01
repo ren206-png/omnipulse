@@ -210,6 +210,65 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
   const [evergreenDays, setEvergreenDays] = useState('30')
   const [evergreenLoading, setEvergreenLoading] = useState(false)
 
+  // Post collaboration comments state
+  const [commentsPostId, setCommentsPostId] = useState<string | null>(null)
+  interface PostCommentItem { id: string; userId: string; userEmail: string; body: string; createdAt: string }
+  const [comments, setComments] = useState<PostCommentItem[]>([])
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [commentBody, setCommentBody] = useState('')
+  const [commentSubmitting, setCommentSubmitting] = useState(false)
+  const [commentError, setCommentError] = useState<string | null>(null)
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
+
+  async function loadComments(postId: string) {
+    setCommentsLoading(true)
+    setCommentsPostId(postId)
+    setComments([])
+    setCommentError(null)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/posts/${postId}/comments`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = (await res.json()) as { comments?: PostCommentItem[]; error?: string }
+      if (!res.ok) { setCommentError(data.error ?? 'Failed to load'); return }
+      setComments(data.comments ?? [])
+    } catch { setCommentError('Network error') }
+    finally { setCommentsLoading(false) }
+  }
+
+  async function submitComment(postId: string) {
+    if (!commentBody.trim()) return
+    setCommentSubmitting(true)
+    setCommentError(null)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/posts/${postId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ body: commentBody.trim() }),
+      })
+      const data = (await res.json()) as { comment?: PostCommentItem; error?: string }
+      if (!res.ok) { setCommentError(data.error ?? 'Failed to post'); return }
+      setComments((prev) => [...prev, data.comment!])
+      setCommentBody('')
+    } catch { setCommentError('Network error') }
+    finally { setCommentSubmitting(false) }
+  }
+
+  async function deleteComment(postId: string, commentId: string) {
+    setDeletingCommentId(commentId)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    try {
+      await fetch(`${apiUrl}/api/v1/posts/${postId}/comments/${commentId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setComments((prev) => prev.filter((c) => c.id !== commentId))
+    } catch { /* ignore */ }
+    finally { setDeletingCommentId(null) }
+  }
+
   // Draft editing state
   const [draftEditContent, setDraftEditContent] = useState<string | undefined>(undefined)
   const [draftEditPlatforms, setDraftEditPlatforms] = useState<string[] | undefined>(undefined)
@@ -703,6 +762,10 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
           setDraftEditPlatforms(undefined)
           setDraftEditMediaUrls(undefined)
           setDraftEditId(undefined)
+          setCommentsPostId(null)
+          setComments([])
+          setCommentBody('')
+          setCommentError(null)
         }
       }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -841,6 +904,67 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
                               <p>{p.reviewNote}</p>
                             </div>
                           )}
+
+                          {/* Team Comments */}
+                          <div className="border-t mt-2 pt-2">
+                            {commentsPostId === p.id ? (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Team Comments</span>
+                                  <button onClick={() => setCommentsPostId(null)} className="text-[10px] text-muted-foreground hover:text-foreground">Hide</button>
+                                </div>
+                                {commentsLoading ? (
+                                  <p className="text-xs text-muted-foreground">Loading…</p>
+                                ) : comments.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground italic">No comments yet. Be the first!</p>
+                                ) : (
+                                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                                    {comments.map((c) => (
+                                      <div key={c.id} className="bg-muted/50 rounded-md px-2.5 py-2 text-xs group relative">
+                                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                                          <span className="font-medium truncate max-w-[120px]">{c.userEmail.split('@')[0]}</span>
+                                          <span className="text-muted-foreground shrink-0">{new Date(c.createdAt).toLocaleDateString()}</span>
+                                        </div>
+                                        <p className="text-muted-foreground leading-relaxed">{c.body}</p>
+                                        <button
+                                          onClick={() => deleteComment(p.id, c.id)}
+                                          disabled={deletingCommentId === c.id}
+                                          className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 text-[10px] text-destructive hover:text-destructive/80 transition-opacity"
+                                          title="Delete comment"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="flex gap-1.5">
+                                  <input
+                                    className="flex-1 h-7 text-xs border rounded px-2 bg-background outline-none focus:ring-1 focus:ring-ring"
+                                    placeholder="Add a comment…"
+                                    value={commentBody}
+                                    onChange={(e) => setCommentBody(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(p.id) } }}
+                                  />
+                                  <button
+                                    onClick={() => submitComment(p.id)}
+                                    disabled={commentSubmitting || !commentBody.trim()}
+                                    className="px-2.5 h-7 text-xs rounded bg-primary text-primary-foreground disabled:opacity-50 transition-opacity"
+                                  >
+                                    {commentSubmitting ? '…' : 'Post'}
+                                  </button>
+                                </div>
+                                {commentError && <p className="text-[10px] text-destructive">{commentError}</p>}
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => loadComments(p.id)}
+                                className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                              >
+                                💬 Team Comments
+                              </button>
+                            )}
+                          </div>
 
                           {/* Actions */}
                           {(p.status === 'SCHEDULED' || p.status === 'DRAFT') && (

@@ -1108,4 +1108,56 @@ router.get('/:id/ab-variants', async (req: Request, res: Response): Promise<void
   }
 })
 
+// ── Post Collaboration Comments ──────────────────────────────────────────────
+
+// GET /api/v1/posts/:id/comments
+router.get('/:id/comments', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params
+  try {
+    const post = await prisma.scheduledPost.findUnique({ where: { id }, select: { workspaceId: true } })
+    if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
+    const member = await prisma.workspaceMember.findFirst({ where: { workspaceId: post.workspaceId, userId: req.user!.id } })
+    const workspace = await prisma.workspace.findUnique({ where: { id: post.workspaceId }, select: { ownerId: true } })
+    if (!member && workspace?.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const comments = await (prisma as any).postComment.findMany({ where: { postId: id }, orderBy: { createdAt: 'asc' } })
+    res.json({ comments })
+  } catch (err) {
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch comments')
+  }
+})
+
+// POST /api/v1/posts/:id/comments
+router.post('/:id/comments', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params
+  const { body } = req.body as { body?: string }
+  if (!body?.trim()) { sendError(res, 400, 'VALIDATION_ERROR', 'Comment body required'); return }
+  try {
+    const post = await prisma.scheduledPost.findUnique({ where: { id }, select: { workspaceId: true } })
+    if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
+    const member = await prisma.workspaceMember.findFirst({ where: { workspaceId: post.workspaceId, userId: req.user!.id } })
+    const workspace = await prisma.workspace.findUnique({ where: { id: post.workspaceId }, select: { ownerId: true } })
+    if (!member && workspace?.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const comment = await (prisma as any).postComment.create({
+      data: { postId: id, userId: req.user!.id, userEmail: req.user!.email, body: body.trim() },
+    })
+    res.status(201).json({ comment })
+  } catch (err) {
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create comment')
+  }
+})
+
+// DELETE /api/v1/posts/:id/comments/:commentId
+router.delete('/:id/comments/:commentId', async (req: Request, res: Response): Promise<void> => {
+  const { commentId } = req.params
+  try {
+    const comment = await (prisma as any).postComment.findUnique({ where: { id: commentId } })
+    if (!comment) { sendError(res, 404, 'NOT_FOUND', 'Comment not found'); return }
+    if (comment.userId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Can only delete your own comments'); return }
+    await (prisma as any).postComment.delete({ where: { id: commentId } })
+    res.json({ success: true })
+  } catch (err) {
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to delete comment')
+  }
+})
+
 export default router

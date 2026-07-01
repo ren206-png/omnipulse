@@ -9,6 +9,7 @@ import { emitWebhook } from '../lib/webhookEmitter.js'
 import { decryptToken } from '../lib/tokenEncryption.js'
 import { isLinkedInTokenExpired, refreshLinkedInToken } from '../lib/linkedinToken.js'
 import { publishLinkedInText, publishLinkedInImage, publishLinkedInVideo } from '../lib/linkedinPublisher.js'
+import { scheduleEngagementCheck } from './engagementAlert.worker.js'
 
 async function publishToPlatform(
   post: { content: string; mediaUrls: string[] },
@@ -319,6 +320,8 @@ const worker = new Worker(
     if (!allFailed) {
       logger.info({ postId, status: 'PUBLISHED', platforms: post.platforms, responseLog }, 'Post published successfully')
       await emitWebhook(post.workspaceId, 'post.published', { postId: post.id, platforms: post.platforms })
+      // Schedule 2-hour engagement check
+      await scheduleEngagementCheck(postId)
 
       // ── Recurrence: spawn next occurrence ────────────────────────────────
       if (post.recurrenceFreq) {

@@ -153,6 +153,20 @@ model ScheduledPost {
   recurrenceParentId   String?     // id of the original post this was spawned from
   metrics              PostMetric[]
   platformVariants     PlatformVariant[]
+  comments             PostComment[]
+}
+
+model PostComment {
+  id        String        @id @default(cuid())
+  postId    String
+  post      ScheduledPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  userEmail String
+  body      String
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([postId])
 }
 
 model PlatformVariant {
