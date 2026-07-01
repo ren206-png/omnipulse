@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { MediaLibraryModal } from '../media/MediaLibraryModal'
 import { PostPreviewCard } from './PostPreviewCard'
 import PostPreview from './PostPreview'
+import { UpgradeModal } from '../components/UpgradeModal'
 
 const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
 type Platform = (typeof PLATFORMS)[number]
@@ -638,6 +639,24 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   const [scoreError, setScoreError] = useState<string | null>(null)
   const scoreContentRef = useRef<string>('')
 
+  // AI Writing Coach
+  const [coachOpen, setCoachOpen] = useState(false)
+  const [coachInstruction, setCoachInstruction] = useState('')
+  const [coachLoading, setCoachLoading] = useState(false)
+  const [coachError, setCoachError] = useState<string | null>(null)
+  const [coachHistory, setCoachHistory] = useState<Array<{ instruction: string; before: string; after: string }>>([])
+
+  // ── Upgrade modal state ────────────────────────────────────────────────────
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const [upgradeFeature, setUpgradeFeature] = useState('')
+  const [upgradeMessage, setUpgradeMessage] = useState<string | undefined>(undefined)
+
+  function handlePlanLimit(featureName: string, message?: string) {
+    setUpgradeFeature(featureName)
+    setUpgradeMessage(message)
+    setUpgradeOpen(true)
+  }
+
   async function handleScorePost() {
     if (!content.trim()) { setScoreError('Write some content first'); return }
     setScoring(true)
@@ -652,13 +671,47 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
         body: JSON.stringify({ content: content.trim(), platforms: selectedPlatforms }),
       })
       const data = (await res.json()) as typeof scoreResult & { error?: string }
-      if (!res.ok) { setScoreError((data as { error?: string }).error ?? 'Scoring failed'); return }
+      if (!res.ok) {
+        if ((data as any).error === 'PLAN_LIMIT') {
+          handlePlanLimit('AI Post Scoring', (data as any).message)
+          return
+        }
+        setScoreError((data as { error?: string }).error ?? 'Scoring failed'); return
+      }
       setScoreResult(data)
       setScoreOpen(true)
     } catch {
       setScoreError('Network error — please try again')
     } finally {
       setScoring(false)
+    }
+  }
+
+  async function handleCoach() {
+    if (!coachInstruction.trim() || !content.trim()) return
+    setCoachLoading(true)
+    setCoachError(null)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/ai/coach`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          content,
+          instruction: coachInstruction,
+          platform: selectedPlatforms[0] ?? undefined,
+        }),
+      })
+      const data = await res.json() as { improved?: string; error?: string }
+      if (!res.ok) { setCoachError(data.error ?? 'Failed'); return }
+      const before = content
+      setContent(data.improved ?? content)
+      setCoachHistory((prev) => [{ instruction: coachInstruction, before, after: data.improved ?? content }, ...prev.slice(0, 4)])
+      setCoachInstruction('')
+    } catch {
+      setCoachError('Network error — please try again')
+    } finally {
+      setCoachLoading(false)
     }
   }
 
@@ -858,7 +911,13 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
         variants?: Record<string, { content: string; hashtags: string[]; mediaUrls: string[] }>
         error?: string
       }
-      if (!res.ok) { setMultiplyError(data.error ?? 'Failed to generate variants'); return }
+      if (!res.ok) {
+        if ((data as any).error === 'PLAN_LIMIT') {
+          handlePlanLimit('AI Content Multiplier', (data as any).message)
+          return
+        }
+        setMultiplyError(data.error ?? 'Failed to generate variants'); return
+      }
       if (data.variants) {
         setVariants((prev) => {
           const next = { ...prev }
@@ -1044,6 +1103,7 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   })()
 
   return (
+    <>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
     <div className="space-y-4">
 
@@ -2156,5 +2216,13 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
       />
     </div>
     </div>
+
+    <UpgradeModal
+      open={upgradeOpen}
+      onClose={() => setUpgradeOpen(false)}
+      featureName={upgradeFeature}
+      message={upgradeMessage}
+    />
+    </>
   )
 }

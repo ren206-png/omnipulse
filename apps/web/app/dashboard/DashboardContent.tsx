@@ -7,6 +7,7 @@ import { PostPerformanceChart } from './PostPerformanceChart'
 import { OnboardingChecklist } from './OnboardingChecklist'
 import { BestTimesWidget } from './BestTimesWidget'
 import { startOfMonth, endOfMonth, isWithinInterval, format, formatDistanceToNow } from 'date-fns'
+import { NoAccountsBanner } from './components/NoAccountsBanner'
 
 interface PostMetric {
   likes: number
@@ -213,6 +214,9 @@ export function DashboardContent({ token }: { token: string }) {
 
   return (
     <>
+      {/* No accounts banner */}
+      <NoAccountsBanner token={token} workspaceId={activeWorkspace.id} />
+
       {/* Onboarding checklist — auto-hides when dismissed or all done */}
       <OnboardingChecklist token={token} />
 

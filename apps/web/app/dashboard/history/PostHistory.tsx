@@ -325,30 +325,31 @@ export function PostHistory({ token }: { token: string }) {
 
       {/* Empty state */}
       {!loading && !error && posts.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
-          <div className="text-5xl">{hasFilters ? '🔍' : '📭'}</div>
-          <p className="font-semibold text-lg">{hasFilters ? 'No matching posts' : 'No posts yet'}</p>
-          <p className="text-sm text-muted-foreground max-w-xs">
-            {hasFilters
-              ? 'Try adjusting your search or filters to find what you\'re looking for.'
-              : 'Once you schedule or publish posts, they\'ll appear here with engagement metrics.'}
-          </p>
-          <div className="flex gap-2 flex-wrap justify-center">
-            {hasFilters && (
-              <Button variant="outline" size="sm" onClick={clearFilters}>
-                Clear Filters
-              </Button>
-            )}
-            {!hasFilters && (
-              <a
-                href="/dashboard/calendar"
-                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-              >
-                📅 Schedule a Post
-              </a>
-            )}
+        hasFilters ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
+            <div className="text-5xl">🔍</div>
+            <p className="font-semibold text-lg">No matching posts</p>
+            <p className="text-sm text-muted-foreground max-w-xs">
+              Try adjusting your search or filters to find what you&apos;re looking for.
+            </p>
+            <Button variant="outline" size="sm" onClick={clearFilters}>
+              Clear Filters
+            </Button>
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
+            <div className="text-5xl">📭</div>
+            <div>
+              <h3 className="font-semibold text-lg">No posts yet</h3>
+              <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+                Your post history will appear here once you start scheduling and publishing content.
+              </p>
+            </div>
+            <a href="/dashboard/calendar" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
+              ✍️ Create your first post
+            </a>
+          </div>
+        )
       )}
 
       {/* Post list */}
