@@ -15,30 +15,59 @@ import { CommandPalette } from './components/CommandPalette'
 
 interface Workspace { id: string; name: string }
 
-const NAV_LINKS = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/dashboard/calendar', label: 'Calendar' },
-  { href: '/dashboard/ai-calendar', label: 'AI Calendar' },
-  { href: '/dashboard/queue', label: 'Queue' },
-  { href: '/dashboard/approvals', label: 'Approvals' },
-  { href: '/dashboard/bulk', label: 'Bulk Schedule' },
-  { href: '/dashboard/history', label: 'History' },
-  { href: '/dashboard/templates', label: 'Templates' },
-  { href: '/dashboard/bulk-import', label: '📥 Bulk Import' },
-  { href: '/dashboard/bio', label: 'Link in Bio' },
-  { href: '/dashboard/analytics', label: 'Analytics' },
-  { href: '/dashboard/insights', label: '💡 Insights' },
-  { href: '/dashboard/content-health', label: '❤️ Content Health' },
-  { href: '/dashboard/hashtags', label: 'Hashtags' },
-  { href: '/dashboard/image-editor', label: '🖼️ Image Editor' },
-  { href: '/dashboard/inbox', label: 'Inbox' },
-  { href: '/dashboard/competitors', label: 'Competitors', icon: '🔍' },
-  { href: '/dashboard/trends', label: 'Trends', icon: '📈' },
-  { href: '/dashboard/accounts', label: 'Accounts' },
-  { href: '/dashboard/billing', label: 'Billing' },
-  { href: '/dashboard/settings', label: 'Settings' },
-  { href: '/dashboard/settings/branding', label: '🎨 Branding' },
-  { href: '/dashboard/settings/client-portal', label: '👤 Client Portal' },
+const NAV_GROUPS = [
+  {
+    label: 'Publish',
+    defaultOpen: true,
+    links: [
+      { href: '/dashboard/calendar', label: 'Calendar', icon: '📅' },
+      { href: '/dashboard/ai-calendar', label: 'AI Calendar', icon: '🤖' },
+      { href: '/dashboard/queue', label: 'Queue', icon: '📋' },
+      { href: '/dashboard/bulk', label: 'Bulk Schedule', icon: '📤' },
+      { href: '/dashboard/bulk-import', label: 'Bulk Import', icon: '📥' },
+    ],
+  },
+  {
+    label: 'Manage',
+    defaultOpen: true,
+    links: [
+      { href: '/dashboard/approvals', label: 'Approvals', icon: '✅' },
+      { href: '/dashboard/history', label: 'History', icon: '📜' },
+      { href: '/dashboard/templates', label: 'Templates', icon: '📝' },
+      { href: '/dashboard/inbox', label: 'Inbox', icon: '📬' },
+    ],
+  },
+  {
+    label: 'Insights',
+    defaultOpen: false,
+    links: [
+      { href: '/dashboard/analytics', label: 'Analytics', icon: '📊' },
+      { href: '/dashboard/insights', label: 'Insights', icon: '💡' },
+      { href: '/dashboard/content-health', label: 'Content Health', icon: '❤️' },
+      { href: '/dashboard/competitors', label: 'Competitors', icon: '🔍' },
+      { href: '/dashboard/trends', label: 'Trends', icon: '📈' },
+    ],
+  },
+  {
+    label: 'Tools',
+    defaultOpen: false,
+    links: [
+      { href: '/dashboard/hashtags', label: 'Hashtags', icon: '#️⃣' },
+      { href: '/dashboard/image-editor', label: 'Image Editor', icon: '🖼️' },
+      { href: '/dashboard/bio', label: 'Link in Bio', icon: '🔗' },
+    ],
+  },
+  {
+    label: 'Settings',
+    defaultOpen: false,
+    links: [
+      { href: '/dashboard/accounts', label: 'Accounts', icon: '🔌' },
+      { href: '/dashboard/billing', label: 'Billing', icon: '💳' },
+      { href: '/dashboard/settings', label: 'Settings', icon: '⚙️' },
+      { href: '/dashboard/settings/branding', label: 'Branding', icon: '🎨' },
+      { href: '/dashboard/settings/client-portal', label: 'Client Portal', icon: '👤' },
+    ],
+  },
 ]
 
 function HamburgerIcon({ open }: { open: boolean }) {
@@ -65,7 +94,6 @@ function WorkspaceSwitcher({ token }: { token: string }) {
     const ws = workspaces.find((w) => w.id === id)
     if (!ws) return
     setActiveWorkspace(ws)
-    // Soft-update URL without useSearchParams
     const url = new URL(window.location.href)
     url.searchParams.set('workspace', id)
     router.replace(`${pathname}?${url.searchParams.toString()}`)
@@ -153,6 +181,17 @@ function WorkspaceSwitcher({ token }: { token: string }) {
 function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNavClick?: () => void; onOpenCmd?: () => void }) {
   const pathname = usePathname()
 
+  const initialOpen = NAV_GROUPS.reduce<Record<string, boolean>>((acc, group) => {
+    acc[group.label] = group.defaultOpen
+    return acc
+  }, {})
+
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(initialOpen)
+
+  function toggleGroup(label: string) {
+    setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }))
+  }
+
   return (
     <>
       <div className="p-4 border-b flex items-center justify-between">
@@ -170,27 +209,68 @@ function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNav
         </div>
       </div>
 
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {NAV_LINKS.map((link) => {
-          const isActive = link.href === '/dashboard'
-            ? pathname === '/dashboard'
-            : pathname === link.href || pathname.startsWith(link.href + '/')
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={onNavClick}
-              className={cn(
-                'block px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-accent hover:text-accent-foreground',
+      <nav className="flex-1 p-3 overflow-y-auto">
+        {/* Dashboard home link */}
+        <Link
+          href="/dashboard"
+          onClick={onNavClick}
+          className={cn(
+            'block px-3 py-2 rounded-md text-sm font-medium transition-colors',
+            pathname === '/dashboard'
+              ? 'bg-primary text-primary-foreground'
+              : 'hover:bg-accent hover:text-accent-foreground',
+          )}
+        >
+          🏠 Dashboard
+        </Link>
+
+        {/* New Post button */}
+        <Link
+          href="/dashboard/calendar?new=1"
+          onClick={onNavClick}
+          className="flex items-center gap-2 mx-3 mt-1 mb-2 px-3 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          ✍️ New Post
+        </Link>
+
+        {/* Grouped nav */}
+        <div className="mt-2 space-y-1">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label}>
+              <button
+                onClick={() => toggleGroup(group.label)}
+                className="w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors rounded-md hover:bg-accent/50"
+              >
+                <span>{group.label}</span>
+                <span>{openGroups[group.label] ? '▾' : '▸'}</span>
+              </button>
+
+              {openGroups[group.label] && (
+                <div className="mt-0.5 space-y-0.5">
+                  {group.links.map((link) => {
+                    const isActive = pathname === link.href || pathname.startsWith(link.href + '/')
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        onClick={onNavClick}
+                        className={cn(
+                          'flex items-center gap-2 pl-5 pr-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                          isActive
+                            ? 'bg-primary text-primary-foreground'
+                            : 'hover:bg-accent hover:text-accent-foreground',
+                        )}
+                      >
+                        <span>{link.icon}</span>
+                        <span>{link.label}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
               )}
-            >
-              {(link as any).icon ? `${(link as any).icon} ${link.label}` : link.label}
-            </Link>
-          )
-        })}
+            </div>
+          ))}
+        </div>
       </nav>
 
       <div className="p-3 border-t">

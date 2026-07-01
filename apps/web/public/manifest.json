@@ -1,0 +1,19 @@
+{
+  "name": "OmniPulse",
+  "short_name": "OmniPulse",
+  "description": "Schedule posts, track analytics, and grow your brand across every platform.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "categories": ["productivity", "social"],
+  "shortcuts": [
+    { "name": "New Post", "url": "/dashboard/calendar?new=1", "description": "Create a new scheduled post" },
+    { "name": "Analytics", "url": "/dashboard/analytics", "description": "View your analytics" }
+  ]
+}
