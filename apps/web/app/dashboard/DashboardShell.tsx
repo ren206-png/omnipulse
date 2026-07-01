@@ -56,6 +56,8 @@ const NAV_GROUPS = [
       { href: '/dashboard/image-editor', label: 'Image Editor', icon: '🖼️' },
       { href: '/dashboard/media', label: 'Media Library', icon: '🖼️' },
       { href: '/dashboard/bio', label: 'Link in Bio', icon: '🔗' },
+      { href: '/dashboard/thread-builder', label: 'Thread Builder', icon: '🧵' },
+      { href: '/dashboard/listening', label: 'Social Listening', icon: '👂' },
     ],
   },
   {

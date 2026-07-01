@@ -50,6 +50,7 @@ model Workspace {
   queueSlots             QueueSlot[]
   campaigns              Campaign[]
   mediaAssets            MediaAsset[]
+  listeningKeywords      ListeningKeyword[]
   plan                   Plan                 @default(FREE)
   stripeCustomerId       String?              @unique
   stripeSubscriptionId   String?              @unique
@@ -438,6 +439,18 @@ model Campaign {
   createdAt   DateTime        @default(now())
 
   @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+model ListeningKeyword {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  keyword     String
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  @@unique([workspaceId, keyword])
   @@index([workspaceId])
 }
 

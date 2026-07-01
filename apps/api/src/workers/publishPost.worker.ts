@@ -92,6 +92,7 @@ async function publishToPlatform(
     return data.data?.id ?? ''
   }
 
+
   if (platform === 'FACEBOOK') {
     const res = await fetch(`https://graph.facebook.com/me/feed?access_token=${accessToken}`, {
       method: 'POST',
@@ -349,6 +350,43 @@ const worker = new Worker(
           { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
         )
         responseLog[platform] = externalId
+
+        // ── X Thread: reply with each subsequent slide ────────────────────────
+        if (platform === 'X' && externalId && post.threadSlides) {
+          type ThreadSlide = { text?: string; id?: string }
+          const slides = post.threadSlides as ThreadSlide[]
+          if (Array.isArray(slides) && slides.length > 1) {
+            let replyToId = externalId
+            for (const slide of slides.slice(1)) {
+              const slideText = (slide.text ?? '').substring(0, 280)
+              if (!slideText) continue
+              try {
+                const replyRes = await fetch('https://api.twitter.com/2/tweets', {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${account.accessToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    text: slideText,
+                    reply: { in_reply_to_tweet_id: replyToId },
+                  }),
+                })
+                const replyData = await replyRes.json() as { data?: { id?: string }; detail?: string }
+                if (!replyRes.ok) {
+                  logger.warn({ replyToId, err: replyData.detail }, 'X thread reply failed — stopping thread chain')
+                  break
+                }
+                replyToId = replyData.data?.id ?? replyToId
+              } catch (threadErr) {
+                logger.warn({ threadErr, replyToId }, 'X thread reply exception — stopping thread chain')
+                break
+              }
+            }
+            logger.info({ postId, slides: slides.length }, 'X thread published')
+          }
+        }
+        // ── End X Thread ──────────────────────────────────────────────────────
       } catch (err) {
         errors[platform] = err instanceof Error ? err.message : String(err)
       }
