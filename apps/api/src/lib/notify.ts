@@ -39,13 +39,10 @@ export async function notify(input: NotifyInput): Promise<void> {
   }
 }
 
+// notifyMany routes through notify() individually so SSE push fires for each recipient
 export async function notifyMany(inputs: NotifyInput[]): Promise<void> {
   if (inputs.length === 0) return
-  try {
-    await prisma.notification.createMany({ data: inputs })
-  } catch (err) {
-    logger.error({ err }, 'Failed to create notifications')
-  }
+  await Promise.allSettled(inputs.map((input) => notify(input)))
 }
 
 // Get all admin/owner user IDs for a workspace

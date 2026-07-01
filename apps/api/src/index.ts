@@ -186,3 +186,15 @@ setTimeout(() => {
   sendWeeklyDigest().catch(() => {})
   setInterval(() => sendWeeklyDigest().catch(() => {}), 7 * 24 * 60 * 60 * 1000)
 }, msUntilMonday)
+
+// ─── Global crash protection (single registration point) ───────────────────
+// Workers previously registered these individually — consolidated here to
+// prevent duplicate listeners and double process.exit calls.
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, '[Process] uncaughtException — exiting for restart')
+  process.exit(1)
+})
+process.on('unhandledRejection', (reason) => {
+  logger.error({ reason }, '[Process] unhandledRejection — exiting for restart')
+  process.exit(1)
+})

@@ -63,14 +63,6 @@ export async function startGuardianWorker(): Promise<void> {
     logger.error({ jobId: job?.id, err }, '[Guardian] Scan job failed')
   })
 
-  // Crash protection: exit so Railway / PM2 auto-restarts the process
-  process.on('uncaughtException', (err) => {
-    logger.error({ err }, '[Guardian] uncaughtException — exiting for restart')
-    process.exit(1)
-  })
-
-  process.on('unhandledRejection', (reason) => {
-    logger.error({ reason }, '[Guardian] unhandledRejection — exiting for restart')
-    process.exit(1)
-  })
+  // Note: global crash handlers (uncaughtException / unhandledRejection) are
+  // registered once in index.ts — avoid duplicate listeners across workers.
 }
