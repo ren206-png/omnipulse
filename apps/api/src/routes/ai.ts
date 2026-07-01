@@ -808,4 +808,42 @@ router.post('/caption-suggestion', async (req: Request, res: Response): Promise<
   }
 })
 
+// POST /api/v1/ai/coach — conversational post rewriting
+router.post('/coach', async (req: Request, res: Response): Promise<void> => {
+  const { content, instruction, platform } = req.body as {
+    content?: string
+    instruction?: string
+    platform?: string
+  }
+  if (!content?.trim()) { sendError(res, 400, 'MISSING_CONTENT', 'content required'); return }
+  if (!instruction?.trim()) { sendError(res, 400, 'MISSING_INSTRUCTION', 'instruction required'); return }
+
+  const platformContext = platform ? `This post is for ${platform}. ` : ''
+  const charLimit = platform === 'X' ? 280 : platform === 'INSTAGRAM' ? 2200 : 3000
+
+  try {
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      messages: [{
+        role: 'user',
+        content: `You are a professional social media copywriter. ${platformContext}
+
+CURRENT POST:
+${content}
+
+INSTRUCTION: ${instruction}
+
+Rewrite the post following the instruction exactly. Return ONLY the improved post text — no labels, no explanations, no preamble. Keep it under ${charLimit} characters.`,
+      }],
+    })
+    const improved = response.content[0].type === 'text' ? response.content[0].text.trim() : content
+    res.json({ improved, original: content })
+  } catch (err) {
+    logger.error({ err }, 'AI coach error')
+    sendError(res, 500, 'AI_ERROR', 'AI coach failed')
+  }
+})
+
 export default router

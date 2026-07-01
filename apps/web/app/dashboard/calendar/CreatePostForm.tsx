@@ -12,6 +12,7 @@ import { MediaLibraryModal } from '../media/MediaLibraryModal'
 import { PostPreviewCard } from './PostPreviewCard'
 import PostPreview from './PostPreview'
 import { UpgradeModal } from '../components/UpgradeModal'
+import { HookLibrary } from '../components/HookLibrary'
 
 const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
 type Platform = (typeof PLATFORMS)[number]
@@ -251,6 +252,7 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const [firstComment, setFirstComment] = useState('')
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [hookLibraryOpen, setHookLibraryOpen] = useState(false)
 
   // Draft autosave state
   const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null)
@@ -1414,6 +1416,18 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
             </button>
             <button
               type="button"
+              onClick={() => setCoachOpen((o) => !o)}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                coachOpen
+                  ? 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700'
+                  : 'bg-background hover:bg-accent border-border text-muted-foreground hover:text-foreground',
+              )}
+            >
+              🧑‍🏫 Coach
+            </button>
+            <button
+              type="button"
               onClick={() => { setTranslateOpen((o) => !o); setTranslated(null); setTranslateError(null) }}
               className={cn(
                 'text-xs px-2 py-0.5 rounded-md border transition-colors font-medium',
@@ -1561,6 +1575,60 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Coach panel */}
+        {coachOpen && (
+          <div className="rounded-xl border bg-gradient-to-br from-indigo-50/50 to-violet-50/50 dark:from-indigo-950/20 dark:to-violet-950/20 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold">🧑‍🏫 AI Writing Coach</p>
+                <p className="text-xs text-muted-foreground">Tell me how to improve your post</p>
+              </div>
+              <button type="button" onClick={() => setCoachOpen(false)} className="text-muted-foreground hover:text-foreground text-sm">✕</button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {['Add a strong hook', 'Make it shorter', 'Add urgency', 'Make it funnier', 'More professional', 'Add a CTA'].map((s) => (
+                <button key={s} type="button" onClick={() => setCoachInstruction(s)}
+                  className="px-2.5 py-1 text-xs rounded-full bg-background border hover:bg-accent transition-colors">
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 h-9 text-sm border rounded-lg px-3 bg-background outline-none focus:ring-2 focus:ring-ring"
+                placeholder="e.g. make it more engaging for LinkedIn…"
+                value={coachInstruction}
+                onChange={(e) => setCoachInstruction(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCoach() }}
+                disabled={coachLoading}
+              />
+              <button type="button" onClick={handleCoach}
+                disabled={coachLoading || !coachInstruction.trim() || !content.trim()}
+                className="px-4 h-9 text-sm rounded-lg bg-indigo-600 text-white font-medium disabled:opacity-50 hover:bg-indigo-700 transition-colors">
+                {coachLoading ? '⏳' : '✨ Apply'}
+              </button>
+            </div>
+            {coachError && <p className="text-xs text-destructive">{coachError}</p>}
+            {coachHistory.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Recent Changes</p>
+                {coachHistory.map((h, i) => (
+                  <div key={i} className="rounded-lg bg-background border p-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium">&ldquo;{h.instruction}&rdquo;</span>
+                      <button type="button" onClick={() => setContent(h.before)}
+                        className="text-[10px] text-muted-foreground hover:text-foreground underline">
+                        Undo
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground line-clamp-2">{h.after}</p>
+                  </div>
+                ))}
               </div>
             )}
           </div>
