@@ -268,7 +268,7 @@ function validateVariants(raw: unknown): { variants: PlatformVariantInput[]; err
 }
 
 router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
-  const { workspaceId, content, mediaUrls, platforms, scheduledFor, firstComment, platformVariants } = req.body as {
+  const { workspaceId, content, mediaUrls, platforms, scheduledFor, firstComment, platformVariants, recurrenceFreq, recurrenceEndsAt } = req.body as {
     workspaceId?: string
     content?: string
     mediaUrls?: string[]
@@ -276,6 +276,8 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
     scheduledFor?: string
     firstComment?: string
     platformVariants?: unknown
+    recurrenceFreq?: string
+    recurrenceEndsAt?: string
   }
 
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
@@ -317,6 +319,9 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
         status,
         submittedBy: req.user!.id,
         ...(firstComment?.trim() ? { firstComment: firstComment.trim() } : {}),
+        ...(recurrenceFreq && ['daily','weekdays','weekly','monthly'].includes(recurrenceFreq)
+          ? { recurrenceFreq } : {}),
+        ...(recurrenceEndsAt ? { recurrenceEndsAt: new Date(recurrenceEndsAt) } : {}),
         ...(variants!.length > 0 ? {
           platformVariants: {
             create: variants!.map((v) => ({
@@ -451,6 +456,68 @@ router.post('/queue-schedule', async (req: Request, res: Response): Promise<void
   } catch (err) {
     logger.error({ err }, 'Queue schedule error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to queue-schedule post')
+  }
+})
+
+// POST /api/v1/posts/draft
+// Create a draft post — no scheduling required, no plan-limit counted.
+router.post('/draft', async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId, content, mediaUrls, platforms, scheduledFor, platformVariants } = req.body as {
+    workspaceId?: string
+    content?: string
+    mediaUrls?: string[]
+    platforms?: string[]
+    scheduledFor?: string
+    platformVariants?: unknown
+  }
+
+  if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
+
+  const role = await getWorkspaceRole(workspaceId, req.user!.id)
+  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+
+  // scheduledFor is optional for drafts — default to 7 days from now
+  let scheduledDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  if (scheduledFor) {
+    const d = new Date(scheduledFor)
+    if (!isNaN(d.getTime())) scheduledDate = d
+  }
+
+  const validPlatforms = (platforms ?? []).filter((p): p is typeof VALID_PLATFORMS[number] =>
+    VALID_PLATFORMS.includes(p as typeof VALID_PLATFORMS[number]),
+  )
+
+  const { variants, error: variantError } = validateVariants(platformVariants)
+  if (variantError) { sendError(res, 400, 'INVALID_VARIANT', variantError); return }
+
+  try {
+    const post = await (prisma.scheduledPost.create as Function)({
+      data: {
+        workspaceId,
+        content: content?.trim() ?? '',
+        mediaUrls: mediaUrls ?? [],
+        platforms: validPlatforms,
+        scheduledFor: scheduledDate,
+        status: 'DRAFT',
+        submittedBy: req.user!.id,
+        ...(variants!.length > 0 ? {
+          platformVariants: {
+            create: variants!.map((v) => ({
+              platform: v.platform,
+              content: v.content,
+              hashtags: v.hashtags ?? [],
+              mediaUrls: v.mediaUrls ?? [],
+            })),
+          },
+        } : {}),
+      },
+      include: { platformVariants: true },
+    })
+    logger.info({ postId: post.id, workspaceId }, 'Draft created')
+    res.status(201).json({ post })
+  } catch (err) {
+    logger.error({ err }, 'Create draft error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create draft')
   }
 })
 
@@ -833,6 +900,46 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
 })
 
 // PATCH /api/v1/posts/:id/metrics  — upsert engagement numbers for one platform
+// POST /api/v1/posts/:id/retry
+// Retry a FAILED post — resets status to SCHEDULED and re-enqueues in BullMQ.
+router.post('/:id/retry', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params
+  try {
+    const post = await prisma.scheduledPost.findUnique({ where: { id } })
+    if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
+
+    const role = await getWorkspaceRole(post.workspaceId, req.user!.id)
+    if (!role || !['OWNER', 'ADMIN'].includes(role)) {
+      sendError(res, 403, 'FORBIDDEN', 'Only workspace owners and admins can retry failed posts')
+      return
+    }
+
+    if (post.status !== 'FAILED') {
+      sendError(res, 400, 'INVALID_STATUS', 'Only FAILED posts can be retried')
+      return
+    }
+
+    // Push scheduledFor 5 minutes into the future to give a clean retry window
+    const retryAt = new Date(Date.now() + 5 * 60 * 1000)
+
+    const updated = await (prisma.scheduledPost.update as Function)({
+      where: { id },
+      data: { status: 'SCHEDULED', scheduledFor: retryAt, errorLog: null },
+    })
+
+    const job = await publishPostQueue.add(
+      'publish-post',
+      { postId: id },
+      { delay: 5 * 60 * 1000, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+    )
+    logger.info({ postId: id, jobId: job.id }, 'Post retry enqueued')
+    res.json({ post: updated, jobId: job.id })
+  } catch (err) {
+    logger.error({ err }, 'Post retry error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to retry post')
+  }
+})
+
 router.patch('/:id/metrics', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params
   const { platform, likes, comments, shares, reach, impressions } = req.body as {

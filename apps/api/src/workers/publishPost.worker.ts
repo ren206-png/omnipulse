@@ -3,7 +3,7 @@ import { Worker } from 'bullmq'
 import IORedis from 'ioredis'
 import { prisma } from '../lib/prisma.js'
 import { logger } from '../lib/logger.js'
-import { redisConnection } from '../lib/queue.js'
+import { redisConnection, publishPostQueue } from '../lib/queue.js'
 import { notify } from '../lib/notify.js'
 import { emitWebhook } from '../lib/webhookEmitter.js'
 import { decryptToken } from '../lib/tokenEncryption.js'
@@ -319,6 +319,59 @@ const worker = new Worker(
     if (!allFailed) {
       logger.info({ postId, status: 'PUBLISHED', platforms: post.platforms, responseLog }, 'Post published successfully')
       await emitWebhook(post.workspaceId, 'post.published', { postId: post.id, platforms: post.platforms })
+
+      // ── Recurrence: spawn next occurrence ────────────────────────────────
+      if (post.recurrenceFreq) {
+        const parentId = post.recurrenceParentId ?? post.id
+        const endsAt: Date | null = post.recurrenceEndsAt ?? null
+
+        function nextScheduledFor(base: Date, freq: string): Date {
+          const d = new Date(base)
+          if (freq === 'daily') {
+            d.setDate(d.getDate() + 1)
+          } else if (freq === 'weekdays') {
+            d.setDate(d.getDate() + 1)
+            while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+          } else if (freq === 'weekly') {
+            d.setDate(d.getDate() + 7)
+          } else if (freq === 'monthly') {
+            d.setMonth(d.getMonth() + 1)
+          }
+          return d
+        }
+
+        const nextDate = nextScheduledFor(post.scheduledFor, post.recurrenceFreq)
+
+        if (!endsAt || nextDate <= endsAt) {
+          try {
+            const nextPost = await (prisma.scheduledPost.create as Function)({
+              data: {
+                workspaceId: post.workspaceId,
+                content: post.content,
+                mediaUrls: post.mediaUrls,
+                platforms: post.platforms,
+                scheduledFor: nextDate,
+                status: 'SCHEDULED',
+                submittedBy: post.submittedBy,
+                firstComment: post.firstComment,
+                recurrenceFreq: post.recurrenceFreq,
+                recurrenceEndsAt: post.recurrenceEndsAt,
+                recurrenceParentId: parentId,
+              },
+            })
+            const delay = nextDate.getTime() - Date.now()
+            await publishPostQueue.add(
+              'publish-post',
+              { postId: nextPost.id },
+              { delay: Math.max(delay, 1000), attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+            )
+            logger.info({ postId: nextPost.id, scheduledFor: nextDate, freq: post.recurrenceFreq }, 'Recurring post spawned')
+          } catch (recErr) {
+            logger.error({ recErr, postId }, 'Failed to spawn next recurring occurrence')
+          }
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
 
       if (post.submittedBy) {
         await notify({

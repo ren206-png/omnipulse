@@ -10,6 +10,10 @@ import {
   format,
   addMonths,
   subMonths,
+  addWeeks,
+  subWeeks,
+  startOfWeek,
+  endOfWeek,
 } from 'date-fns'
 import {
   DndContext,
@@ -160,6 +164,8 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
   const isReuse = searchParams.get('reuse') === '1'
 
   const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
+  const [currentWeek, setCurrentWeek] = useState(new Date())
   const [posts, setPosts] = useState<Post[]>([])
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(() => {
@@ -204,6 +210,12 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
   const [evergreenDays, setEvergreenDays] = useState('30')
   const [evergreenLoading, setEvergreenLoading] = useState(false)
 
+  // Draft editing state
+  const [draftEditContent, setDraftEditContent] = useState<string | undefined>(undefined)
+  const [draftEditPlatforms, setDraftEditPlatforms] = useState<string[] | undefined>(undefined)
+  const [draftEditMediaUrls, setDraftEditMediaUrls] = useState<string[] | undefined>(undefined)
+  const [draftEditId, setDraftEditId] = useState<string | undefined>(undefined)
+
   // Drag-and-drop state
   const [draggingPostId, setDraggingPostId] = useState<string | null>(null)
   const dragInFlight = useRef(false)
@@ -232,6 +244,16 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
   })
 
   const paddingDays = Array.from({ length: startOfMonth(currentMonth).getDay() })
+
+  function handleEditDraft(post: Post) {
+    setDraftEditContent(post.content)
+    setDraftEditPlatforms(post.platforms)
+    setDraftEditMediaUrls([])
+    setDraftEditId(post.id)
+    setSelectedDate(new Date(post.scheduledFor))
+    setFormKey((k) => k + 1)
+    setShowCreateForm(true)
+  }
 
   function handleDayClick(day: Date) {
     setSelectedDate(day)
@@ -446,18 +468,66 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">{format(currentMonth, 'MMMM yyyy')}</h2>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setCurrentMonth((m) => subMonths(m, 1))}>
-            ‹ Prev
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setCurrentMonth(new Date())}>
-            Today
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setCurrentMonth((m) => addMonths(m, 1))}>
-            Next ›
-          </Button>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-xl font-semibold">
+          {viewMode === 'month'
+            ? format(currentMonth, 'MMMM yyyy')
+            : `Week of ${format(startOfWeek(currentWeek, { weekStartsOn: 0 }), 'MMM d')}`}
+        </h2>
+        <div className="flex gap-2 flex-wrap">
+          {/* View mode toggle */}
+          <div className="flex rounded-md border overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setViewMode('month')}
+              className={cn(
+                'px-3 py-1.5 text-xs font-medium transition-colors',
+                viewMode === 'month'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-accent hover:text-foreground',
+              )}
+            >
+              Month
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('week')}
+              className={cn(
+                'px-3 py-1.5 text-xs font-medium transition-colors border-l',
+                viewMode === 'week'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-accent hover:text-foreground',
+              )}
+            >
+              Week
+            </button>
+          </div>
+
+          {viewMode === 'month' ? (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setCurrentMonth((m) => subMonths(m, 1))}>
+                ‹ Prev
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => { setCurrentMonth(new Date()); setCurrentWeek(new Date()) }}>
+                Today
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setCurrentMonth((m) => addMonths(m, 1))}>
+                Next ›
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setCurrentWeek((w) => subWeeks(w, 1))}>
+                ‹ Prev
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => { setCurrentMonth(new Date()); setCurrentWeek(new Date()) }}>
+                Today
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setCurrentWeek((w) => addWeeks(w, 1))}>
+                Next ›
+              </Button>
+            </>
+          )}
           <Button variant="outline" size="sm" onClick={exportIcal} title="Export calendar as iCal (.ics)">
             📅 Export iCal
           </Button>
@@ -484,58 +554,134 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
 
       {/* Calendar grid — wrapped in DndContext for drag-and-drop */}
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="overflow-x-auto -mx-1 px-1">
-      <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden border min-w-[560px]">
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-          <div key={d} className="bg-muted px-2 py-1 text-xs font-medium text-center text-muted-foreground">
-            {d}
-          </div>
-        ))}
 
-        {paddingDays.map((_, i) => (
-          <div key={`pad-${i}`} className="bg-background min-h-[80px]" />
-        ))}
+      {viewMode === 'month' ? (
+        <div className="overflow-x-auto -mx-1 px-1">
+        <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden border min-w-[560px]">
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+            <div key={d} className="bg-muted px-2 py-1 text-xs font-medium text-center text-muted-foreground">
+              {d}
+            </div>
+          ))}
 
-        {days.map((day) => {
-          const dayPosts = posts.filter((p) => isSameDay(new Date(p.scheduledFor), day))
-          const isToday = isSameDay(day, new Date())
-          const isPast = day < new Date(new Date().setHours(0, 0, 0, 0)) && !isToday
+          {paddingDays.map((_, i) => (
+            <div key={`pad-${i}`} className="bg-background min-h-[80px]" />
+          ))}
+
+          {days.map((day) => {
+            const dayPosts = posts.filter((p) => isSameDay(new Date(p.scheduledFor), day))
+            const isToday = isSameDay(day, new Date())
+            const isPast = day < new Date(new Date().setHours(0, 0, 0, 0)) && !isToday
+            return (
+              <DroppableDay
+                key={day.toISOString()}
+                day={day}
+                isToday={isToday}
+                isPast={isPast}
+                onClick={() => handleDayClick(day)}
+              >
+                <span className={cn(
+                  'text-xs font-medium',
+                  isToday && 'text-primary font-bold',
+                )}>
+                  {format(day, 'd')}
+                </span>
+
+                {dayPosts.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {dayPosts.map((p) => {
+                      const isDraggable = p.status !== 'PUBLISHED' && p.status !== 'FAILED'
+                      return isDraggable ? (
+                        <DraggablePostDot key={p.id} post={p} isDragging={draggingPostId === p.id} />
+                      ) : (
+                        <span
+                          key={p.id}
+                          className={cn('inline-block w-2 h-2 rounded-full', STATUS_DOT[p.status])}
+                          title={`${STATUS_LABEL[p.status]}: ${p.content.slice(0, 60)}`}
+                        />
+                      )
+                    })}
+                  </div>
+                )}
+              </DroppableDay>
+            )
+          })}
+        </div>
+        </div>
+      ) : (
+        /* Week view */
+        (() => {
+          const weekStart = startOfWeek(currentWeek, { weekStartsOn: 0 })
+          const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 0 })
+          const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd })
           return (
-            <DroppableDay
-              key={day.toISOString()}
-              day={day}
-              isToday={isToday}
-              isPast={isPast}
-              onClick={() => handleDayClick(day)}
-            >
-              <span className={cn(
-                'text-xs font-medium',
-                isToday && 'text-primary font-bold',
-              )}>
-                {format(day, 'd')}
-              </span>
-
-              {dayPosts.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {dayPosts.map((p) => {
-                    const isDraggable = p.status !== 'PUBLISHED' && p.status !== 'FAILED'
-                    return isDraggable ? (
-                      <DraggablePostDot key={p.id} post={p} isDragging={draggingPostId === p.id} />
-                    ) : (
-                      <span
-                        key={p.id}
-                        className={cn('inline-block w-2 h-2 rounded-full', STATUS_DOT[p.status])}
-                        title={`${STATUS_LABEL[p.status]}: ${p.content.slice(0, 60)}`}
-                      />
-                    )
-                  })}
-                </div>
-              )}
-            </DroppableDay>
+            <div className="overflow-x-auto -mx-1 px-1">
+              <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden border min-w-[560px]">
+                {/* Day headers */}
+                {weekDays.map((day) => {
+                  const isToday = isSameDay(day, new Date())
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      className={cn(
+                        'bg-muted px-2 py-2 text-center',
+                        isToday && 'ring-1 ring-inset ring-primary',
+                      )}
+                    >
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase">{format(day, 'EEE')}</p>
+                      <p className={cn('text-sm font-semibold', isToday && 'text-primary')}>{format(day, 'd')}</p>
+                    </div>
+                  )
+                })}
+                {/* Day columns */}
+                {weekDays.map((day) => {
+                  const dayPosts = posts.filter((p) => isSameDay(new Date(p.scheduledFor), day))
+                  const isToday = isSameDay(day, new Date())
+                  const isPast = day < new Date(new Date().setHours(0, 0, 0, 0)) && !isToday
+                  return (
+                    <DroppableDay
+                      key={day.toISOString()}
+                      day={day}
+                      isToday={isToday}
+                      isPast={isPast}
+                      onClick={() => handleDayClick(day)}
+                    >
+                      <div className="space-y-1 min-h-[120px]">
+                        {dayPosts.length === 0 ? (
+                          <p className="text-[10px] text-muted-foreground/50 text-center pt-2">—</p>
+                        ) : (
+                          dayPosts.map((p) => {
+                            const isDraggable = p.status !== 'PUBLISHED' && p.status !== 'FAILED'
+                            return (
+                              <div
+                                key={p.id}
+                                className={cn(
+                                  'flex items-center gap-1 rounded px-1 py-0.5 text-[10px] leading-tight',
+                                  'bg-muted/60 hover:bg-muted transition-colors',
+                                )}
+                                title={`${STATUS_LABEL[p.status]}: ${p.content.slice(0, 80)}`}
+                              >
+                                {isDraggable ? (
+                                  <DraggablePostDot post={p} isDragging={draggingPostId === p.id} />
+                                ) : (
+                                  <span className={cn('inline-block w-2 h-2 rounded-full flex-shrink-0', STATUS_DOT[p.status])} />
+                                )}
+                                <span className="truncate text-foreground/80">
+                                  {format(new Date(p.scheduledFor), 'h:mm a')} · {p.content.slice(0, 20)}
+                                </span>
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    </DroppableDay>
+                  )
+                })}
+              </div>
+            </div>
           )
-        })}
-      </div>
-      </div>
+        })()
+      )}
 
       {/* Drag overlay — ghost card while dragging */}
       <DragOverlay>
@@ -549,7 +695,15 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
       {/* Day detail dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => {
         setDialogOpen(open)
-        if (!open) { setShowCreateForm(false); setConfirmDeleteId(null); cancelEdit() }
+        if (!open) {
+          setShowCreateForm(false)
+          setConfirmDeleteId(null)
+          cancelEdit()
+          setDraftEditContent(undefined)
+          setDraftEditPlatforms(undefined)
+          setDraftEditMediaUrls(undefined)
+          setDraftEditId(undefined)
+        }
       }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -702,15 +856,25 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
                                 </Button>
                               )}
                               {p.status === 'DRAFT' && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-xs"
-                                  onClick={() => handleSubmitReview(p.id)}
-                                  disabled={submittingReviewId === p.id}
-                                >
-                                  {submittingReviewId === p.id ? 'Submitting…' : 'Submit for Review'}
-                                </Button>
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs"
+                                    onClick={() => handleEditDraft(p)}
+                                  >
+                                    ✏️ Edit Draft
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs"
+                                    onClick={() => handleSubmitReview(p.id)}
+                                    disabled={submittingReviewId === p.id}
+                                  >
+                                    {submittingReviewId === p.id ? 'Submitting…' : 'Submit for Review'}
+                                  </Button>
+                                </>
                               )}
                               {confirmDeleteId === p.id ? (
                                 <>
@@ -784,9 +948,10 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
                 token={token}
                 onSuccess={handlePostSuccess}
                 onClose={() => setDialogOpen(false)}
-                initialContent={isReuse ? reuseContent : undefined}
-                initialPlatforms={isReuse ? reusePlatforms : undefined}
-                initialMediaUrls={isReuse ? reuseMediaUrls : undefined}
+                initialContent={draftEditId ? draftEditContent : isReuse ? reuseContent : undefined}
+                initialPlatforms={draftEditId ? draftEditPlatforms : isReuse ? reusePlatforms : undefined}
+                initialMediaUrls={draftEditId ? draftEditMediaUrls : isReuse ? reuseMediaUrls : undefined}
+                initialDraftId={draftEditId}
               />
             </>
           )}

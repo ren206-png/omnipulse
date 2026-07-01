@@ -23,6 +23,7 @@ const NAV_LINKS = [
   { href: '/dashboard/bulk', label: 'Bulk Schedule' },
   { href: '/dashboard/history', label: 'History' },
   { href: '/dashboard/templates', label: 'Templates' },
+  { href: '/dashboard/bulk-import', label: '📥 Bulk Import' },
   { href: '/dashboard/bio', label: 'Link in Bio' },
   { href: '/dashboard/analytics', label: 'Analytics' },
   { href: '/dashboard/insights', label: '💡 Insights' },

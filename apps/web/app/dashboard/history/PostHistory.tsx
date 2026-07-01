@@ -89,6 +89,8 @@ export function PostHistory({ token }: { token: string }) {
   const [totalPages, setTotalPages] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [retryingPostId, setRetryingPostId] = useState<string | null>(null)
+  const [retryMessage, setRetryMessage] = useState<string | null>(null)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -145,6 +147,28 @@ export function PostHistory({ token }: { token: string }) {
   useEffect(() => {
     setPage(1)
   }, [status, platform])
+
+  async function retryPost(post: Post) {
+    setRetryingPostId(post.id)
+    setRetryMessage(null)
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/posts/${post.id}/retry`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string }
+        setRetryMessage(body.error ?? 'Failed to retry post')
+        return
+      }
+      setRetryMessage('Post rescheduled for retry in 5 minutes')
+      setPosts((prev) => prev.filter((p) => p.id !== post.id))
+    } catch {
+      setRetryMessage('Network error — please try again')
+    } finally {
+      setRetryingPostId(null)
+    }
+  }
 
   function reusePost(post: Post) {
     const params = new URLSearchParams({
@@ -219,6 +243,18 @@ export function PostHistory({ token }: { token: string }) {
         <p className="text-sm text-muted-foreground">
           {total} post{total !== 1 ? 's' : ''} found
         </p>
+      )}
+
+      {/* Retry message */}
+      {retryMessage && (
+        <div className={cn(
+          'rounded-lg border px-4 py-3 text-sm',
+          retryMessage.startsWith('Post rescheduled')
+            ? 'border-green-300 bg-green-50 text-green-700'
+            : 'border-destructive/30 bg-destructive/10 text-destructive',
+        )}>
+          {retryMessage}
+        </div>
       )}
 
       {/* Error state */}
@@ -310,14 +346,27 @@ export function PostHistory({ token }: { token: string }) {
                     <span>🔁 {post.metrics.shares.toLocaleString()} shares</span>
                   </div>
                 ) : <div />}
-                <button
-                  type="button"
-                  onClick={() => reusePost(post)}
-                  className="text-xs text-muted-foreground hover:text-primary border border-border hover:border-primary/40 rounded-md px-2 py-0.5 transition-colors flex items-center gap-1 shrink-0"
-                  title="Reuse this post"
-                >
-                  ♻️ Reuse
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {post.status === 'FAILED' && (
+                    <button
+                      type="button"
+                      onClick={() => retryPost(post)}
+                      disabled={retryingPostId === post.id}
+                      className="text-xs text-muted-foreground hover:text-orange-600 border border-border hover:border-orange-400/60 rounded-md px-2 py-0.5 transition-colors flex items-center gap-1 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Retry this failed post"
+                    >
+                      {retryingPostId === post.id ? '⏳ Retrying…' : '🔄 Retry'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => reusePost(post)}
+                    className="text-xs text-muted-foreground hover:text-primary border border-border hover:border-primary/40 rounded-md px-2 py-0.5 transition-colors flex items-center gap-1 shrink-0"
+                    title="Reuse this post"
+                  >
+                    ♻️ Reuse
+                  </button>
+                </div>
               </div>
             </div>
           ))}

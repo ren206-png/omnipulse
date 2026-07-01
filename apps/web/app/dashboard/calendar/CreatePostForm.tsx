@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { format, addHours, startOfHour } from 'date-fns'
+import { format, addHours, startOfHour, addDays, formatDistanceToNow } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
@@ -216,6 +216,7 @@ interface Props {
   initialContent?: string
   initialPlatforms?: string[]
   initialMediaUrls?: string[]
+  initialDraftId?: string
 }
 
 function defaultTime(): string {
@@ -239,7 +240,7 @@ function makeVariants(masterContent: string): Record<VariantPlatform, PlatformVa
   ) as unknown as Record<VariantPlatform, PlatformVariant>
 }
 
-export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, onClose, initialContent = '', initialPlatforms = [], initialMediaUrls = [] }: Props) {
+export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, onClose, initialContent = '', initialPlatforms = [], initialMediaUrls = [], initialDraftId }: Props) {
   const [content, setContent] = useState(initialContent)
   const [mediaUrls, setMediaUrls] = useState<string[]>(initialMediaUrls.length > 0 ? initialMediaUrls : [''])
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>(initialPlatforms.filter((p): p is Platform => (PLATFORMS as readonly string[]).includes(p)))
@@ -249,6 +250,16 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const [firstComment, setFirstComment] = useState('')
   const [advancedOpen, setAdvancedOpen] = useState(false)
+
+  // Draft autosave state
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null)
+  const [draftSaving, setDraftSaving] = useState(false)
+  const [draftSavedAt, setDraftSavedAt] = useState<Date | null>(null)
+  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Recurrence state
+  const [recurrenceFreq, setRecurrenceFreq] = useState<string>('none')
+  const [recurrenceEndsAt, setRecurrenceEndsAt] = useState<string>('')
 
   // Per-platform variant state
   const [variantsOpen, setVariantsOpen] = useState(false)
@@ -265,6 +276,10 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   const [bestRecs, setBestRecs] = useState<Array<{ platform: string; topHours: number[]; heatmap: Array<{ hour: number; label: string }> }>>([])
   const [bestTimesOpen, setBestTimesOpen] = useState(false)
   const bestTimesRef = useRef<HTMLDivElement>(null)
+
+  // Quick best-time button state
+  const [bestTimeLoading, setBestTimeLoading] = useState(false)
+  const [bestTimeApplied, setBestTimeApplied] = useState<string | null>(null)
 
   useEffect(() => {
     if (!workspaceId) return
@@ -320,6 +335,29 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
     const hh = String(hour).padStart(2, '0')
     setTimeValue(`${hh}:00`)
     setBestTimesOpen(false)
+  }
+
+  async function handleBestTime() {
+    setBestTimeLoading(true)
+    setBestTimeApplied(null)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/analytics/best-times?workspaceId=${workspaceId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json() as { recommendations?: Array<{ platform: string; topHours: number[]; heatmap: Array<{ hour: number; label: string }> }> }
+      const recs = data.recommendations ?? []
+      const match = recs.find(r => selectedPlatforms.includes(r.platform as Platform)) ?? recs[0]
+      if (match && match.topHours.length > 0) {
+        const hour = match.topHours[0]
+        const hh = String(hour).padStart(2, '0')
+        setTimeValue(`${hh}:00`)
+        const label = match.heatmap[hour]?.label ?? `${hh}:00`
+        setBestTimeApplied(`Set to ${label}`)
+        setTimeout(() => setBestTimeApplied(null), 2500)
+      }
+    } catch { /* silent */ }
+    finally { setBestTimeLoading(false) }
   }
 
   // Which recs to show — prefer platforms the user selected, fall back to all
@@ -405,6 +443,10 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
       const diff = Math.abs(value.length - scoreContentRef.current.length)
       if (diff > 20) setScoreOpen(false)
     }
+    // Autosave draft
+    if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
+    draftSaveTimerRef.current = setTimeout(() => { void saveDraft() }, 3000)
+
     if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current)
     previewDebounceRef.current = setTimeout(() => {
       const url = extractFirstUrl(value)
@@ -466,6 +508,14 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
     if (selectedPlatforms.length > 0) {
       setUtmSource(selectedPlatforms[0].toLowerCase())
     }
+  }, [selectedPlatforms])
+
+  // Autosave draft when platforms change
+  useEffect(() => {
+    if (!content.trim() && !draftId) return
+    if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current)
+    draftSaveTimerRef.current = setTimeout(() => { void saveDraft() }, 3000)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlatforms])
 
   const utmBuiltUrl = utmUrl.trim()
@@ -732,6 +782,47 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
     setAiPrompt('')
   }
 
+  // Draft save function
+  const saveDraft = useCallback(async () => {
+    if (!draftId && !content.trim()) return
+    setDraftSaving(true)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    const [hours, minutes] = timeValue.split(':').map(Number)
+    const scheduledDate = new Date(selectedDate)
+    scheduledDate.setHours(hours, minutes, 0, 0)
+    const payload = {
+      workspaceId,
+      content,
+      platforms: selectedPlatforms,
+      mediaUrls: mediaUrls.filter((u) => u.trim()),
+      scheduledFor: scheduledDate.toISOString(),
+    }
+    try {
+      if (!draftId) {
+        const res = await fetch(`${apiUrl}/api/v1/posts/draft`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload),
+        })
+        if (res.ok) {
+          const data = (await res.json()) as { post: { id: string } }
+          setDraftId(data.post.id)
+          setDraftSavedAt(new Date())
+        }
+      } else {
+        const res = await fetch(`${apiUrl}/api/v1/posts/${draftId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(payload),
+        })
+        if (res.ok) {
+          setDraftSavedAt(new Date())
+        }
+      }
+    } catch { /* silent — draft save is non-critical */ }
+    finally { setDraftSaving(false) }
+  }, [draftId, content, timeValue, selectedDate, workspaceId, selectedPlatforms, mediaUrls, token])
+
   const [queueLoading, setQueueLoading] = useState(false)
 
   // ── Content Multiplier ─────────────────────────────────────────────────────
@@ -863,6 +954,8 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
             hashtags: variants[p].hashtags,
             mediaUrls: variants[p].mediaUrls,
           })),
+          ...(recurrenceFreq !== 'none' ? { recurrenceFreq } : {}),
+          ...(recurrenceFreq !== 'none' && recurrenceEndsAt ? { recurrenceEndsAt: new Date(recurrenceEndsAt).toISOString() } : {}),
         }),
       })
       const body = await res.json() as { message?: string; scheduledFor?: string; requiresReview?: boolean }
@@ -926,6 +1019,8 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
             hashtags: variants[p].hashtags,
             mediaUrls: variants[p].mediaUrls,
           })),
+          ...(recurrenceFreq !== 'none' ? { recurrenceFreq } : {}),
+          ...(recurrenceFreq !== 'none' && recurrenceEndsAt ? { recurrenceEndsAt: new Date(recurrenceEndsAt).toISOString() } : {}),
         }),
       })
       const body = (await res.json()) as { error?: string; requiresReview?: boolean }
@@ -1741,6 +1836,21 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
             className="w-36"
           />
 
+          {/* Quick best time button */}
+          <button
+            type="button"
+            onClick={handleBestTime}
+            disabled={bestTimeLoading}
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="Set to AI-recommended best time for your selected platforms"
+          >
+            {bestTimeLoading ? <span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> : '⚡'}
+            Best time
+          </button>
+          {bestTimeApplied && (
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">✓ {bestTimeApplied}</span>
+          )}
+
           {/* Best times button */}
           <div className="relative" ref={bestTimesRef}>
             <button
@@ -1834,6 +1944,35 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
               <p className="text-[11px] text-muted-foreground">
                 Automatically post this as the first comment after publishing
               </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Repeat</Label>
+              <select
+                value={recurrenceFreq}
+                onChange={(e) => setRecurrenceFreq(e.target.value)}
+                className="w-full text-xs h-8 rounded-md border border-border bg-background px-2 focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="none">Don&apos;t repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekdays">Weekdays (Mon–Fri)</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+
+              {recurrenceFreq !== 'none' && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">End date (optional)</Label>
+                  <Input
+                    type="date"
+                    value={recurrenceEndsAt}
+                    onChange={(e) => setRecurrenceEndsAt(e.target.value)}
+                    className="h-8 text-xs"
+                    min={format(addDays(new Date(), 1), 'yyyy-MM-dd')}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Leave blank to repeat indefinitely</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1957,7 +2096,20 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
         )
       })()}
 
-      <div className="flex justify-end gap-2 pt-1 flex-wrap">
+      <div className="flex justify-end gap-2 pt-1 flex-wrap items-center">
+        {draftId && (
+          <p className="text-xs text-muted-foreground mr-auto">
+            {draftSaving ? 'Saving draft…' : draftSavedAt ? `Draft saved ${formatDistanceToNow(draftSavedAt, { addSuffix: true })}` : 'Draft'}
+          </p>
+        )}
+        {recurrenceFreq !== 'none' && (
+          <span className="text-xs text-violet-600 dark:text-violet-400 font-medium">
+            🔁 Repeats {recurrenceFreq}
+          </span>
+        )}
+        <Button variant="ghost" size="sm" onClick={saveDraft} disabled={draftSaving || !content.trim()}>
+          {draftSaving ? 'Saving…' : '📝 Save Draft'}
+        </Button>
         <Button variant="outline" onClick={onClose} disabled={loading || queueLoading}>Cancel</Button>
         <Button
           variant="outline"

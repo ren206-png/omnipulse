@@ -145,10 +145,14 @@ model ScheduledPost {
   utmMedium         String?
   utmCampaign       String?
   firstComment      String?
-  abVariantOf       String?
-  abTestActive      Boolean     @default(false)
-  metrics           PostMetric[]
-  platformVariants  PlatformVariant[]
+  abVariantOf          String?
+  abTestActive         Boolean     @default(false)
+  // Recurring post fields
+  recurrenceFreq       String?     // "daily" | "weekdays" | "weekly" | "monthly"
+  recurrenceEndsAt     DateTime?   // stop creating new occurrences after this date (null = forever)
+  recurrenceParentId   String?     // id of the original post this was spawned from
+  metrics              PostMetric[]
+  platformVariants     PlatformVariant[]
 }
 
 model PlatformVariant {
