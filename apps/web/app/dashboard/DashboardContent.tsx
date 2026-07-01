@@ -120,6 +120,156 @@ function PostRow({ post }: { post: Post }) {
   )
 }
 
+interface UpcomingPost {
+  id: string
+  content: string
+  platforms: string[]
+  scheduledFor: string
+  status: string
+}
+
+interface ActivityLog {
+  id: string
+  action: string
+  targetType?: string
+  targetId?: string
+  userEmail?: string
+  createdAt: string
+}
+
+function UpcomingPosts({ token }: { token: string }) {
+  const { activeWorkspace } = useWorkspace()
+  const [posts, setPosts] = useState<UpcomingPost[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!activeWorkspace) return
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    setLoading(true)
+    fetch(`${apiUrl}/api/v1/posts/upcoming?workspaceId=${activeWorkspace.id}&limit=5`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
+      .then((data: { posts: UpcomingPost[] }) => setPosts(data.posts))
+      .catch(() => setPosts([]))
+      .finally(() => setLoading(false))
+  }, [activeWorkspace, token])
+
+  return (
+    <div className="rounded-xl border bg-card shadow-sm">
+      <div className="flex items-center justify-between px-5 py-4 border-b">
+        <h2 className="text-sm font-semibold">Upcoming Posts</h2>
+        <Link href="/dashboard/calendar" className="text-xs text-primary hover:underline">
+          View Calendar →
+        </Link>
+      </div>
+      <div className="px-5 py-1">
+        {loading ? (
+          <div className="py-6 flex justify-center">
+            <svg className="animate-spin h-4 w-4 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+          </div>
+        ) : posts.length === 0 ? (
+          <p className="py-6 text-sm text-muted-foreground text-center">
+            No upcoming posts — schedule something!
+          </p>
+        ) : (
+          posts.map((p) => (
+            <div key={p.id} className="flex items-start gap-3 py-3 border-b last:border-0">
+              <div className="flex gap-1 pt-0.5 shrink-0">
+                {p.platforms.slice(0, 3).map((pl) => (
+                  <span key={pl} title={pl} className="text-base leading-none">
+                    {PLATFORM_ICONS[pl] ?? '🌐'}
+                  </span>
+                ))}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-foreground line-clamp-1">{p.content}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {formatDistanceToNow(new Date(p.scheduledFor), { addSuffix: true })}
+                </p>
+              </div>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                  p.status === 'SCHEDULED'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                    : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                }`}
+              >
+                {p.status.charAt(0) + p.status.slice(1).toLowerCase()}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ActivityFeed({ token }: { token: string }) {
+  const { activeWorkspace } = useWorkspace()
+  const [logs, setLogs] = useState<ActivityLog[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!activeWorkspace) return
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    setLoading(true)
+    fetch(`${apiUrl}/api/v1/activity?workspaceId=${activeWorkspace.id}&limit=10`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
+      .then((data: { logs: ActivityLog[] }) => setLogs(data.logs))
+      .catch(() => setLogs([]))
+      .finally(() => setLoading(false))
+  }, [activeWorkspace, token])
+
+  return (
+    <div className="rounded-xl border bg-card shadow-sm">
+      <div className="flex items-center justify-between px-5 py-4 border-b">
+        <h2 className="text-sm font-semibold">Recent Activity</h2>
+      </div>
+      <div className="px-5 py-1">
+        {loading ? (
+          <div className="py-6 flex justify-center">
+            <svg className="animate-spin h-4 w-4 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+          </div>
+        ) : logs.length === 0 ? (
+          <p className="py-6 text-sm text-muted-foreground text-center">No activity yet</p>
+        ) : (
+          logs.map((log) => {
+            const initial = log.userEmail ? log.userEmail[0].toUpperCase() : '?'
+            return (
+              <div key={log.id} className="flex items-start gap-3 py-3 border-b last:border-0">
+                <div className="shrink-0 flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                  {initial}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-foreground">
+                    <span className="font-medium">{log.userEmail ?? 'Someone'}</span>{' '}
+                    <span className="text-muted-foreground">{log.action.replace(/_/g, ' ').toLowerCase()}</span>
+                    {log.targetType && (
+                      <span className="text-muted-foreground"> · {log.targetType.toLowerCase()}</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {formatDistanceToNow(new Date(log.createdAt), { addSuffix: true })}
+                  </p>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function DashboardContent({ token }: { token: string }) {
   const { activeWorkspace, workspacesLoading } = useWorkspace()
   const [posts, setPosts] = useState<Post[]>([])
@@ -353,6 +503,12 @@ export function DashboardContent({ token }: { token: string }) {
             <PostPerformanceChart posts={posts as Parameters<typeof PostPerformanceChart>[0]['posts']} />
           )}
         </div>
+      </div>
+
+      {/* Upcoming posts + activity feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <UpcomingPosts token={token} />
+        <ActivityFeed token={token} />
       </div>
     </>
   )

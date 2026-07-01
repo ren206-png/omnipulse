@@ -53,6 +53,49 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 })
 
+// GET /api/v1/posts/upcoming?workspaceId=&limit=5
+router.get('/upcoming', async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId, limit: limitStr } = req.query as { workspaceId?: string; limit?: string }
+  if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId query param is required'); return }
+
+  const role = await getWorkspaceRole(workspaceId, req.user!.id)
+  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+
+  const limit = Math.min(Math.max(1, parseInt(limitStr ?? '5', 10) || 5), 50)
+
+  try {
+    const posts = await (prisma.scheduledPost.findMany as Function)({
+      where: {
+        workspaceId,
+        status: { in: ['SCHEDULED', 'APPROVED'] },
+        scheduledFor: { gte: new Date() },
+      },
+      orderBy: { scheduledFor: 'asc' },
+      take: limit,
+      select: {
+        id: true,
+        content: true,
+        platforms: true,
+        scheduledFor: true,
+        status: true,
+      },
+    })
+
+    res.json({
+      posts: posts.map((p: { id: string; content: string; platforms: string[]; scheduledFor: Date; status: string }) => ({
+        id: p.id,
+        content: p.content.slice(0, 100),
+        platforms: p.platforms,
+        scheduledFor: p.scheduledFor,
+        status: p.status,
+      })),
+    })
+  } catch (err) {
+    logger.error({ err }, 'Upcoming posts error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch upcoming posts')
+  }
+})
+
 // GET /api/v1/posts/history?workspaceId=&status=&platform=&search=&page=1&limit=20
 router.get('/history', async (req: Request, res: Response): Promise<void> => {
   const {
@@ -1094,6 +1137,66 @@ router.post('/:id/ab-test', async (req: Request, res: Response): Promise<void> =
     res.status(201).json({ variant })
   } catch (err) {
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create A/B variant')
+  }
+})
+
+// GET /api/v1/posts/:id/analytics
+router.get('/:id/analytics', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params
+  try {
+    const post = await (prisma.scheduledPost.findUnique as Function)({
+      where: { id },
+      include: { metrics: true, comments: true },
+    })
+    if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
+
+    const role = await getWorkspaceRole(post.workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+
+    const metrics = (post.metrics as Array<{
+      platform: string; likes: number; comments: number; shares: number; reach: number; impressions: number; recordedAt: Date
+    }>).map((m) => ({
+      platform: m.platform,
+      likes: m.likes,
+      comments: m.comments,
+      shares: m.shares,
+      reach: m.reach,
+      impressions: m.impressions,
+      recordedAt: m.recordedAt,
+    }))
+
+    const totals = metrics.reduce(
+      (acc, m) => ({
+        likes: acc.likes + m.likes,
+        comments: acc.comments + m.comments,
+        shares: acc.shares + m.shares,
+        reach: acc.reach + m.reach,
+        impressions: acc.impressions + m.impressions,
+      }),
+      { likes: 0, comments: 0, shares: 0, reach: 0, impressions: 0 },
+    )
+
+    const engagement = totals.reach > 0
+      ? Math.round(((totals.likes + totals.comments + totals.shares) / totals.reach) * 10000) / 100
+      : 0
+
+    res.json({
+      post: {
+        id: post.id,
+        content: post.content,
+        platforms: post.platforms,
+        scheduledFor: post.scheduledFor,
+        status: post.status,
+        campaignId: post.campaignId ?? null,
+      },
+      metrics,
+      totals: { ...totals, engagement },
+      commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
+      comments: post.comments ?? [],
+    })
+  } catch (err) {
+    logger.error({ err }, 'Post analytics error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch post analytics')
   }
 })
 

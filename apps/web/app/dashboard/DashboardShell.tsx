@@ -34,6 +34,8 @@ const NAV_GROUPS = [
       { href: '/dashboard/approvals', label: 'Approvals', icon: '✅' },
       { href: '/dashboard/history', label: 'History', icon: '📜' },
       { href: '/dashboard/templates', label: 'Templates', icon: '📝' },
+      { href: '/dashboard/campaigns', label: 'Campaigns', icon: '🏷️' },
+      { href: '/dashboard/ab-test', label: 'A/B Tests', icon: '🧪' },
       { href: '/dashboard/inbox', label: 'Inbox', icon: '📬' },
     ],
   },
@@ -46,13 +48,13 @@ const NAV_GROUPS = [
       { href: '/dashboard/content-health', label: 'Content Health', icon: '❤️' },
       { href: '/dashboard/competitors', label: 'Competitors', icon: '🔍' },
       { href: '/dashboard/trends', label: 'Trends', icon: '📈' },
+      { href: '/dashboard/hashtags', label: 'Hashtags', icon: '#️⃣' },
     ],
   },
   {
     label: 'Tools',
     defaultOpen: false,
     links: [
-      { href: '/dashboard/hashtags', label: 'Hashtags', icon: '#️⃣' },
       { href: '/dashboard/image-editor', label: 'Image Editor', icon: '🖼️' },
       { href: '/dashboard/media', label: 'Media Library', icon: '🖼️' },
       { href: '/dashboard/bio', label: 'Link in Bio', icon: '🔗' },
@@ -324,6 +326,46 @@ function Sidebar({ token, onOpenCmd }: { token: string; onOpenCmd: () => void })
   )
 }
 
+const MOBILE_NAV = [
+  { href: '/dashboard', label: 'Home', icon: '🏠' },
+  { href: '/dashboard/calendar', label: 'Calendar', icon: '📅' },
+  { href: '/dashboard/calendar?new=1', label: 'Post', icon: '✍️' },
+  { href: '/dashboard/inbox', label: 'Inbox', icon: '📬' },
+  { href: '/dashboard/analytics', label: 'Analytics', icon: '📊' },
+]
+
+function MobileBottomNav() {
+  const pathname = usePathname()
+  return (
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-end border-t bg-background/80 backdrop-blur-md">
+      {MOBILE_NAV.map((item) => {
+        const isPost = item.label === 'Post'
+        const isActive = !isPost && (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href.split('?')[0])))
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              'flex flex-1 flex-col items-center justify-end pb-2 pt-1 gap-0.5 text-[10px] font-medium transition-colors relative',
+              isPost ? 'mb-1' : '',
+              isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {isPost ? (
+              <span className="flex items-center justify-center w-12 h-12 rounded-full bg-primary text-primary-foreground text-xl shadow-lg -mt-5 mb-0.5">
+                {item.icon}
+              </span>
+            ) : (
+              <span className="text-xl leading-none">{item.icon}</span>
+            )}
+            <span>{item.label}</span>
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}
+
 export function DashboardShell({
   children,
   token,
@@ -339,8 +381,9 @@ export function DashboardShell({
       <ToastProvider>
         <div className="flex min-h-screen">
           <Sidebar token={token} onOpenCmd={() => setCmdOpen(true)} />
-          <main className="flex-1 overflow-auto p-6 pt-20 md:pt-6 md:ml-0">{children}</main>
+          <main className="flex-1 overflow-auto p-6 pt-20 pb-20 md:pt-6 md:pb-6 md:ml-0">{children}</main>
         </div>
+        <MobileBottomNav />
         <ToastViewport />
         <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
       </ToastProvider>

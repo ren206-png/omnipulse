@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -388,7 +389,16 @@ export function PostHistory({ token }: { token: string }) {
               </div>
 
               {/* Content preview */}
-              <p className="text-sm line-clamp-2 leading-relaxed">{post.content}</p>
+              {post.status === 'PUBLISHED' ? (
+                <Link
+                  href={`/dashboard/posts/${post.id}`}
+                  className="block text-sm line-clamp-2 leading-relaxed hover:text-primary transition-colors"
+                >
+                  {post.content}
+                </Link>
+              ) : (
+                <p className="text-sm line-clamp-2 leading-relaxed">{post.content}</p>
+              )}
 
               {/* Engagement metrics + reuse */}
               <div className="flex items-center justify-between gap-2">
