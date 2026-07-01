@@ -1,5 +1,6 @@
 import { prisma } from './prisma.js'
 import { logger } from './logger.js'
+import { pushNotificationToUser } from './sseRegistry.js'
 
 export type NotificationType =
   | 'POST_PUBLISHED'
@@ -20,7 +21,18 @@ interface NotifyInput {
 
 export async function notify(input: NotifyInput): Promise<void> {
   try {
-    await prisma.notification.create({ data: input })
+    const created = await prisma.notification.create({ data: input })
+    try {
+      pushNotificationToUser(input.userId, {
+        id: created.id,
+        type: created.type,
+        title: created.title,
+        body: created.body,
+        link: created.link ?? null,
+        read: created.read,
+        createdAt: created.createdAt.toISOString(),
+      })
+    } catch { /* SSE push is non-critical */ }
   } catch (err) {
     // Notifications are non-critical — log and continue
     logger.error({ err }, 'Failed to create notification')

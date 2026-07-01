@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
+import { sseSubscribers } from '../lib/sseRegistry.js'
 
 const router = Router()
 router.use(requireAuth)
@@ -70,5 +71,52 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to delete notification')
   }
 })
+
+// GET /api/v1/notifications/stream — SSE endpoint for real-time notifications
+// This route patches req.headers.authorization from query param before requireAuth runs,
+// because EventSource cannot send custom headers.
+router.get(
+  '/stream',
+  (req: Request, _res: Response, next: () => void) => {
+    if (req.query.token && !req.headers.authorization) {
+      req.headers.authorization = `Bearer ${req.query.token as string}`
+    }
+    next()
+  },
+  requireAuth,
+  (req: Request, res: Response): void => {
+    const userId = req.user!.id
+
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no') // Disable nginx buffering
+    res.flushHeaders()
+
+    // Send initial heartbeat
+    res.write('event: connected\ndata: {"ok":true}\n\n')
+
+    // Register subscriber
+    if (!sseSubscribers.has(userId)) sseSubscribers.set(userId, new Set())
+    sseSubscribers.get(userId)!.add(res)
+
+    // Heartbeat every 25s to keep connection alive through proxies
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(':heartbeat\n\n')
+      } catch {
+        clearInterval(heartbeat)
+      }
+    }, 25_000)
+
+    // Cleanup on disconnect
+    req.on('close', () => {
+      clearInterval(heartbeat)
+      sseSubscribers.get(userId)?.delete(res)
+      if (sseSubscribers.get(userId)?.size === 0) sseSubscribers.delete(userId)
+    })
+  },
+)
 
 export default router

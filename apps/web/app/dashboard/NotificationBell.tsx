@@ -46,12 +46,44 @@ export function NotificationBell({ token }: Props) {
     } catch { /* silent */ }
   }, [token])
 
-  // Poll every 30 seconds
+  // Initial fetch + SSE for real-time updates
   useEffect(() => {
+    if (!token) return
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+
+    // Load existing notifications on mount
     fetchNotifications()
-    const interval = setInterval(fetchNotifications, 30_000)
-    return () => clearInterval(interval)
-  }, [fetchNotifications])
+
+    // SSE for real-time updates
+    const url = `${apiUrl}/api/v1/notifications/stream`
+    let es: EventSource | null = null
+
+    function connect() {
+      // EventSource doesn't support custom headers — pass token as query param
+      es = new EventSource(`${url}?token=${token}`)
+
+      es.addEventListener('notification', (e: MessageEvent) => {
+        try {
+          const notif = JSON.parse(e.data as string) as Notification
+          setNotifications((prev) => {
+            if (prev.find((n) => n.id === notif.id)) return prev
+            return [notif, ...prev]
+          })
+          if (!notif.read) setUnreadCount((c) => c + 1)
+        } catch { /* ignore malformed events */ }
+      })
+
+      es.onerror = () => {
+        es?.close()
+        // Reconnect after 5s
+        setTimeout(connect, 5000)
+      }
+    }
+
+    connect()
+
+    return () => { es?.close() }
+  }, [token]) // fetchNotifications is stable via useCallback
 
   // Close on outside click
   useEffect(() => {
