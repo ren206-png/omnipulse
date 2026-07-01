@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import Anthropic from '@anthropic-ai/sdk'
+import IORedis from 'ioredis'
 import { requireAuth } from '../middleware/auth.js'
 import { rateLimit } from '../middleware/rateLimit.js'
 import { sendError } from '../lib/apiError.js'
@@ -9,6 +10,45 @@ import { logger } from '../lib/logger.js'
 import { prisma } from '../lib/prisma.js'
 import { PLAN_LIMITS } from '../lib/plans.js'
 import type { Plan } from '../lib/plans.js'
+import { generateVariants } from '../lib/contentMultiplier.js'
+import { scanContent } from '../lib/safeguard.js'
+import { generateCaption } from '../lib/visualCopywriter.js'
+import { logActivity } from '../lib/activity.js'
+
+// Singleton Redis for AI rate-limit counters
+let _aiRedis: IORedis | null = null
+function getAiRedis(): IORedis {
+  if (!_aiRedis) _aiRedis = new IORedis(env.REDIS_URL, { lazyConnect: true, enableReadyCheck: false })
+  return _aiRedis
+}
+
+async function checkDailyLimit(userId: string, key: string, limit: number): Promise<{ allowed: boolean; remaining: number; resetAt: string }> {
+  const redis = getAiRedis()
+  const today = new Date().toISOString().slice(0, 10)
+  const redisKey = `${key}:${userId}:${today}`
+  const current = parseInt((await redis.get(redisKey)) ?? '0', 10)
+  const allowed = current < limit
+  // TTL: seconds until midnight UTC
+  const now = new Date()
+  const midnight = new Date(today)
+  midnight.setUTCDate(midnight.getUTCDate() + 1)
+  const ttl = Math.ceil((midnight.getTime() - now.getTime()) / 1000)
+  return { allowed, remaining: Math.max(0, limit - current), resetAt: midnight.toISOString() }
+}
+
+async function incrementDailyLimit(userId: string, key: string): Promise<void> {
+  const redis = getAiRedis()
+  const today = new Date().toISOString().slice(0, 10)
+  const redisKey = `${key}:${userId}:${today}`
+  const now = new Date()
+  const midnight = new Date(today)
+  midnight.setUTCDate(midnight.getUTCDate() + 1)
+  const ttl = Math.ceil((midnight.getTime() - now.getTime()) / 1000)
+  const pipeline = redis.pipeline()
+  pipeline.incr(redisKey)
+  pipeline.expire(redisKey, ttl)
+  await pipeline.exec()
+}
 
 const router = Router()
 
@@ -557,6 +597,214 @@ router.post('/draft-reply', async (req: Request, res: Response): Promise<void> =
     res.json({ reply })
   } catch {
     sendError(res, 500, 'INTERNAL_ERROR', 'Draft failed')
+  }
+})
+
+// ─── POST /api/v1/ai/multiply ────────────────────────────────────────────────
+// Generate per-platform content variants from a master post using AI.
+// Writes into the existing platformVariants structure.
+router.post('/multiply', async (req: Request, res: Response): Promise<void> => {
+  if (!env.ANTHROPIC_API_KEY) {
+    sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server')
+    return
+  }
+
+  const { masterContent, workspaceId } = req.body as { masterContent?: string; workspaceId?: string }
+
+  if (!masterContent?.trim()) {
+    sendError(res, 400, 'MISSING_FIELD', 'masterContent is required')
+    return
+  }
+
+  // Plan gate: require PRO or AGENCY
+  if (workspaceId) {
+    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    if (workspace) {
+      const limits = PLAN_LIMITS[workspace.plan as Plan]
+      if (limits.aiGenerations === 0) {
+        sendError(res, 402, 'PLAN_LIMIT', 'AI features require a Pro or Agency plan.')
+        return
+      }
+    }
+  }
+
+  // Daily rate limit
+  const userId = req.user!.id
+  const limitCheck = await checkDailyLimit(userId, 'ai:multiply', env.AI_MULTIPLIER_DAILY_LIMIT)
+  if (!limitCheck.allowed) {
+    res.status(429).json({
+      error: 'DAILY_LIMIT_REACHED',
+      message: `You've used all ${env.AI_MULTIPLIER_DAILY_LIMIT} AI multiplications for today. Resets at ${limitCheck.resetAt}.`,
+      resetAt: limitCheck.resetAt,
+    })
+    return
+  }
+
+  try {
+    // Get brand name for context if workspaceId provided
+    let brandName: string | undefined
+    if (workspaceId) {
+      const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { brandName: true } })
+      brandName = ws?.brandName ?? undefined
+    }
+
+    const variants = await generateVariants(masterContent.trim(), brandName)
+
+    await incrementDailyLimit(userId, 'ai:multiply')
+    logger.info({ userId, workspaceId, variantCount: Object.keys(variants).length }, 'Content Multiplier used')
+
+    res.json({ variants })
+  } catch (err) {
+    logger.error({ err }, 'Content Multiplier error')
+    sendError(res, 500, 'MULTIPLY_ERROR', 'Failed to generate variants — please try again')
+  }
+})
+
+// ─── POST /api/v1/ai/safety-scan ─────────────────────────────────────────────
+// Pre-publish advisory safety scan. Returns per-platform status and flags.
+// Never blocks publishing — advisory only.
+router.post('/safety-scan', async (req: Request, res: Response): Promise<void> => {
+  if (!env.ANTHROPIC_API_KEY) {
+    // Fail safe: return warning for all platforms without hitting LLM
+    const { variants } = req.body as { variants?: Record<string, string> }
+    const platforms = Object.keys(variants ?? {})
+    res.json({
+      results: Object.fromEntries(platforms.map((p) => [p, {
+        status: 'warning',
+        flags: ['Safety scan unavailable — review manually before publishing'],
+      }])),
+    })
+    return
+  }
+
+  const { variants, workspaceId, postId } = req.body as {
+    variants?: Record<string, string>
+    workspaceId?: string
+    postId?: string
+  }
+
+  if (!variants || typeof variants !== 'object' || Object.keys(variants).length === 0) {
+    sendError(res, 400, 'MISSING_FIELD', 'variants object is required (platform → content map)')
+    return
+  }
+
+  try {
+    const results = await scanContent(variants)
+    res.json({ results })
+    logger.info({ userId: req.user!.id, platforms: Object.keys(variants) }, 'SafeGuard scan completed')
+  } catch (err) {
+    logger.error({ err }, 'SafeGuard scan error')
+    // Fail safe: return warning, never clear
+    res.json({
+      results: Object.fromEntries(
+        Object.keys(variants).map((p) => [p, {
+          status: 'warning',
+          flags: ['Safety scan encountered an error — review manually before publishing'],
+        }])
+      ),
+    })
+  }
+})
+
+// ─── POST /api/v1/ai/safety-scan/override ────────────────────────────────────
+// Audit log when user publishes despite a 'risk' SafeGuard result.
+router.post('/safety-scan/override', async (req: Request, res: Response): Promise<void> => {
+  const { postId, workspaceId, flags, platforms } = req.body as {
+    postId?: string
+    workspaceId?: string
+    flags?: Record<string, string[]>
+    platforms?: string[]
+  }
+
+  logger.warn({
+    userId: req.user!.id,
+    postId,
+    workspaceId,
+    flags,
+    platforms,
+    overriddenAt: new Date().toISOString(),
+  }, 'SafeGuard RISK override: user published despite risk flags')
+
+  if (workspaceId) {
+    await logActivity({
+      workspaceId,
+      userId: req.user!.id,
+      userEmail: req.user!.email,
+      action: 'safeguard_risk_override',
+      targetId: postId ?? 'unknown',
+      targetType: 'ScheduledPost',
+      details: JSON.stringify({ flags, platforms }),
+    }).catch(() => {/* non-critical */})
+  }
+
+  res.json({ logged: true })
+})
+
+// ─── POST /api/v1/ai/caption-suggestion ──────────────────────────────────────
+// Generate a caption from a product image URL.
+// The image must already be uploaded and have a publicly accessible URL.
+router.post('/caption-suggestion', async (req: Request, res: Response): Promise<void> => {
+  if (!env.ANTHROPIC_API_KEY) {
+    sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server')
+    return
+  }
+
+  const { imageUrl, workspaceId } = req.body as { imageUrl?: string; workspaceId?: string }
+
+  if (!imageUrl?.trim()) {
+    sendError(res, 400, 'MISSING_FIELD', 'imageUrl is required')
+    return
+  }
+
+  // Basic URL validation — must be http/https
+  try {
+    const parsed = new URL(imageUrl)
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Bad protocol')
+  } catch {
+    sendError(res, 400, 'INVALID_URL', 'imageUrl must be a valid http/https URL')
+    return
+  }
+
+  // Plan gate
+  if (workspaceId) {
+    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    if (workspace) {
+      const limits = PLAN_LIMITS[workspace.plan as Plan]
+      if (limits.aiGenerations === 0) {
+        sendError(res, 402, 'PLAN_LIMIT', 'AI features require a Pro or Agency plan.')
+        return
+      }
+    }
+  }
+
+  // Daily rate limit
+  const userId = req.user!.id
+  const limitCheck = await checkDailyLimit(userId, 'ai:vision', env.AI_VISION_DAILY_LIMIT)
+  if (!limitCheck.allowed) {
+    res.status(429).json({
+      error: 'DAILY_LIMIT_REACHED',
+      message: `You've used all ${env.AI_VISION_DAILY_LIMIT} AI caption generations for today. Resets at ${limitCheck.resetAt}.`,
+      resetAt: limitCheck.resetAt,
+    })
+    return
+  }
+
+  try {
+    let brandName: string | undefined
+    if (workspaceId) {
+      const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { brandName: true } })
+      brandName = ws?.brandName ?? undefined
+    }
+
+    const suggestedCaption = await generateCaption(imageUrl.trim(), brandName)
+
+    await incrementDailyLimit(userId, 'ai:vision')
+    logger.info({ userId, workspaceId }, 'Visual caption generated')
+
+    res.json({ suggestedCaption })
+  } catch (err) {
+    logger.error({ err }, 'Caption suggestion error')
+    sendError(res, 500, 'CAPTION_ERROR', 'Failed to generate caption — please try again')
   }
 })
 

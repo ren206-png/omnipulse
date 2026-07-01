@@ -291,6 +291,31 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
     return () => document.removeEventListener('mousedown', handleClick)
   }, [bestTimesOpen])
 
+  // Caption suggestion: auto-fetch when the first valid image URL is set
+  useEffect(() => {
+    const firstImageUrl = mediaUrls.find((u) =>
+      /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(u.trim()),
+    )
+    if (!firstImageUrl || captionUrlRef.current === firstImageUrl) return
+    captionUrlRef.current = firstImageUrl
+    setCaptionDismissed(false)
+    setCaptionSuggestion(null)
+    setCaptionLoading(true)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    fetch(`${apiUrl}/api/v1/ai/caption-suggestion`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ workspaceId, imageUrl: firstImageUrl }),
+    })
+      .then((r) => r.json())
+      .then((data: { caption?: string }) => {
+        if (data.caption) setCaptionSuggestion(data.caption)
+      })
+      .catch(() => {})
+      .finally(() => setCaptionLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaUrls])
+
   function applyBestHour(hour: number) {
     const hh = String(hour).padStart(2, '0')
     setTimeValue(`${hh}:00`)
@@ -709,7 +734,114 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
 
   const [queueLoading, setQueueLoading] = useState(false)
 
+  // ── Content Multiplier ─────────────────────────────────────────────────────
+  const [multiplyLoading, setMultiplyLoading] = useState(false)
+  const [multiplyError, setMultiplyError] = useState<string | null>(null)
+
+  // ── SafeGuard ──────────────────────────────────────────────────────────────
+  const [safeGuardReport, setSafeGuardReport] = useState<Record<string, { status: string; flags: string[] }> | null>(null)
+  const [safeGuardLoading, setSafeGuardLoading] = useState(false)
+  const [safeGuardExpanded, setSafeGuardExpanded] = useState(false)
+  const [safeGuardDismissed, setSafeGuardDismissed] = useState(false)
+  const [riskConfirmPending, setRiskConfirmPending] = useState<'schedule' | 'queue' | null>(null)
+
+  // ── Caption Suggestion ─────────────────────────────────────────────────────
+  const [captionSuggestion, setCaptionSuggestion] = useState<string | null>(null)
+  const [captionLoading, setCaptionLoading] = useState(false)
+  const [captionDismissed, setCaptionDismissed] = useState(false)
+  const captionUrlRef = useRef<string>('')
+
+  // ── Content Multiplier handler ─────────────────────────────────────────────
+  async function handleMultiply() {
+    if (!content.trim()) { setMultiplyError('Write some master content first'); return }
+    setMultiplyLoading(true)
+    setMultiplyError(null)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/ai/multiply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ workspaceId, content: content.trim() }),
+      })
+      const data = (await res.json()) as {
+        variants?: Record<string, { content: string; hashtags: string[]; mediaUrls: string[] }>
+        error?: string
+      }
+      if (!res.ok) { setMultiplyError(data.error ?? 'Failed to generate variants'); return }
+      if (data.variants) {
+        setVariants((prev) => {
+          const next = { ...prev }
+          for (const p of VARIANT_PLATFORMS) {
+            const v = data.variants![p]
+            if (v) next[p] = { platform: p, content: v.content, hashtags: v.hashtags, mediaUrls: [] }
+          }
+          return next
+        })
+        setVariantsOpen(true)
+      }
+    } catch {
+      setMultiplyError('Network error — please try again')
+    } finally {
+      setMultiplyLoading(false)
+    }
+  }
+
+  // ── SafeGuard handlers ─────────────────────────────────────────────────────
+  async function handleSafetyScan() {
+    if (!content.trim() || selectedPlatforms.length === 0) return
+    setSafeGuardLoading(true)
+    setSafeGuardDismissed(false)
+    setSafeGuardReport(null)
+    const variantsToScan: Record<string, string> = {}
+    for (const p of selectedPlatforms) {
+      const vp = p as VariantPlatform
+      const hasVariant = (VARIANT_PLATFORMS as readonly string[]).includes(p) && variants[vp]?.content?.trim()
+      variantsToScan[p] = hasVariant ? variants[vp].content.trim() : content.trim()
+    }
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/ai/safety-scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ workspaceId, variants: variantsToScan }),
+      })
+      const data = (await res.json()) as {
+        report?: Record<string, { status: string; flags: string[] }>
+        error?: string
+      }
+      if (res.ok && data.report) setSafeGuardReport(data.report)
+    } catch { /* silent — safety scan is advisory */ }
+    finally { setSafeGuardLoading(false) }
+  }
+
+  async function logRiskOverride() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+    try {
+      await fetch(`${apiUrl}/api/v1/ai/safety-scan/override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ workspaceId, report: safeGuardReport }),
+      })
+    } catch { /* silent */ }
+  }
+
+  function overallSafeGuardStatus(): 'clear' | 'warning' | 'risk' | null {
+    if (!safeGuardReport) return null
+    const statuses = Object.values(safeGuardReport).map((r) => r.status)
+    if (statuses.includes('risk')) return 'risk'
+    if (statuses.includes('warning')) return 'warning'
+    return 'clear'
+  }
+
   const handleQueueSchedule = async () => {
+    if (overallSafeGuardStatus() === 'risk' && riskConfirmPending !== 'queue') {
+      setRiskConfirmPending('queue')
+      return
+    }
+    if (riskConfirmPending === 'queue') {
+      await logRiskOverride()
+      setRiskConfirmPending(null)
+    }
     setError(null)
     if (!content.trim()) { setError('Content is required'); return }
     if (selectedPlatforms.length === 0) { setError('Select at least one platform'); return }
@@ -747,6 +879,14 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   }
 
   const handleSubmit = async () => {
+    if (overallSafeGuardStatus() === 'risk' && riskConfirmPending !== 'schedule') {
+      setRiskConfirmPending('schedule')
+      return
+    }
+    if (riskConfirmPending === 'schedule') {
+      await logRiskOverride()
+      setRiskConfirmPending(null)
+    }
     setError(null)
     if (!content.trim()) { setError('Content is required'); return }
     if (selectedPlatforms.length === 0) { setError('Select at least one platform'); return }
@@ -1148,20 +1288,47 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
         {/* Per-platform content customiser */}
         {activeVariantPlatforms.length > 0 && (
           <div>
-            <button
-              type="button"
-              onClick={() => setVariantsOpen((o) => !o)}
-              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>
-              </svg>
-              {variantsOpen ? 'Hide' : 'Customise'} per-platform content
-              <span className="text-muted-foreground font-normal">
-                ({activeVariantPlatforms.length} platform{activeVariantPlatforms.length !== 1 ? 's' : ''})
-              </span>
-            </button>
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setVariantsOpen((o) => !o)}
+                className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>
+                </svg>
+                {variantsOpen ? 'Hide' : 'Customise'} per-platform content
+                <span className="text-muted-foreground font-normal">
+                  ({activeVariantPlatforms.length} platform{activeVariantPlatforms.length !== 1 ? 's' : ''})
+                </span>
+              </button>
+
+              {/* Content Multiplier */}
+              <button
+                type="button"
+                onClick={handleMultiply}
+                disabled={multiplyLoading || !content.trim()}
+                className={cn(
+                  'flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md border transition-colors',
+                  multiplyLoading || !content.trim()
+                    ? 'text-muted-foreground border-border cursor-not-allowed opacity-50'
+                    : 'text-violet-600 border-violet-300 hover:bg-violet-50 dark:text-violet-400 dark:border-violet-700 dark:hover:bg-violet-950/30',
+                )}
+                title="Use AI to generate tailored variants for each platform"
+              >
+                {multiplyLoading ? (
+                  <><span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> Multiplying…</>
+                ) : (
+                  <><SparkleIcon /> Multiply for all platforms</>
+                )}
+              </button>
+            </div>
+
+            {multiplyError && (
+              <p className="text-xs text-destructive mt-1">{multiplyError}</p>
+            )}
+
             {variantsOpen && (
               <div className="mt-2">
                 <PlatformVariantTabs
@@ -1346,6 +1513,44 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
         </div>
       )}
 
+      {/* Caption suggestion banner */}
+      {(captionLoading || (captionSuggestion && !captionDismissed)) && (
+        <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 px-3 py-2.5 flex items-start gap-2">
+          <span className="mt-0.5 text-violet-500"><SparkleIcon /></span>
+          <div className="flex-1 min-w-0">
+            {captionLoading ? (
+              <p className="text-xs text-violet-600 dark:text-violet-400">Generating caption from image…</p>
+            ) : captionSuggestion ? (
+              <>
+                <p className="text-xs font-semibold text-violet-700 dark:text-violet-300 mb-1">
+                  ✨ AI caption suggestion
+                </p>
+                <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{captionSuggestion}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (content.trim() && !window.confirm('Replace current content with the AI caption?')) return
+                    handleContentChange(captionSuggestion)
+                    setCaptionDismissed(true)
+                  }}
+                  className="text-xs px-2.5 py-1 rounded-md bg-violet-600 text-white hover:bg-violet-700 transition-colors"
+                >
+                  Insert caption
+                </button>
+              </>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => { setCaptionDismissed(true); setCaptionSuggestion(null) }}
+            className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 text-base leading-none mt-0.5"
+            aria-label="Dismiss caption suggestion"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Hashtag suggestions */}
       <div>
         <button
@@ -1443,7 +1648,7 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
       {/* Post preview */}
       <PostPreviewCard
         content={content}
-        platforms={selectedPlatforms as ('FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'X' | 'GOOGLE')[]}
+        platforms={selectedPlatforms as ('FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'X' | 'GOOGLE' | 'LINKEDIN')[]}
         mediaUrls={mediaUrls.filter((u) => u.trim().length > 0)}
       />
 
@@ -1639,6 +1844,118 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
           {error}
         </div>
       )}
+
+      {/* SafeGuard */}
+      {!safeGuardDismissed && (() => {
+        const status = overallSafeGuardStatus()
+        return (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleSafetyScan}
+                disabled={safeGuardLoading || !content.trim() || selectedPlatforms.length === 0}
+                className={cn(
+                  'flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border transition-colors',
+                  safeGuardLoading || !content.trim() || selectedPlatforms.length === 0
+                    ? 'text-muted-foreground border-border cursor-not-allowed opacity-50'
+                    : 'text-foreground border-border hover:bg-accent',
+                )}
+              >
+                {safeGuardLoading ? (
+                  <><span className="inline-block w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" /> Scanning…</>
+                ) : (
+                  <>🛡️ Safety scan</>
+                )}
+              </button>
+
+              {status && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setSafeGuardExpanded((o) => !o)}
+                    className={cn(
+                      'flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors',
+                      status === 'clear'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800'
+                        : status === 'warning'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800'
+                        : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800',
+                    )}
+                  >
+                    {status === 'clear' ? '✅ Clear' : status === 'warning' ? '⚠️ Warning' : '🚨 Risk'}
+                    <span className="opacity-60">{safeGuardExpanded ? '▲' : '▼'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setSafeGuardDismissed(true); setSafeGuardReport(null) }}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors ml-auto"
+                  >
+                    Dismiss
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Expanded flags */}
+            {safeGuardExpanded && safeGuardReport && (
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-2 text-xs">
+                {Object.entries(safeGuardReport).map(([platform, result]) => (
+                  <div key={platform}>
+                    <p className="font-semibold uppercase tracking-wide text-muted-foreground text-[10px] mb-1">{platform}</p>
+                    {result.flags.length === 0 ? (
+                      <p className="text-emerald-600 dark:text-emerald-400">✓ No issues detected</p>
+                    ) : (
+                      <ul className="space-y-0.5">
+                        {result.flags.map((flag, i) => (
+                          <li key={i} className={cn(
+                            'flex items-start gap-1.5',
+                            result.status === 'risk' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400',
+                          )}>
+                            <span className="mt-0.5">→</span>
+                            {flag}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Risk confirmation prompt */}
+            {riskConfirmPending && (
+              <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-3 space-y-2">
+                <p className="text-xs font-semibold text-red-700 dark:text-red-400">
+                  🚨 High-risk content detected — publish anyway?
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  This post has been flagged as potentially policy-violating. Publishing will be logged for review.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (riskConfirmPending === 'schedule') handleSubmit()
+                      else handleQueueSchedule()
+                    }}
+                    className="text-xs px-2.5 py-1 rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
+                  >
+                    Publish anyway
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRiskConfirmPending(null)}
+                    className="text-xs px-2.5 py-1 rounded-md border border-border hover:bg-accent transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       <div className="flex justify-end gap-2 pt-1 flex-wrap">
         <Button variant="outline" onClick={onClose} disabled={loading || queueLoading}>Cancel</Button>

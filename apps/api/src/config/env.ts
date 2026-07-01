@@ -41,4 +41,7 @@ export const env = {
   LINKEDIN_API_VERSION: process.env.LINKEDIN_API_VERSION ?? '202506',
   // Token encryption (AES-256-GCM) — 32-byte hex key
   TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY ?? '',
+  // AI feature daily caps (per-user)
+  AI_MULTIPLIER_DAILY_LIMIT: parseInt(process.env.AI_MULTIPLIER_DAILY_LIMIT ?? '50', 10),
+  AI_VISION_DAILY_LIMIT: parseInt(process.env.AI_VISION_DAILY_LIMIT ?? '50', 10),
 }

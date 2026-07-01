@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 
-type Platform = 'FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'X' | 'GOOGLE'
+type Platform = 'FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'X' | 'GOOGLE' | 'LINKEDIN'
 
 interface Props {
   content: string
@@ -18,6 +18,7 @@ const PLATFORM_META: Record<Platform, { label: string; color: string; avatar: st
   FACEBOOK:  { label: 'Facebook',    color: '#1877F2', avatar: '👤' },
   TIKTOK:    { label: 'TikTok',      color: '#000000', avatar: '🎵' },
   GOOGLE:    { label: 'Google',      color: '#4285F4', avatar: '🔍' },
+  LINKEDIN:  { label: 'LinkedIn',    color: '#0A66C2', avatar: '💼' },
 }
 
 function XPreview({ content, mediaUrls }: { content: string; mediaUrls?: string[] }) {
@@ -129,6 +130,31 @@ function TikTokPreview({ content, mediaUrls }: { content: string; mediaUrls?: st
   )
 }
 
+function LinkedInPreview({ content, mediaUrls }: { content: string; mediaUrls?: string[] }) {
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1b1f23] w-full max-w-sm font-sans overflow-hidden">
+      <div className="flex items-center gap-2 p-3">
+        <div className="w-10 h-10 rounded-full bg-[#0A66C2] flex items-center justify-center text-white text-sm font-bold shrink-0">YB</div>
+        <div>
+          <p className="font-semibold text-sm text-gray-900 dark:text-white">Your Brand</p>
+          <p className="text-xs text-gray-500">Just now · 🌐</p>
+        </div>
+        <span className="ml-auto text-gray-400">•••</span>
+      </div>
+      <p className="px-3 pb-2 text-sm text-gray-900 dark:text-white whitespace-pre-wrap line-clamp-5">
+        {content || <span className="text-gray-400 italic">Start typing your post…</span>}
+      </p>
+      {mediaUrls && mediaUrls[0] && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={mediaUrls[0]} alt="" className="w-full object-cover aspect-video" />
+      )}
+      <div className="flex gap-2 px-3 py-2 border-t text-gray-500 text-xs">
+        <span>👍 Like</span><span>💬 Comment</span><span>↗ Share</span>
+      </div>
+    </div>
+  )
+}
+
 function GooglePreview({ content }: { content: string }) {
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 w-full max-w-sm font-sans p-4">
@@ -160,6 +186,7 @@ export function PostPreviewCard({ content, platforms, mediaUrls, scheduledFor }:
       case 'FACEBOOK':  return <FacebookPreview   content={content} mediaUrls={mediaUrls} />
       case 'TIKTOK':    return <TikTokPreview     content={content} mediaUrls={mediaUrls} />
       case 'GOOGLE':    return <GooglePreview     content={content} />
+      case 'LINKEDIN':  return <LinkedInPreview   content={content} mediaUrls={mediaUrls} />
     }
   }
 
