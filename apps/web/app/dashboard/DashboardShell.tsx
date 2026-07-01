@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { ToastProvider, ToastViewport } from '@/components/ui/toast'
 import { NotificationBell } from './NotificationBell'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { CommandPalette } from './components/CommandPalette'
 
 interface Workspace { id: string; name: string }
 
@@ -27,6 +28,7 @@ const NAV_LINKS = [
   { href: '/dashboard/bio', label: 'Link in Bio' },
   { href: '/dashboard/analytics', label: 'Analytics' },
   { href: '/dashboard/insights', label: '💡 Insights' },
+  { href: '/dashboard/content-health', label: '❤️ Content Health' },
   { href: '/dashboard/hashtags', label: 'Hashtags' },
   { href: '/dashboard/image-editor', label: '🖼️ Image Editor' },
   { href: '/dashboard/inbox', label: 'Inbox' },
@@ -148,7 +150,7 @@ function WorkspaceSwitcher({ token }: { token: string }) {
   )
 }
 
-function SidebarContent({ token, onNavClick }: { token: string; onNavClick?: () => void }) {
+function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNavClick?: () => void; onOpenCmd?: () => void }) {
   const pathname = usePathname()
 
   return (
@@ -158,6 +160,13 @@ function SidebarContent({ token, onNavClick }: { token: string; onNavClick?: () 
         <div className="flex items-center gap-1">
           <ThemeToggle />
           <NotificationBell token={token} />
+          <button
+            onClick={onOpenCmd}
+            className="hidden md:flex items-center gap-1 text-xs text-muted-foreground border rounded px-2 py-1 hover:bg-accent transition-colors"
+            aria-label="Open command palette"
+          >
+            ⌘K
+          </button>
         </div>
       </div>
 
@@ -198,7 +207,7 @@ function SidebarContent({ token, onNavClick }: { token: string; onNavClick?: () 
   )
 }
 
-function Sidebar({ token }: { token: string }) {
+function Sidebar({ token, onOpenCmd }: { token: string; onOpenCmd: () => void }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   return (
     <>
@@ -220,10 +229,10 @@ function Sidebar({ token }: { token: string }) {
             ✕
           </button>
         </div>
-        <SidebarContent token={token} onNavClick={() => setMobileOpen(false)} />
+        <SidebarContent token={token} onNavClick={() => setMobileOpen(false)} onOpenCmd={onOpenCmd} />
       </aside>
       <aside className="hidden md:flex w-56 flex-shrink-0 border-r bg-background flex-col h-screen sticky top-0">
-        <SidebarContent token={token} />
+        <SidebarContent token={token} onOpenCmd={onOpenCmd} />
       </aside>
     </>
   )
@@ -238,14 +247,16 @@ export function DashboardShell({
   token: string
   initialWorkspaces: Workspace[]
 }) {
+  const [cmdOpen, setCmdOpen] = useState(false)
   return (
     <WorkspaceProvider initialWorkspaces={initialWorkspaces}>
       <ToastProvider>
         <div className="flex min-h-screen">
-          <Sidebar token={token} />
+          <Sidebar token={token} onOpenCmd={() => setCmdOpen(true)} />
           <main className="flex-1 overflow-auto p-6 pt-20 md:pt-6 md:ml-0">{children}</main>
         </div>
         <ToastViewport />
+        <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
       </ToastProvider>
     </WorkspaceProvider>
   )
