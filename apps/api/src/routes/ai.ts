@@ -808,6 +808,118 @@ router.post('/caption-suggestion', async (req: Request, res: Response): Promise<
   }
 })
 
+// ─── POST /api/v1/ai/repurpose ───────────────────────────────────────────────
+router.post('/repurpose', aiLimiter, async (req: Request, res: Response): Promise<void> => {
+  if (!env.ANTHROPIC_API_KEY) {
+    sendError(res, 503, 'AI_UNAVAILABLE', 'AI generation is not configured on this server')
+    return
+  }
+
+  const { workspaceId, postId, targetFormat } = req.body as {
+    workspaceId?: string
+    postId?: string
+    targetFormat?: string
+  }
+
+  if (!postId?.trim()) { sendError(res, 400, 'MISSING_FIELD', 'postId is required'); return }
+
+  const validFormats = ['x-thread', 'linkedin-carousel', 'tweet-drafts', 'instagram-caption']
+  if (!targetFormat || !validFormats.includes(targetFormat)) {
+    sendError(res, 400, 'INVALID_FORMAT', `targetFormat must be one of: ${validFormats.join(', ')}`)
+    return
+  }
+
+  const post = await prisma.scheduledPost.findUnique({ where: { id: postId }, include: { metrics: true } })
+  if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
+
+  const promptMap: Record<string, string> = {
+    'x-thread': 'Convert this post into a 5-tweet X thread. Each tweet max 280 chars. Return JSON array of strings.',
+    'linkedin-carousel': 'Convert this into 6 LinkedIn carousel slide texts. Slide 1 = hook, slides 2-5 = key points, slide 6 = CTA. Return JSON array of strings.',
+    'tweet-drafts': 'Create 3 different tweet versions of this content, each under 280 chars with different angles. Return JSON array of strings.',
+    'instagram-caption': 'Rewrite this as an engaging Instagram caption with relevant emojis and 5-10 hashtags. Return a single string.',
+  }
+
+  try {
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      messages: [{
+        role: 'user',
+        content: `${promptMap[targetFormat]}\n\nPost content:\n${post.content}`,
+      }],
+    })
+
+    const raw = message.content[0]?.type === 'text' ? message.content[0].text : ''
+
+    let slides: string[]
+    if (targetFormat === 'instagram-caption') {
+      slides = [raw.trim()]
+    } else {
+      const jsonMatch = raw.match(/\[[\s\S]*\]/)
+      if (jsonMatch) {
+        slides = JSON.parse(jsonMatch[0]) as string[]
+      } else {
+        slides = raw.split('\n').map((s) => s.trim()).filter(Boolean)
+      }
+    }
+
+    res.json({
+      format: targetFormat,
+      slides,
+      sourcePost: { id: post.id, content: post.content.slice(0, 100) },
+    })
+    logger.info({ userId: req.user!.id, postId, targetFormat }, 'Post repurposed')
+  } catch (err) {
+    logger.error({ err }, 'Repurpose error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to repurpose post')
+  }
+})
+
+// ─── GET /api/v1/ai/repurpose/suggestions ────────────────────────────────────
+router.get('/repurpose/suggestions', async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId, limit = '10' } = req.query as { workspaceId?: string; limit?: string }
+
+  const take = Math.min(Math.max(1, parseInt(limit, 10) || 10), 50)
+  const since = new Date()
+  since.setDate(since.getDate() - 90)
+
+  const posts = await prisma.scheduledPost.findMany({
+    where: {
+      ...(workspaceId ? { workspaceId } : {}),
+      status: 'PUBLISHED',
+      scheduledFor: { gte: since },
+    },
+    include: { metrics: true },
+    orderBy: { scheduledFor: 'desc' },
+    take: take * 3,
+  })
+
+  const ranked = posts
+    .map((p) => {
+      const totalEngagement = (p.metrics ?? []).reduce(
+        (sum, m) => sum + (m.likes ?? 0) + (m.comments ?? 0) + (m.shares ?? 0),
+        0,
+      )
+      const suggestedFormats: string[] = ['tweet-drafts', 'instagram-caption']
+      if (p.content.length > 500) {
+        suggestedFormats.unshift('x-thread', 'linkedin-carousel')
+      }
+      return {
+        id: p.id,
+        content: p.content.slice(0, 120),
+        platforms: p.platforms,
+        scheduledFor: p.scheduledFor,
+        totalEngagement,
+        suggestedFormats,
+      }
+    })
+    .sort((a, b) => b.totalEngagement - a.totalEngagement)
+    .slice(0, take)
+
+  res.json({ posts: ranked })
+})
+
 // POST /api/v1/ai/coach — conversational post rewriting
 router.post('/coach', async (req: Request, res: Response): Promise<void> => {
   const { content, instruction, platform } = req.body as {
@@ -844,6 +956,294 @@ Rewrite the post following the instruction exactly. Return ONLY the improved pos
     logger.error({ err }, 'AI coach error')
     sendError(res, 500, 'AI_ERROR', 'AI coach failed')
   }
+})
+
+// ─── GET /api/v1/ai/brand-voice ──────────────────────────────────────────────
+// Analyze past published posts to build a voice profile.
+router.get('/brand-voice', async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId } = req.query as { workspaceId?: string }
+  if (!workspaceId) {
+    sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required')
+    return
+  }
+
+  try {
+    const posts = await prisma.scheduledPost.findMany({
+      where: { workspaceId, status: 'PUBLISHED' },
+      orderBy: { publishedAt: 'desc' },
+      take: 30,
+      select: { content: true },
+    })
+
+    if (posts.length < 5) {
+      res.json({ ready: false, message: 'Publish at least 5 posts to build your brand voice.' })
+      return
+    }
+
+    const contents = posts.map((p) => p.content ?? '')
+
+    // Avg character count
+    const avgLength = Math.round(contents.reduce((sum, c) => sum + c.length, 0) / contents.length)
+
+    // Emoji detection
+    const emojiRegex = /\p{Emoji_Presentation}/u
+    const emojiCount = contents.filter((c) => emojiRegex.test(c)).length
+    const usesEmoji = emojiCount / contents.length > 0.3
+
+    // Hashtag detection
+    const hashtagCount = contents.filter((c) => /#\w/.test(c)).length
+    const usesHashtags = hashtagCount / contents.length > 0.5
+
+    // Tone heuristics based on avg sentence length and punctuation
+    const avgSentenceLen = contents.reduce((sum, c) => {
+      const sentences = c.split(/[.!?]+/).filter(Boolean)
+      return sum + (sentences.length > 0 ? c.length / sentences.length : c.length)
+    }, 0) / contents.length
+
+    const exclamationRate = contents.filter((c) => c.includes('!')).length / contents.length
+    const questionRate = contents.filter((c) => c.includes('?')).length / contents.length
+
+    let tone: 'casual' | 'professional' | 'playful' | 'inspirational'
+    if (avgSentenceLen < 40 && exclamationRate > 0.4) {
+      tone = 'playful'
+    } else if (avgSentenceLen > 80 && exclamationRate < 0.2) {
+      tone = 'professional'
+    } else if (questionRate > 0.3 || contents.some((c) => /\b(you can|believe|dream|possible)\b/i.test(c))) {
+      tone = 'inspirational'
+    } else {
+      tone = 'casual'
+    }
+
+    // Common 2-word phrases (frequency count)
+    const phraseFreq: Record<string, number> = {}
+    for (const c of contents) {
+      const words = c.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean)
+      for (let i = 0; i < words.length - 1; i++) {
+        const phrase = `${words[i]} ${words[i + 1]}`
+        phraseFreq[phrase] = (phraseFreq[phrase] ?? 0) + 1
+      }
+    }
+    const commonPhrases = Object.entries(phraseFreq)
+      .filter(([, count]) => count > 1)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([phrase]) => phrase)
+
+    const samplePosts = contents.slice(0, 3).map((c) => c.slice(0, 100))
+
+    res.json({
+      ready: true,
+      profile: { tone, avgLength, usesEmoji, usesHashtags, commonPhrases, samplePosts },
+    })
+
+    logger.info({ userId: req.user!.id, workspaceId, postCount: posts.length }, 'Brand voice profile built')
+  } catch (err) {
+    logger.error({ err }, 'Brand voice profile error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to build brand voice profile')
+  }
+})
+
+// ─── POST /api/v1/ai/brand-voice/generate ────────────────────────────────────
+// Generate captions that match the workspace's brand voice.
+router.post('/brand-voice/generate', aiLimiter, async (req: Request, res: Response): Promise<void> => {
+  if (!env.ANTHROPIC_API_KEY) {
+    sendError(res, 503, 'AI_UNAVAILABLE', 'AI generation is not configured on this server')
+    return
+  }
+
+  const { workspaceId, topic, platform, count = 3 } = req.body as {
+    workspaceId?: string
+    topic?: string
+    platform?: string
+    count?: number
+  }
+
+  if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
+  if (!topic?.trim()) { sendError(res, 400, 'MISSING_FIELD', 'topic is required'); return }
+  if (!platform?.trim()) { sendError(res, 400, 'MISSING_FIELD', 'platform is required'); return }
+
+  const numCaptions = Math.min(Math.max(1, count), 5)
+
+  try {
+    const posts = await prisma.scheduledPost.findMany({
+      where: { workspaceId, status: 'PUBLISHED' },
+      orderBy: { publishedAt: 'desc' },
+      take: 20,
+      select: { content: true },
+    })
+
+    const examples = posts.slice(0, 5).map((p, i) => `Example ${i + 1}:\n${p.content ?? ''}`).join('\n\n')
+
+    const userPrompt = `Here are my last 5 social media posts — study the writing style carefully:
+
+${examples}
+
+Now generate exactly ${numCaptions} new captions about the topic: "${topic.trim()}" for ${platform}.
+
+Match my exact style: the tone, emoji usage, sentence length, phrasing, and energy from those examples.
+
+Return ONLY a JSON array of strings. No markdown, no labels, no explanations. Example format: ["caption 1", "caption 2", "caption 3"]`
+
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
+    const message = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: userPrompt }],
+    })
+
+    const raw = message.content[0]?.type === 'text' ? message.content[0].text : '[]'
+
+    let captions: string[]
+    try {
+      const jsonMatch = raw.match(/\[[\s\S]*\]/)
+      captions = jsonMatch ? JSON.parse(jsonMatch[0]) as string[] : raw.split('\n').filter(Boolean)
+    } catch {
+      captions = raw.split('\n').filter(Boolean)
+    }
+
+    res.json({ captions })
+    logger.info({ userId: req.user!.id, workspaceId, topic, platform, count: numCaptions }, 'Brand voice captions generated')
+  } catch (err) {
+    logger.error({ err }, 'Brand voice generation error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to generate captions')
+  }
+})
+
+// ─── POST /api/v1/ai/score ───────────────────────────────────────────────────
+// Algorithmic (no LLM) real-time content scorer. Returns 1-100 score instantly.
+function scorePost(content: string, platform: string): {
+  score: number
+  grade: 'A' | 'B' | 'C' | 'D' | 'F'
+  breakdown: { label: string; score: number; max: number; tip: string }[]
+} {
+  const p = platform.toUpperCase()
+
+  // 1. Length (25 pts)
+  const len = content.length
+  let lengthScore = 5
+  if (p === 'INSTAGRAM') {
+    if (len >= 138 && len <= 150) lengthScore = 25
+    else if (len >= 100 && len <= 200) lengthScore = 20
+    else if (len >= 50 && len <= 300) lengthScore = 15
+  } else if (p === 'X') {
+    if (len >= 71 && len <= 100) lengthScore = 25
+    else if (len >= 50 && len <= 140) lengthScore = 20
+    else lengthScore = 10
+  } else if (p === 'LINKEDIN') {
+    if (len >= 150 && len <= 300) lengthScore = 25
+    else if (len >= 100 && len <= 500) lengthScore = 20
+    else lengthScore = 10
+  } else if (p === 'FACEBOOK') {
+    if (len >= 40 && len <= 80) lengthScore = 25
+    else if (len >= 20 && len <= 200) lengthScore = 20
+    else lengthScore = 10
+  } else if (p === 'TIKTOK') {
+    if (len >= 100 && len <= 150) lengthScore = 25
+    else if (len >= 50 && len <= 300) lengthScore = 20
+    else lengthScore = 10
+  }
+
+  // 2. Has CTA (20 pts)
+  const hasCta = /comment|share|follow|click|link in bio|check out|learn more|sign up|subscribe|tag|save|repost/i.test(content)
+  const ctaScore = hasCta ? 20 : 0
+
+  // 3. Readability (20 pts)
+  const sentences = content.split(/[.!?]+/).filter((s) => s.trim().length > 0)
+  const avgWords = content.split(' ').length / Math.max(sentences.length, 1)
+  let readabilityScore: number
+  if (avgWords <= 15) readabilityScore = 20
+  else if (avgWords <= 20) readabilityScore = 15
+  else if (avgWords <= 25) readabilityScore = 10
+  else readabilityScore = 5
+
+  // 4. Hashtags (15 pts)
+  const hashtags = (content.match(/#\w+/g) ?? []).length
+  let hashtagScore = 5
+  if (p === 'INSTAGRAM') {
+    if (hashtags >= 5 && hashtags <= 15) hashtagScore = 15
+    else if (hashtags >= 1 && hashtags <= 4) hashtagScore = 10
+    else if (hashtags === 0) hashtagScore = 0
+    else hashtagScore = 5 // >15
+  } else if (p === 'X') {
+    if (hashtags >= 1 && hashtags <= 2) hashtagScore = 15
+    else if (hashtags === 0) hashtagScore = 5
+    else hashtagScore = 8 // >2
+  } else if (p === 'LINKEDIN') {
+    if (hashtags >= 3 && hashtags <= 5) hashtagScore = 15
+    else if (hashtags >= 1 && hashtags <= 2) hashtagScore = 10
+    else if (hashtags === 0) hashtagScore = 5
+  } else {
+    if (hashtags >= 1 && hashtags <= 5) hashtagScore = 15
+    else if (hashtags === 0) hashtagScore = 5
+  }
+
+  // 5. Emoji presence (10 pts)
+  const emojiCount = (content.match(/\p{Emoji}/gu) ?? []).length
+  const emojiScore = emojiCount > 0 ? 10 : 3
+
+  // 6. Question hook (10 pts)
+  const questionScore = /\?/.test(content) ? 10 : 0
+
+  const score = Math.min(100, lengthScore + ctaScore + readabilityScore + hashtagScore + emojiScore + questionScore)
+
+  let grade: 'A' | 'B' | 'C' | 'D' | 'F'
+  if (score >= 90) grade = 'A'
+  else if (score >= 75) grade = 'B'
+  else if (score >= 60) grade = 'C'
+  else if (score >= 45) grade = 'D'
+  else grade = 'F'
+
+  const breakdown = [
+    {
+      label: 'Length',
+      score: lengthScore,
+      max: 25,
+      tip: `Aim for the optimal length for ${p}. Current: ${len} chars.`,
+    },
+    {
+      label: 'Call to Action',
+      score: ctaScore,
+      max: 20,
+      tip: 'Add a CTA like "comment below", "share this", "click the link in bio", or "sign up".',
+    },
+    {
+      label: 'Readability',
+      score: readabilityScore,
+      max: 20,
+      tip: 'Keep sentences short — aim for under 15 words per sentence for best engagement.',
+    },
+    {
+      label: 'Hashtags',
+      score: hashtagScore,
+      max: 15,
+      tip: p === 'INSTAGRAM' ? 'Use 5-15 hashtags for best reach on Instagram.'
+        : p === 'X' ? 'Use 1-2 hashtags on X — more reduces engagement.'
+        : p === 'LINKEDIN' ? 'Use 3-5 hashtags on LinkedIn.'
+        : 'Add 1-5 relevant hashtags.',
+    },
+    {
+      label: 'Emojis',
+      score: emojiScore,
+      max: 10,
+      tip: 'Add at least one emoji to boost visual appeal and engagement.',
+    },
+    {
+      label: 'Question Hook',
+      score: questionScore,
+      max: 10,
+      tip: 'Ask a question to spark comments and conversation.',
+    },
+  ]
+
+  return { score, grade, breakdown }
+}
+
+router.post('/score', async (req: Request, res: Response): Promise<void> => {
+  const { content, platform, workspaceId } = req.body as { content?: string; platform?: string; workspaceId?: string }
+  if (!content?.trim()) { sendError(res, 400, 'MISSING_CONTENT', 'content is required'); return }
+  if (!platform?.trim()) { sendError(res, 400, 'MISSING_PLATFORM', 'platform is required'); return }
+  const result = scorePost(content, platform)
+  res.json({ ...result, platform: platform.toUpperCase() })
 })
 
 export default router

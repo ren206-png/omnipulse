@@ -35,6 +35,22 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
   } catch { sendError(res, 500, 'INTERNAL_ERROR', 'Failed') }
 })
 
+// PATCH — update clientName, clientEmail, active
+router.patch('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  const { workspaceId, clientName, clientEmail, active } = req.body
+  if (!workspaceId) { sendError(res, 400, 'BAD_REQUEST', 'workspaceId required'); return }
+  try {
+    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const data: any = {}
+    if (clientName !== undefined) data.clientName = clientName
+    if (clientEmail !== undefined) data.clientEmail = clientEmail
+    if (active !== undefined) data.active = active
+    const portal = await db.clientPortal.update({ where: { workspaceId }, data })
+    res.json({ portal })
+  } catch { sendError(res, 500, 'INTERNAL_ERROR', 'Failed') }
+})
+
 // DELETE — disable portal
 router.delete('/:workspaceId', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.params

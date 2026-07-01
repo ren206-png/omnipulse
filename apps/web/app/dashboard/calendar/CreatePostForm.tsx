@@ -242,6 +242,63 @@ function makeVariants(masterContent: string): Record<VariantPlatform, PlatformVa
   ) as unknown as Record<VariantPlatform, PlatformVariant>
 }
 
+function ContentScoreWidget({ content, platform }: { content: string; platform: string }) {
+  const [result, setResult] = useState<{ score: number; grade: string; breakdown: { label: string; score: number; max: number; tip: string }[] } | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (content.length < 10) { setResult(null); return }
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(async () => {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
+      try {
+        const r = await fetch(`${apiUrl}/api/v1/ai/score`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, platform }),
+        })
+        const d = await r.json()
+        setResult(d)
+      } catch {}
+    }, 600) // debounce 600ms
+  }, [content, platform])
+
+  if (!result) return null
+
+  const gradeColor = result.grade === 'A' ? 'text-green-500' : result.grade === 'B' ? 'text-blue-500' : result.grade === 'C' ? 'text-yellow-500' : 'text-red-500'
+  const barColor = result.score >= 75 ? 'bg-green-500' : result.score >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+
+  return (
+    <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-xs">
+      <div className="flex items-center justify-between">
+        <span className="font-semibold text-sm">Content Score</span>
+        <span className={`text-2xl font-bold ${gradeColor}`}>{result.grade}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+          <div className={`h-full ${barColor} rounded-full transition-all duration-500`} style={{ width: `${result.score}%` }} />
+        </div>
+        <span className="font-mono font-semibold w-8 text-right">{result.score}</span>
+      </div>
+      <div className="space-y-1">
+        {result.breakdown.map((b: { label: string; score: number; max: number; tip: string }) => (
+          <div key={b.label} className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground truncate flex-1">{b.label}</span>
+            <span className={b.score >= b.max * 0.8 ? 'text-green-500' : b.score >= b.max * 0.5 ? 'text-yellow-500' : 'text-red-400'}>
+              {b.score}/{b.max}
+            </span>
+          </div>
+        ))}
+      </div>
+      {result.breakdown.find((b: { label: string; score: number; max: number; tip: string }) => b.score < b.max * 0.5) && (
+        <p className="text-muted-foreground border-t pt-1">
+          💡 {result.breakdown.find((b: { label: string; score: number; max: number; tip: string }) => b.score < b.max * 0.5)?.tip}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, onClose, initialContent = '', initialPlatforms = [], initialMediaUrls = [], initialDraftId }: Props) {
   const [content, setContent] = useState(initialContent)
   const [mediaUrls, setMediaUrls] = useState<string[]>(initialMediaUrls.length > 0 ? initialMediaUrls : [''])
@@ -1505,6 +1562,8 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
           rows={4}
           className={cn(charWarning && content.length > charLimit && 'border-destructive')}
         />
+
+        <ContentScoreWidget content={content} platform={selectedPlatforms[0] ?? 'INSTAGRAM'} />
 
         {/* Per-platform content customiser */}
         {activeVariantPlatforms.length > 0 && (

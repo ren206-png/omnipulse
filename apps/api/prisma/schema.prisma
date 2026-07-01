@@ -51,6 +51,7 @@ model Workspace {
   campaigns              Campaign[]
   mediaAssets            MediaAsset[]
   listeningKeywords      ListeningKeyword[]
+  shortLinks             ShortLink[]
   plan                   Plan                 @default(FREE)
   stripeCustomerId       String?              @unique
   stripeSubscriptionId   String?              @unique
@@ -466,4 +467,19 @@ model MediaAsset {
   createdAt   DateTime  @default(now())
 
   @@index([workspaceId, createdAt])
+}
+
+model ShortLink {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  originalUrl String
+  slug        String    @unique
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  clicks      Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
 }

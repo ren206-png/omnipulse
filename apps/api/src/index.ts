@@ -37,6 +37,7 @@ import apiKeysRouter from './routes/apikeys.js'
 import rssRouter from './routes/rss.js'
 import brandingRouter from './routes/branding.js'
 import clientPortalRouter from './routes/clientPortal.js'
+import portalPublicRouter from './routes/portalPublic.js'
 import digestRouter from './routes/digest.js'
 import competitorsRouter from './routes/competitors.js'
 import adminRouter from './routes/admin.js'
@@ -45,6 +46,7 @@ import queueSlotsRouter from './routes/queueSlots.js'
 import { twoFactorRouter } from './routes/twoFactor.js'
 import campaignsRouter from './routes/campaigns.js'
 import listeningRouter from './routes/listening.js'
+import linksRouter from './routes/links.js'
 import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
 import { sendWeeklyDigest } from './lib/digest.js'
@@ -101,6 +103,22 @@ app.get('/health', async (_req, res) => {
   res.status(status === 'ok' ? 200 : 503).json({ status, db, redis, ts: new Date().toISOString() })
 })
 
+// Public short-link redirect — no auth required
+app.get('/l/:slug', async (req, res) => {
+  const { slug } = req.params
+  try {
+    const link = await (prisma as any).shortLink.findUnique({ where: { slug } })
+    if (!link) { res.status(404).send('Link not found'); return }
+    await (prisma as any).shortLink.update({ where: { slug }, data: { clicks: { increment: 1 } } })
+    res.redirect(link.originalUrl)
+  } catch {
+    res.status(500).send('Internal error')
+  }
+})
+
+// Public portal routes — no auth required (must be before requireAuth middleware)
+app.use('/portal-api', portalPublicRouter)
+
 app.use('/api/v1/auth', authRouter)
 app.use('/api/v1/workspaces', workspacesRouter)
 app.use('/api/v1/posts', postsRouter)
@@ -130,6 +148,7 @@ app.use('/api/v1/queue-slots', queueSlotsRouter)
 app.use('/api/v1/2fa', twoFactorRouter)
 app.use('/api/v1/campaigns', campaignsRouter)
 app.use('/api/v1/listening', listeningRouter)
+app.use('/api/v1/links', linksRouter)
 app.use('/uploads', express.static('public/uploads'))
 
 // Sentry error handler — must be after all routes
