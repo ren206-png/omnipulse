@@ -5,6 +5,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 
 interface Metric {
   platform: string
@@ -40,6 +41,7 @@ function PostPicker({
   selectedId,
   onSelect,
   placeholder,
+  filterActive,
 }: {
   token: string
   workspaceId: string
@@ -47,6 +49,7 @@ function PostPicker({
   selectedId: string
   onSelect: (post: Post) => void
   placeholder: string
+  filterActive?: boolean
 }) {
   const [query, setQuery] = useState('')
   const [posts, setPosts] = useState<Post[]>([])
@@ -66,13 +69,14 @@ function PostPicker({
       })
       if (!res.ok) return
       const data = (await res.json()) as { posts: Post[] }
-      setPosts(data.posts ?? [])
+      const all = data.posts ?? []
+      setPosts(filterActive ? all.filter((p) => p.abTestActive) : all)
     } catch {
       // silent
     } finally {
       setLoading(false)
     }
-  }, [workspaceId, apiUrl, token])
+  }, [workspaceId, apiUrl, token, filterActive])
 
   // Load posts when dropdown opens
   useEffect(() => {
@@ -110,6 +114,11 @@ function PostPicker({
     onSelect({ id: '', content: '', platforms: [], status: '', scheduledFor: '', mediaUrls: [] })
   }
 
+  // Keep selected in sync when selectedId is cleared externally
+  useEffect(() => {
+    if (!selectedId) setSelected(null)
+  }, [selectedId])
+
   return (
     <div ref={containerRef} className="relative">
       {selected ? (
@@ -122,6 +131,11 @@ function PostPicker({
                 </span>
               ))}
               <span className="text-[10px] text-muted-foreground">{selected.status}</span>
+              {selected.abTestActive && (
+                <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded">
+                  A/B Active
+                </span>
+              )}
             </div>
             <p className="text-sm line-clamp-2">{selected.content}</p>
             <p className="text-xs text-muted-foreground mt-1">
@@ -151,7 +165,9 @@ function PostPicker({
               {loading ? (
                 <div className="py-6 text-center text-sm text-muted-foreground">Loading posts…</div>
               ) : posts.length === 0 ? (
-                <div className="py-6 text-center text-sm text-muted-foreground">No posts found</div>
+                <div className="py-6 text-center text-sm text-muted-foreground">
+                  {filterActive ? 'No active A/B tests found' : 'No posts found'}
+                </div>
               ) : (
                 <ul className="max-h-64 overflow-y-auto divide-y divide-border">
                   {posts.map((post) => (
@@ -166,6 +182,11 @@ function PostPicker({
                               {p}
                             </span>
                           ))}
+                          {post.abTestActive && (
+                            <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-1.5 py-0.5 rounded">
+                              A/B
+                            </span>
+                          )}
                           <span className="text-[10px] text-muted-foreground ml-auto">
                             {new Date(post.scheduledFor).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           </span>
@@ -254,21 +275,136 @@ function PostCard({ post, label, winner }: { post: Post; label: string; winner?:
   )
 }
 
+// ── Results Panel ─────────────────────────────────────────────────────────────
+
+function ResultsPanel({ original, variants, onApplyWinner }: {
+  original: Post
+  variants: Post[]
+  onApplyWinner: (post: Post) => void
+}) {
+  function engagementScore(post: Post): number {
+    if (!post.metrics?.length) return 0
+    return post.metrics.reduce((sum, m) => sum + m.likes + m.comments + m.shares, 0)
+  }
+
+  const allPosts = [original, ...variants]
+  const scores = allPosts.map(p => ({ post: p, score: engagementScore(p) }))
+  const maxScore = Math.max(...scores.map(s => s.score), 1)
+  const winner = scores.reduce((a, b) => a.score >= b.score ? a : b)
+  const hasData = scores.some(s => s.score > 0)
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-sm">A/B Test Results</h3>
+        {hasData && (
+          <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2.5 py-1 rounded-full font-medium">
+            🏆 Winner identified
+          </span>
+        )}
+      </div>
+
+      {!hasData ? (
+        <div className="text-center py-8 space-y-2">
+          <p className="text-3xl">⏳</p>
+          <p className="text-sm font-medium">Awaiting engagement data</p>
+          <p className="text-xs text-muted-foreground">Metrics sync after publishing. Check back in a few hours.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {scores
+            .sort((a, b) => b.score - a.score)
+            .map(({ post, score }, i) => {
+              const isOriginal = post.id === original.id
+              const isWinner = post.id === winner.post.id && hasData
+              const pct = Math.round((score / maxScore) * 100)
+              const totalMetrics = post.metrics?.reduce(
+                (acc, m) => ({ likes: acc.likes + m.likes, comments: acc.comments + m.comments, shares: acc.shares + m.shares }),
+                { likes: 0, comments: 0, shares: 0 }
+              ) ?? { likes: 0, comments: 0, shares: 0 }
+
+              return (
+                <div key={post.id} className={cn(
+                  'rounded-xl border p-4 space-y-3 transition-all',
+                  isWinner ? 'border-green-400 bg-green-50/50 dark:bg-green-950/20' : 'bg-muted/20'
+                )}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {isWinner && <span>🏆</span>}
+                      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        {isOriginal ? 'Original' : `Variant ${i}`}
+                      </span>
+                    </div>
+                    <span className="text-lg font-bold tabular-nums">{score}</span>
+                  </div>
+
+                  <p className="text-sm line-clamp-3 text-muted-foreground">{post.content}</p>
+
+                  {/* Engagement bar */}
+                  <div className="space-y-1">
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={cn('h-full rounded-full transition-all duration-700',
+                          isWinner ? 'bg-green-500' : 'bg-primary/60')}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="flex gap-3 text-[10px] text-muted-foreground">
+                      <span>❤️ {totalMetrics.likes}</span>
+                      <span>💬 {totalMetrics.comments}</span>
+                      <span>🔁 {totalMetrics.shares}</span>
+                      <span className="ml-auto font-medium">{pct}% of top</span>
+                    </div>
+                  </div>
+
+                  {isWinner && hasData && (
+                    <Button
+                      size="sm"
+                      className="w-full h-8 text-xs"
+                      onClick={() => onApplyWinner(post)}
+                    >
+                      ✨ Use this version for future posts
+                    </Button>
+                  )}
+                </div>
+              )
+            })}
+        </div>
+      )}
+
+      {hasData && (
+        <div className="rounded-lg bg-primary/5 border border-primary/20 p-3">
+          <p className="text-xs font-medium">
+            💡 {winner.post.id === original.id
+              ? 'Your original post outperformed the variants. Stick with your instincts!'
+              : `The variant beat the original by ${winner.score > 0 ? Math.round(((winner.score - engagementScore(original)) / Math.max(engagementScore(original), 1)) * 100) : 0}% in total engagement.`}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function AbTestClient({ token }: Props) {
   const { activeWorkspace } = useWorkspace()
 
+  const [activeTab, setActiveTab] = useState<'create' | 'results'>('create')
+
+  // Create tab state
   const [createPost, setCreatePost] = useState<Post | null>(null)
   const [variantContent, setVariantContent] = useState('')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createSuccess, setCreateSuccess] = useState<string | null>(null)
 
+  // Results tab state
   const [resultsPost, setResultsPost] = useState<Post | null>(null)
   const [loadingResults, setLoadingResults] = useState(false)
   const [resultsError, setResultsError] = useState<string | null>(null)
   const [results, setResults] = useState<{ original: Post; variants: Post[] } | null>(null)
+  const [applyToast, setApplyToast] = useState<string | null>(null)
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
   const workspaceId = activeWorkspace?.id ?? ''
@@ -329,7 +465,26 @@ export default function AbTestClient({ token }: Props) {
     }
   }
 
-  // Determine winner (highest total engagement)
+  function handleApplyWinner(post: Post) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(post.content).then(() => {
+        setApplyToast('Copied to clipboard — paste into your next post!')
+        setTimeout(() => setApplyToast(null), 4000)
+      }).catch(() => {
+        setVariantContent(post.content)
+        setActiveTab('create')
+        setApplyToast('Winner content loaded into the Create Test tab.')
+        setTimeout(() => setApplyToast(null), 4000)
+      })
+    } else {
+      setVariantContent(post.content)
+      setActiveTab('create')
+      setApplyToast('Winner content loaded into the Create Test tab.')
+      setTimeout(() => setApplyToast(null), 4000)
+    }
+  }
+
+  // Determine winner (highest total engagement) — used in legacy side-by-side view
   function totalEngagement(post: Post) {
     return (post.metrics ?? []).reduce((s, m) => s + m.likes + m.comments + m.shares, 0)
   }
@@ -357,135 +512,182 @@ export default function AbTestClient({ token }: Props) {
         </p>
       </div>
 
-      {/* ── Create Variant ── */}
-      <section className="rounded-xl border bg-card p-6 space-y-5">
-        <div>
-          <h2 className="text-lg font-semibold">Create Variant B</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Select any published or scheduled post as your control (A), then write an alternative caption.
-          </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>Original Post (A)</Label>
-          <PostPicker
-            token={token}
-            workspaceId={workspaceId}
-            apiUrl={apiUrl}
-            selectedId={createPost?.id ?? ''}
-            onSelect={(p) => setCreatePost(p.id ? p : null)}
-            placeholder="Search your posts…"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="variant-content">Variant B Caption</Label>
-          <Textarea
-            id="variant-content"
-            placeholder="Write the alternative caption for your A/B test…"
-            value={variantContent}
-            onChange={(e) => setVariantContent(e.target.value)}
-            rows={4}
-          />
-          <p className="text-xs text-muted-foreground">
-            {variantContent.length} characters
-          </p>
-        </div>
-
-        {createError && (
-          <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{createError}</p>
-        )}
-        {createSuccess && (
-          <p className="text-sm text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400 px-3 py-2 rounded-md">
-            ✓ {createSuccess}
-          </p>
-        )}
-
-        <Button
-          onClick={handleCreateVariant}
-          disabled={creating || !createPost?.id || !variantContent.trim()}
+      {/* ── Tab switcher ── */}
+      <div className="flex gap-1 p-1 bg-muted/50 rounded-xl w-fit">
+        <button
+          onClick={() => setActiveTab('create')}
+          className={cn(
+            'px-4 py-1.5 rounded-lg text-sm font-medium transition-all',
+            activeTab === 'create'
+              ? 'bg-background shadow-sm text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
         >
-          {creating ? 'Creating…' : 'Create Variant B'}
-        </Button>
-      </section>
+          Create Test
+        </button>
+        <button
+          onClick={() => setActiveTab('results')}
+          className={cn(
+            'px-4 py-1.5 rounded-lg text-sm font-medium transition-all',
+            activeTab === 'results'
+              ? 'bg-background shadow-sm text-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          )}
+        >
+          View Results
+        </button>
+      </div>
 
-      {/* ── View Results ── */}
-      <section className="rounded-xl border bg-card p-6 space-y-5">
-        <div>
-          <h2 className="text-lg font-semibold">Compare Results</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Select the original post to see how A and B performed side by side.
-          </p>
+      {/* ── Apply winner toast ── */}
+      {applyToast && (
+        <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+          <span>✓</span>
+          <span>{applyToast}</span>
         </div>
+      )}
 
-        <div className="space-y-1.5">
-          <Label>Post to Compare</Label>
-          <PostPicker
-            token={token}
-            workspaceId={workspaceId}
-            apiUrl={apiUrl}
-            selectedId={resultsPost?.id ?? ''}
-            onSelect={(p) => setResultsPost(p.id ? p : null)}
-            placeholder="Search your posts…"
-          />
-        </div>
-
-        {loadingResults && (
-          <div className="flex items-center gap-3 py-4">
-            <div className="flex gap-1">
-              {[0, 1, 2].map((i) => (
-                <span key={i} className="block w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
-              ))}
-            </div>
-            <span className="text-sm text-muted-foreground">Loading results…</span>
+      {/* ── Create Variant tab ── */}
+      {activeTab === 'create' && (
+        <section className="rounded-xl border bg-card p-6 space-y-5">
+          <div>
+            <h2 className="text-lg font-semibold">Create Variant B</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Select any published or scheduled post as your control (A), then write an alternative caption.
+            </p>
           </div>
-        )}
 
-        {resultsError && (
-          <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{resultsError}</p>
-        )}
+          <div className="space-y-1.5">
+            <Label>Original Post (A)</Label>
+            <PostPicker
+              token={token}
+              workspaceId={workspaceId}
+              apiUrl={apiUrl}
+              selectedId={createPost?.id ?? ''}
+              onSelect={(p) => setCreatePost(p.id ? p : null)}
+              placeholder="Search your posts…"
+            />
+          </div>
 
-        {results && !loadingResults && (
-          <div className="space-y-4 pt-2">
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-border" />
-              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                {results.variants.length === 0 ? 'No variants yet' : `${1 + results.variants.length} versions`}
-              </span>
-              <div className="h-px flex-1 bg-border" />
+          <div className="space-y-1.5">
+            <Label htmlFor="variant-content">Variant B Caption</Label>
+            <Textarea
+              id="variant-content"
+              placeholder="Write the alternative caption for your A/B test…"
+              value={variantContent}
+              onChange={(e) => setVariantContent(e.target.value)}
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground">
+              {variantContent.length} characters
+            </p>
+          </div>
+
+          {createError && (
+            <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{createError}</p>
+          )}
+          {createSuccess && (
+            <p className="text-sm text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400 px-3 py-2 rounded-md">
+              ✓ {createSuccess}
+            </p>
+          )}
+
+          <Button
+            onClick={handleCreateVariant}
+            disabled={creating || !createPost?.id || !variantContent.trim()}
+          >
+            {creating ? 'Creating…' : 'Create Variant B'}
+          </Button>
+        </section>
+      )}
+
+      {/* ── View Results tab ── */}
+      {activeTab === 'results' && (
+        <section className="rounded-xl border bg-card p-6 space-y-5">
+          <div>
+            <h2 className="text-lg font-semibold">Compare Results</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Select an active A/B test to see how the versions performed.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Post to Compare</Label>
+            <PostPicker
+              token={token}
+              workspaceId={workspaceId}
+              apiUrl={apiUrl}
+              selectedId={resultsPost?.id ?? ''}
+              onSelect={(p) => {
+                setResultsPost(p.id ? p : null)
+                if (!p.id) setResults(null)
+              }}
+              placeholder="Search posts with active A/B tests…"
+              filterActive
+            />
+          </div>
+
+          {loadingResults && (
+            <div className="flex items-center gap-3 py-4">
+              <div className="flex gap-1">
+                {[0, 1, 2].map((i) => (
+                  <span key={i} className="block w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                ))}
+              </div>
+              <span className="text-sm text-muted-foreground">Loading results…</span>
             </div>
+          )}
 
-            <div className="flex gap-4 flex-col sm:flex-row">
-              <PostCard
-                post={results.original}
-                label="A — Original"
-                winner={winnerId === results.original.id}
-              />
-              {results.variants.length === 0 ? (
-                <div className="flex-1 rounded-lg border border-dashed p-8 flex flex-col items-center justify-center gap-2 text-center">
-                  <p className="text-sm text-muted-foreground">No variants yet.</p>
-                  <p className="text-xs text-muted-foreground">Use the form above to create Variant B.</p>
-                </div>
+          {resultsError && (
+            <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{resultsError}</p>
+          )}
+
+          {results && !loadingResults && (
+            <>
+              {/* ResultsPanel — engagement comparison with winner detection */}
+              {results.variants.length > 0 ? (
+                <ResultsPanel
+                  original={results.original}
+                  variants={results.variants}
+                  onApplyWinner={handleApplyWinner}
+                />
               ) : (
-                results.variants.map((v, i) => (
-                  <PostCard
-                    key={v.id}
-                    post={v}
-                    label={`B${results.variants.length > 1 ? String(i + 1) : ''} — Variant`}
-                    winner={winnerId === v.id}
-                  />
-                ))
-              )}
-            </div>
+                <>
+                  {/* Legacy side-by-side when no variants yet */}
+                  <div className="space-y-4 pt-2">
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                        No variants yet
+                      </span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
 
-            {!hasMetrics && (
-              <p className="text-xs text-center text-muted-foreground pt-1">
-                Metrics will appear here once your posts have been published and data synced.
-              </p>
-            )}
-          </div>
-        )}
-      </section>
+                    <div className="flex gap-4 flex-col sm:flex-row">
+                      <PostCard
+                        post={results.original}
+                        label="A — Original"
+                        winner={winnerId === results.original.id}
+                      />
+                      <div className="flex-1 rounded-lg border border-dashed p-8 flex flex-col items-center justify-center gap-2 text-center">
+                        <p className="text-sm text-muted-foreground">No variants yet.</p>
+                        <p className="text-xs text-muted-foreground">Use the Create Test tab to create Variant B.</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-2"
+                          onClick={() => setActiveTab('create')}
+                        >
+                          Create Variant B →
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </section>
+      )}
     </div>
   )
 }
