@@ -5,17 +5,47 @@ export const metadata: Metadata = {
   title: 'OmniPulse — Social Media Management',
   description: 'Schedule posts, track analytics, and grow your brand across every platform.',
   metadataBase: new URL('https://getomnipulse.com'),
+  keywords: [
+    'social media management',
+    'schedule posts',
+    'social media analytics',
+    'content calendar',
+    'instagram scheduler',
+    'twitter scheduler',
+    'linkedin scheduler',
+    'social media tool',
+  ],
   openGraph: {
     title: 'OmniPulse — Social Media Management',
     description: 'Schedule posts, track analytics, and grow your brand across every platform.',
     url: 'https://getomnipulse.com',
     siteName: 'OmniPulse',
     type: 'website',
+    images: [
+      {
+        url: 'https://getomnipulse.com/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'OmniPulse — Social Media Management',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'OmniPulse — Social Media Management',
     description: 'Schedule posts, track analytics, and grow your brand across every platform.',
+    images: ['https://getomnipulse.com/og-image.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
+  alternates: {
+    canonical: 'https://getomnipulse.com',
+  },
+  verification: {
+    google: 'add-your-google-site-verification-here',
   },
 }
 

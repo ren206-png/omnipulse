@@ -31,7 +31,7 @@ router.get('/oauth/connect', requireAuth, async (req: Request, res: Response): P
     // Instagram now uses Facebook/Meta OAuth (Basic Display API deprecated Dec 2024)
     // Requires an Instagram Business or Creator account linked to a Facebook Page
     INSTAGRAM: `https://www.facebook.com/dialog/oauth?client_id=${process.env.FACEBOOK_CLIENT_ID ?? 'FACEBOOK_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=instagram_basic,instagram_content_publish,instagram_manage_accounts,pages_show_list,pages_read_engagement&response_type=code&state=${state}`,
-    FACEBOOK: `https://www.facebook.com/v19.0/dialog/oauth?client_id=${process.env.FACEBOOK_CLIENT_ID ?? 'FACEBOOK_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=pages_manage_posts,pages_read_engagement&response_type=code&state=${state}`,
+    FACEBOOK: `https://www.facebook.com/v20.0/dialog/oauth?client_id=${process.env.FACEBOOK_CLIENT_ID ?? 'FACEBOOK_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=pages_manage_posts,pages_read_engagement&response_type=code&state=${state}`,
     X: `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${process.env.X_CLIENT_ID ?? 'X_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=tweet.read+tweet.write+users.read&state=${state}&code_challenge=${pkceVerifier}&code_challenge_method=plain`,
     TIKTOK: `https://www.tiktok.com/v2/auth/authorize/?client_key=${process.env.TIKTOK_CLIENT_KEY ?? 'TIKTOK_CLIENT_KEY'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user.info.basic,video.upload&response_type=code&state=${state}`,
     GOOGLE: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID ?? 'GOOGLE_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=https://www.googleapis.com/auth/youtube.upload&response_type=code&state=${state}`,
@@ -58,13 +58,21 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
     return
   }
 
+  // Validate state parameter (CSRF protection)
+  let parsedState: { platform: string; workspaceId: string; userId: string; pkceVerifier?: string }
   try {
-    const { platform, workspaceId, pkceVerifier } = JSON.parse(Buffer.from(state, 'base64url').toString()) as {
-      platform: string
-      workspaceId: string
-      userId: string
-      pkceVerifier?: string
+    parsedState = JSON.parse(Buffer.from(state ?? '', 'base64url').toString())
+    if (!parsedState || typeof parsedState.workspaceId !== 'string' || !parsedState.workspaceId) {
+      throw new Error('invalid_state')
     }
+  } catch {
+    logger.warn({ state }, 'OAuth callback received invalid or tampered state parameter')
+    res.redirect(`${webUrl}/dashboard/accounts?error=invalid_state`)
+    return
+  }
+
+  try {
+    const { platform, workspaceId, pkceVerifier } = parsedState
     const redirectUri = `${process.env.API_URL ?? 'http://localhost:4000'}/api/v1/social-accounts/oauth/callback`
 
     let accessToken = ''
@@ -121,10 +129,21 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
       profileName = igUsername
     } else if (platform === 'FACEBOOK') {
       const tokenRes = await fetch(
-        `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&redirect_uri=${encodeURIComponent(redirectUri)}&code=${code}`,
+        `https://graph.facebook.com/v20.0/oauth/access_token?client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&redirect_uri=${encodeURIComponent(redirectUri)}&code=${code}`,
       )
-      const tokenData = await tokenRes.json() as { access_token?: string }
-      accessToken = tokenData.access_token ?? ''
+      if (!tokenRes.ok) {
+        const errBody = await tokenRes.text()
+        logger.error({ status: tokenRes.status, body: errBody }, 'Facebook token exchange failed')
+        res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
+        return
+      }
+      const tokenData = await tokenRes.json() as { access_token?: string; error?: { message?: string } }
+      if (!tokenData.access_token) {
+        logger.error({ tokenData }, 'Facebook token exchange returned no access_token')
+        res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
+        return
+      }
+      accessToken = tokenData.access_token
       if (accessToken) {
         const profileRes = await fetch(`https://graph.facebook.com/me?access_token=${accessToken}`)
         const profile = await profileRes.json() as { id?: string; name?: string }
@@ -140,8 +159,19 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
         },
         body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, code_verifier: pkceVerifier ?? 'challenge' }),
       })
-      const tokenData = await tokenRes.json() as { access_token?: string }
-      accessToken = tokenData.access_token ?? ''
+      if (!tokenRes.ok) {
+        const errBody = await tokenRes.text()
+        logger.error({ status: tokenRes.status, body: errBody }, 'X (Twitter) token exchange failed')
+        res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
+        return
+      }
+      const tokenData = await tokenRes.json() as { access_token?: string; error?: string }
+      if (!tokenData.access_token) {
+        logger.error({ tokenData }, 'X token exchange returned no access_token')
+        res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
+        return
+      }
+      accessToken = tokenData.access_token
       if (accessToken) {
         const profileRes = await fetch('https://api.twitter.com/2/users/me', { headers: { Authorization: `Bearer ${accessToken}` } })
         const profile = await profileRes.json() as { data?: { id?: string; username?: string } }
@@ -160,8 +190,19 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
           code,
         }),
       })
-      const tokenData = await tokenRes.json() as { access_token?: string; open_id?: string }
-      accessToken = tokenData.access_token ?? ''
+      if (!tokenRes.ok) {
+        const errBody = await tokenRes.text()
+        logger.error({ status: tokenRes.status, body: errBody }, 'TikTok token exchange failed')
+        res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
+        return
+      }
+      const tokenData = await tokenRes.json() as { access_token?: string; open_id?: string; error?: string; error_description?: string }
+      if (!tokenData.access_token) {
+        logger.error({ tokenData }, 'TikTok token exchange returned no access_token')
+        res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
+        return
+      }
+      accessToken = tokenData.access_token
       externalProfileId = tokenData.open_id ?? ''
       if (accessToken && externalProfileId) {
         try {
@@ -183,8 +224,19 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
           code,
         }),
       })
-      const tokenData = await tokenRes.json() as { access_token?: string }
-      accessToken = tokenData.access_token ?? ''
+      if (!tokenRes.ok) {
+        const errBody = await tokenRes.text()
+        logger.error({ status: tokenRes.status, body: errBody }, 'Google token exchange failed')
+        res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
+        return
+      }
+      const tokenData = await tokenRes.json() as { access_token?: string; error?: string; error_description?: string }
+      if (!tokenData.access_token) {
+        logger.error({ tokenData }, 'Google token exchange returned no access_token')
+        res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
+        return
+      }
+      accessToken = tokenData.access_token
       if (accessToken) {
         const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: `Bearer ${accessToken}` } })
         const profile = await profileRes.json() as { id?: string; name?: string }
@@ -433,6 +485,102 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   } catch (err) {
     logger.error({ err }, 'Delete social account error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to disconnect social account')
+  }
+})
+
+// POST /api/v1/social-accounts/:id/refresh
+// Attempts to refresh the access token for platforms that support it (Facebook long-lived, LinkedIn)
+router.post('/:id/refresh', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params
+  try {
+    const account = await prisma.socialAccount.findUnique({ where: { id }, include: { workspace: true } })
+    if (!account || account.workspace.ownerId !== req.user!.id) {
+      sendError(res, 404, 'NOT_FOUND', 'Social account not found')
+      return
+    }
+
+    const platform = account.platform
+
+    if (platform === 'FACEBOOK' || platform === 'INSTAGRAM') {
+      // Facebook long-lived tokens can be refreshed by exchanging with fb_exchange_token
+      const currentToken = decryptToken(account.accessToken)
+      const refreshRes = await fetch(
+        `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${currentToken}`,
+      )
+      if (!refreshRes.ok) {
+        sendError(res, 502, 'REFRESH_FAILED', 'Facebook token refresh failed')
+        return
+      }
+      const refreshData = await refreshRes.json() as { access_token?: string; expires_in?: number }
+      if (!refreshData.access_token) {
+        sendError(res, 502, 'REFRESH_FAILED', 'Facebook token refresh returned no token')
+        return
+      }
+      const expiresAt = refreshData.expires_in
+        ? new Date(Date.now() + refreshData.expires_in * 1000)
+        : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000) // default 60 days
+      await prisma.socialAccount.update({
+        where: { id },
+        data: { accessToken: encryptToken(refreshData.access_token), tokenExpiresAt: expiresAt },
+      })
+      logger.info({ accountId: id, platform }, 'Token refreshed')
+      res.json({ success: true, expiresAt })
+      return
+    }
+
+    if (platform === 'LINKEDIN') {
+      if (!account.refreshToken) {
+        sendError(res, 400, 'NO_REFRESH_TOKEN', 'No refresh token stored for this LinkedIn account')
+        return
+      }
+      const rawRefresh = decryptToken(account.refreshToken)
+      const tokenRes = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: rawRefresh,
+          client_id: process.env.LINKEDIN_CLIENT_ID ?? '',
+          client_secret: process.env.LINKEDIN_CLIENT_SECRET ?? '',
+        }),
+      })
+      if (!tokenRes.ok) {
+        const errBody = await tokenRes.text()
+        logger.error({ status: tokenRes.status, body: errBody }, 'LinkedIn token refresh failed')
+        sendError(res, 502, 'REFRESH_FAILED', 'LinkedIn token refresh failed')
+        return
+      }
+      const tokenData = await tokenRes.json() as {
+        access_token?: string
+        refresh_token?: string
+        expires_in?: number
+        error?: string
+      }
+      if (!tokenData.access_token) {
+        logger.error({ tokenData }, 'LinkedIn token refresh returned no access_token')
+        sendError(res, 502, 'REFRESH_FAILED', 'LinkedIn token refresh returned no token')
+        return
+      }
+      const expiresAt = tokenData.expires_in
+        ? new Date(Date.now() + tokenData.expires_in * 1000)
+        : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+      await prisma.socialAccount.update({
+        where: { id },
+        data: {
+          accessToken: encryptToken(tokenData.access_token),
+          ...(tokenData.refresh_token ? { refreshToken: encryptToken(tokenData.refresh_token) } : {}),
+          tokenExpiresAt: expiresAt,
+        },
+      })
+      logger.info({ accountId: id, platform }, 'LinkedIn token refreshed')
+      res.json({ success: true, expiresAt })
+      return
+    }
+
+    sendError(res, 400, 'NOT_SUPPORTED', `Token refresh is not supported for platform: ${platform}`)
+  } catch (err) {
+    logger.error({ err }, 'Token refresh error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to refresh token')
   }
 })
 

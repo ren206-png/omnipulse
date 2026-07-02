@@ -1,6 +1,11 @@
+import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { DashboardShell } from './DashboardShell'
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+}
 
 interface Workspace {
   id: string

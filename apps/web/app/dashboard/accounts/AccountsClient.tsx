@@ -304,21 +304,34 @@ function ConnectModal({ platform, onClose, onSuccess, token, workspaceId, apiUrl
   )
 }
 
+const REFRESH_SUPPORTED_PLATFORMS: Platform[] = ['FACEBOOK', 'INSTAGRAM', 'LINKEDIN']
+
 function PlatformCard({
   platform,
   account,
   onConnect,
   onDisconnect,
+  onRefresh,
   deleting,
+  refreshing,
 }: {
   platform: Platform
   account: SocialAccount | undefined
   onConnect: (p: Platform) => void
   onDisconnect: (id: string) => void
+  onRefresh: (id: string) => void
   deleting: boolean
+  refreshing: boolean
 }) {
   const config = PLATFORM_CONFIG[platform]
   const connected = !!account
+
+  const tokenExpiry = (() => {
+    if (!account?.tokenExpiresAt) return null
+    const expiresAt = new Date(account.tokenExpiresAt)
+    const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    return { expiresAt, daysLeft, isExpired: daysLeft <= 0 }
+  })()
 
   return (
     <div
@@ -341,10 +354,17 @@ function PlatformCard({
             {platform.charAt(0) + platform.slice(1).toLowerCase()}
           </p>
           {connected ? (
-            <span className="inline-flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 px-2 py-0.5 rounded-full font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-              Connected
-            </span>
+            tokenExpiry?.isExpired ? (
+              <span className="inline-flex items-center gap-1 text-xs text-red-600 bg-red-50 dark:bg-red-950/40 dark:text-red-400 px-2 py-0.5 rounded-full font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                Token expired
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 px-2 py-0.5 rounded-full font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                Connected
+              </span>
+            )
           ) : (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 inline-block" />
@@ -368,59 +388,80 @@ function PlatformCard({
         </p>
       )}
 
-      {/* LinkedIn token expiry warning */}
-      {connected && platform === 'LINKEDIN' && account?.tokenExpiresAt && (() => {
-        const expiresAt = new Date(account.tokenExpiresAt)
-        const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-        if (daysLeft > 7) return null
-        return (
-          <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md px-2 py-1.5 leading-relaxed flex items-center gap-1">
-            <span>⚠️</span>
-            {daysLeft <= 0
-              ? 'Token expired — reconnect to continue posting'
-              : `Token expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'} — reconnect soon`}
-          </p>
-        )
-      })()}
-
-      {/* Action button */}
-      {connected && account ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full text-xs text-destructive hover:text-destructive hover:bg-destructive/10 border border-destructive/20 h-8 mt-auto"
-          onClick={() => onDisconnect(account.id)}
-          disabled={deleting}
-        >
-          {deleting ? (
-            <span className="flex items-center gap-1.5">
-              <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
-              Disconnecting…
-            </span>
-          ) : 'Disconnect'}
-        </Button>
-      ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full text-xs h-8 mt-auto border transition-colors hover:text-white"
-          style={{
-            borderColor: config.color,
-            color: config.color,
-          }}
-          onClick={() => onConnect(platform)}
-          onMouseEnter={(e) => {
-            ;(e.currentTarget as HTMLButtonElement).style.background = config.color
-            ;(e.currentTarget as HTMLButtonElement).style.color = '#fff'
-          }}
-          onMouseLeave={(e) => {
-            ;(e.currentTarget as HTMLButtonElement).style.background = ''
-            ;(e.currentTarget as HTMLButtonElement).style.color = config.color
-          }}
-        >
-          Connect
-        </Button>
+      {/* Token expiry warning for all platforms */}
+      {connected && tokenExpiry && tokenExpiry.daysLeft <= 7 && (
+        <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-md px-2 py-1.5 leading-relaxed flex items-center gap-1">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="flex-shrink-0"><path d="m10.29 3.86-8.57 14.87A2 2 0 0 0 3.43 21h17.14a2 2 0 0 0 1.71-3.27L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          {tokenExpiry.isExpired
+            ? 'Token expired — reconnect or refresh to continue posting'
+            : `Token expires in ${tokenExpiry.daysLeft} day${tokenExpiry.daysLeft === 1 ? '' : 's'}`}
+        </p>
       )}
+
+      {/* Action buttons */}
+      <div className="flex flex-col gap-2 mt-auto">
+        {connected && account ? (
+          <>
+            {/* Refresh Token button — shown for expired tokens on supported platforms */}
+            {tokenExpiry?.isExpired && REFRESH_SUPPORTED_PLATFORMS.includes(platform) && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs h-8 border-amber-400 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                onClick={() => onRefresh(account.id)}
+                disabled={refreshing || deleting}
+              >
+                {refreshing ? (
+                  <span className="flex items-center gap-1.5">
+                    <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                    Refreshing…
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    Refresh Token
+                  </span>
+                )}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-xs text-destructive hover:text-destructive hover:bg-destructive/10 border border-destructive/20 h-8"
+              onClick={() => onDisconnect(account.id)}
+              disabled={deleting || refreshing}
+            >
+              {deleting ? (
+                <span className="flex items-center gap-1.5">
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/></svg>
+                  Disconnecting…
+                </span>
+              ) : 'Disconnect'}
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full text-xs h-8 border transition-colors hover:text-white"
+            style={{
+              borderColor: config.color,
+              color: config.color,
+            }}
+            onClick={() => onConnect(platform)}
+            onMouseEnter={(e) => {
+              ;(e.currentTarget as HTMLButtonElement).style.background = config.color
+              ;(e.currentTarget as HTMLButtonElement).style.color = '#fff'
+            }}
+            onMouseLeave={(e) => {
+              ;(e.currentTarget as HTMLButtonElement).style.background = ''
+              ;(e.currentTarget as HTMLButtonElement).style.color = config.color
+            }}
+          >
+            Connect
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
@@ -432,6 +473,7 @@ export function AccountsClient({ token }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [connectingPlatform, setConnectingPlatform] = useState<Platform | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null)
   const didHandleParams = useRef(false)
 
@@ -476,6 +518,10 @@ export function AccountsClient({ token }: Props) {
       if (connected) showToast(`${connected} connected successfully!`, 'success')
       else if (oauthError === 'no_ig_business_account') {
         showToast('No Instagram Business Account found. Convert your account to Business/Creator and link it to a Facebook Page first.', 'info')
+      } else if (oauthError === 'TOKEN_EXCHANGE_FAILED') {
+        showToast('OAuth failed: could not exchange authorization code for an access token. Please try again.', 'info')
+      } else if (oauthError === 'invalid_state') {
+        showToast('OAuth failed: invalid or tampered state parameter. Please try connecting again.', 'info')
       } else if (oauthError) showToast(`OAuth failed: ${oauthError}`, 'info')
     }
   }, [])
@@ -500,6 +546,24 @@ export function AccountsClient({ token }: Props) {
       // account list stays intact — user can retry
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  async function handleRefresh(id: string) {
+    setRefreshingId(id)
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/social-accounts/${id}/refresh`, { method: 'POST', headers })
+      if (!res.ok) {
+        const body = (await res.json()) as { error?: string }
+        showToast(body.error ?? 'Token refresh failed — try reconnecting', 'info')
+        return
+      }
+      showToast('Token refreshed successfully!', 'success')
+      if (activeWorkspace) fetchAccounts(activeWorkspace.id)
+    } catch {
+      showToast('Network error — could not refresh token', 'info')
+    } finally {
+      setRefreshingId(null)
     }
   }
 
@@ -567,7 +631,9 @@ export function AccountsClient({ token }: Props) {
                 account={account}
                 onConnect={handleOAuthConnect}
                 onDisconnect={handleDisconnect}
+                onRefresh={handleRefresh}
                 deleting={deletingId === account?.id}
+                refreshing={refreshingId === account?.id}
               />
             )
           })}

@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /signup
+
+# Block private/user pages from indexing
+Disallow: /dashboard/
+Disallow: /portal/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /reports/
+Disallow: /invite/
+Disallow: /onboarding/
+Disallow: /reset-password/
+Disallow: /logout/
+
+Sitemap: https://getomnipulse.com/sitemap.xml

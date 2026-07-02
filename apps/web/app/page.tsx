@@ -1,4 +1,18 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
+
+export const metadata: Metadata = {
+  title: 'OmniPulse — Social Media Management Platform',
+  description:
+    'Schedule posts, track analytics, manage your inbox, and grow your brand across Instagram, X, LinkedIn, TikTok, and Facebook — all in one place.',
+  alternates: { canonical: 'https://getomnipulse.com' },
+  openGraph: {
+    title: 'OmniPulse — Social Media Management Platform',
+    description: 'Schedule posts, track analytics, and grow your brand across every platform.',
+    url: 'https://getomnipulse.com',
+    images: [{ url: 'https://getomnipulse.com/og-image.png', width: 1200, height: 630 }],
+  },
+}
 
 const FEATURES = [
   {
@@ -257,6 +271,27 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'SoftwareApplication',
+            name: 'OmniPulse',
+            applicationCategory: 'BusinessApplication',
+            operatingSystem: 'Web',
+            description:
+              'Social media management platform for scheduling, analytics, and team collaboration.',
+            url: 'https://getomnipulse.com',
+            offers: [
+              { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free Plan' },
+              { '@type': 'Offer', price: '29', priceCurrency: 'USD', name: 'Pro Plan' },
+              { '@type': 'Offer', price: '79', priceCurrency: 'USD', name: 'Agency Plan' },
+            ],
+          }),
+        }}
+      />
     </div>
   )
 }
