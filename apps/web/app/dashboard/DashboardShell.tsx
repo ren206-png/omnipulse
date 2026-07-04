@@ -237,7 +237,7 @@ function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNav
         <Link
           href="/dashboard/calendar?new=1"
           onClick={onNavClick}
-          className="flex items-center gap-2 mx-3 mt-1 mb-2 px-3 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          className="flex items-center gap-2 mx-3 mt-1 mb-2 px-3 py-2 rounded-md text-sm font-medium border border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
         >
           ✍️ New Post
         </Link>
