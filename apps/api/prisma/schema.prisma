@@ -61,6 +61,7 @@ model Workspace {
   brandLogoUrl           String?
   brandColor             String?              @default("#6366f1")
   customDomain           String?              @unique
+  seoMetadata         PostSeoMetadata[]
 }
 
 enum Plan {
@@ -160,6 +161,7 @@ model ScheduledPost {
   comments             PostComment[]
   campaignId           String?
   campaign             Campaign?             @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  seoMetadata         PostSeoMetadata?
 }
 
 model PostComment {
@@ -183,6 +185,7 @@ model PlatformVariant {
   content   String
   hashtags  String[]
   mediaUrls String[]
+  altText             String?
   createdAt DateTime      @default(now())
 
   @@unique([postId, platform])
@@ -464,6 +467,7 @@ model MediaAsset {
   mimeType    String
   size        Int       @default(0)
   tags        String[]
+  altText             String?
   createdAt   DateTime  @default(now())
 
   @@index([workspaceId, createdAt])
@@ -480,6 +484,25 @@ model ShortLink {
   utmCampaign String?
   clicks      Int       @default(0)
   createdAt   DateTime  @default(now())
+
+  @@index([workspaceId])
+}
+
+model PostSeoMetadata {
+  id              String        @id @default(cuid())
+  postId          String        @unique
+  post            ScheduledPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  workspaceId     String
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  metaTitle       String?
+  metaDescription String?
+  ogTitle         String?
+  ogDescription   String?
+  ogType          String?
+  ogImageUrl      String?
+  keywords        String[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   @@index([workspaceId])
 }
