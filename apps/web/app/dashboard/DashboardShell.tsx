@@ -42,7 +42,7 @@ const NAV_GROUPS = [
   },
   {
     label: 'Insights',
-    defaultOpen: false,
+    defaultOpen: true,
     links: [
       { href: '/dashboard/analytics', label: 'Analytics', icon: '📊' },
       { href: '/dashboard/insights', label: 'Insights', icon: '💡' },
@@ -54,7 +54,7 @@ const NAV_GROUPS = [
   },
   {
     label: 'Tools',
-    defaultOpen: false,
+    defaultOpen: true,
     links: [
       { href: '/dashboard/image-editor', label: 'Image Editor', icon: '🖼️' },
       { href: '/dashboard/media', label: 'Media Library', icon: '🖼️' },
