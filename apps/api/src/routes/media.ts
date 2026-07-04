@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { env } from '../config/env.js'
 import { prisma } from '../lib/prisma.js'
 import { sendError } from '../lib/apiError.js'
+import { generateAndPersistAltText } from '../services/seo/altTextGenerator.js'
 
 const router = Router()
 
@@ -139,6 +140,10 @@ router.post('/library', requireAuth, async (req: Request, res: Response): Promis
     const asset = await (prisma as any).mediaAsset.create({
       data: { workspaceId, url, filename, mimeType: mimeType ?? 'application/octet-stream', size: size ?? 0, tags: tags ?? [] },
     })
+    // Fire-and-forget alt-text generation for image assets (non-blocking)
+    if (asset.mimeType.startsWith('image/') && asset.url) {
+      generateAndPersistAltText(asset.id, asset.url, asset.filename, prisma as any)
+    }
     res.status(201).json({ asset })
   } catch {
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to save media asset')

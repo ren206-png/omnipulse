@@ -273,6 +273,7 @@ interface PlatformVariantInput {
   content: string
   hashtags?: string[]
   mediaUrls?: string[]
+  altText?: string
 }
 
 // Validate and normalise platformVariants from request body.
@@ -303,6 +304,7 @@ function validateVariants(raw: unknown): { variants: PlatformVariantInput[]; err
       content: (item.content as string).trim(),
       hashtags: Array.isArray(item.hashtags) ? (item.hashtags as string[]) : [],
       mediaUrls: Array.isArray(item.mediaUrls) ? (item.mediaUrls as string[]) : [],
+      ...(typeof item.altText === 'string' && item.altText ? { altText: item.altText } : {}),
     }
     if (existing >= 0) out[existing] = entry
     else out.push(entry)
@@ -374,6 +376,7 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
               content: v.content,
               hashtags: v.hashtags ?? [],
               mediaUrls: v.mediaUrls ?? [],
+              ...(v.altText ? { altText: v.altText } : {}),
             })),
           },
         } : {}),
@@ -480,6 +483,7 @@ router.post('/queue-schedule', async (req: Request, res: Response): Promise<void
               content: v.content,
               hashtags: v.hashtags ?? [],
               mediaUrls: v.mediaUrls ?? [],
+              ...(v.altText ? { altText: v.altText } : {}),
             })),
           },
         } : {}),
@@ -554,6 +558,7 @@ router.post('/draft', async (req: Request, res: Response): Promise<void> => {
               content: v.content,
               hashtags: v.hashtags ?? [],
               mediaUrls: v.mediaUrls ?? [],
+              ...(v.altText ? { altText: v.altText } : {}),
             })),
           },
         } : {}),
@@ -958,6 +963,7 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
             content: v.content,
             hashtags: v.hashtags ?? [],
             mediaUrls: v.mediaUrls ?? [],
+            ...(v.altText ? { altText: v.altText } : {}),
           })),
         })
       }

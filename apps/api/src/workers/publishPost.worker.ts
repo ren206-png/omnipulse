@@ -215,7 +215,7 @@ const worker = new Worker(
     const errors: Record<string, string> = {}
 
     // Build a lookup of platform → variant (falls back to master content)
-    type Variant = { platform: string; content: string; hashtags: string[]; mediaUrls: string[] }
+    type Variant = { platform: string; content: string; hashtags: string[]; mediaUrls: string[]; altText?: string | null }
     const variantMap: Record<string, Variant> = {}
     for (const v of (post.platformVariants ?? []) as Variant[]) {
       variantMap[v.platform] = v
@@ -320,7 +320,7 @@ const worker = new Worker(
               liAccount.linkedinPersonUrn,
               content,
               mediaUrls[0],
-              content.slice(0, 120),
+              variant?.altText ?? post.content.slice(0, 120),
             )
           } else {
             result = await publishLinkedInText(rawToken, liAccount.linkedinPersonUrn, content)
