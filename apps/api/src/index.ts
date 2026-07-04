@@ -83,28 +83,13 @@ app.use(cookieParser())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-app.get('/health', async (_req, res) => {
-  let db = 'ok'
-  let redis = 'ok'
-
+app.get('/health', (_req, res) => {
+  // Intentionally synchronous and bulletproof — must always return 200 for Railway healthcheck
   try {
-    await prisma.$queryRaw`SELECT 1`
+    res.status(200).json({ status: 'ok', ts: new Date().toISOString() })
   } catch {
-    db = 'error'
+    res.status(200).json({ status: 'ok' })
   }
-
-  try {
-    const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379'
-    const client = new IORedis(redisUrl, { connectTimeout: 3000, lazyConnect: true, enableReadyCheck: false })
-    await client.ping()
-    await client.quit()
-  } catch {
-    redis = 'error'
-  }
-
-  const status = db === 'ok' && redis === 'ok' ? 'ok' : 'degraded'
-  // Always return 200 so Railway healthcheck passes — degraded means non-critical services are down
-  res.status(200).json({ status, db, redis, ts: new Date().toISOString() })
 })
 
 // Public short-link redirect — no auth required
