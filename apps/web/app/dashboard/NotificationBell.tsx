@@ -39,6 +39,7 @@ export function NotificationBell({ token }: Props) {
   const fetchNotifications = useCallback(async () => {
     try {
       const res = await fetch(`${apiUrl}/api/v1/notifications?limit=20`, { headers: { Authorization: `Bearer ${token}` } })
+      if (res.status === 401) { window.location.href = '/logout'; return }
       if (!res.ok) return
       const data = (await res.json()) as { notifications: Notification[]; unreadCount: number }
       setNotifications(data.notifications)

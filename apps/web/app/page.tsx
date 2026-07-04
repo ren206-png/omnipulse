@@ -117,7 +117,7 @@ export default function HomePage() {
               Sign in
             </Link>
             <Link
-              href="/register"
+              href="/signup"
               className="text-sm font-semibold bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors"
             >
               Get started
@@ -138,7 +138,7 @@ export default function HomePage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-14">
             <Link
-              href="/register"
+              href="/signup"
               className="inline-flex items-center justify-center px-8 py-3.5 text-base font-semibold bg-white text-indigo-700 rounded-xl hover:bg-indigo-50 transition-colors shadow-lg shadow-black/20"
             >
               Start for Free
@@ -233,7 +233,7 @@ export default function HomePage() {
                   ))}
                 </ul>
                 <Link
-                  href="/register"
+                  href="/signup"
                   className={`text-center text-sm font-semibold py-3 px-6 rounded-xl transition-colors ${
                     plan.highlighted
                       ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
@@ -287,7 +287,7 @@ export default function HomePage() {
             offers: [
               { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free Plan' },
               { '@type': 'Offer', price: '29', priceCurrency: 'USD', name: 'Pro Plan' },
-              { '@type': 'Offer', price: '79', priceCurrency: 'USD', name: 'Agency Plan' },
+              { '@type': 'Offer', price: '99', priceCurrency: 'USD', name: 'Agency Plan' },
             ],
           }),
         }}

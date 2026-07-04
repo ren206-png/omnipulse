@@ -44,9 +44,6 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://getomnipulse.com',
   },
-  verification: {
-    google: 'add-your-google-site-verification-here',
-  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -62,6 +59,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             }
           })();
         ` }} />
+        {process.env.GOOGLE_SITE_VERIFICATION && (
+          <meta name="google-site-verification" content={process.env.GOOGLE_SITE_VERIFICATION} />
+        )}
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#6366f1" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

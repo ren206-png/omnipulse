@@ -21,7 +21,7 @@ interface BioPageData {
   links: BioLink[]
 }
 
-export const THEMES: Record<string, { bg: string; card: string; text: string; subtext: string; button: string; buttonText: string }> = {
+const THEMES: Record<string, { bg: string; card: string; text: string; subtext: string; button: string; buttonText: string }> = {
   light: {
     bg: 'bg-gradient-to-br from-gray-100 to-gray-200',
     card: 'bg-white',

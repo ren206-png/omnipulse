@@ -8,6 +8,7 @@ import { env } from '../config/env.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 import { rateLimit } from '../middleware/rateLimit.js'
+import { requireAuth } from '../middleware/auth.js'
 import { sendPasswordResetEmail } from '../lib/email.js'
 import { TOTP, Secret } from 'otpauth'
 
@@ -247,6 +248,24 @@ router.post('/reset-password', resetLimiter, async (req: Request, res: Response)
   } catch (err) {
     logger.error({ err }, 'Reset password error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to reset password')
+  }
+})
+
+// GET /api/v1/auth/me — return the authenticated user's profile from the JWT
+router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { id: true, email: true, role: true, createdAt: true },
+    })
+    if (!user) {
+      sendError(res, 401, 'UNAUTHORIZED', 'User not found')
+      return
+    }
+    res.json({ user })
+  } catch (err) {
+    logger.error({ err }, '/me error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch user')
   }
 })
 
