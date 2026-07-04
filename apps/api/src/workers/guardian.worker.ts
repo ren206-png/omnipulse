@@ -19,13 +19,10 @@ export async function startGuardianWorker(): Promise<void> {
   if (_guardianWorker) return // already running
 
   // Ensure the repeatable job exists (upsert-safe — BullMQ deduplicates by key)
-  await guardianQueue.add(
+  await guardianQueue.upsertJobScheduler(
     'guardian-scan',
-    {},
-    {
-      repeat: { every: INTERVAL_MS },
-      jobId: 'guardian-scan-repeatable',
-    },
+    { every: INTERVAL_MS },
+    { data: {} },
   )
 
   _guardianWorker = new Worker(
