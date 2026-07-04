@@ -12,6 +12,7 @@ import { ToastProvider, ToastViewport } from '@/components/ui/toast'
 import { NotificationBell } from './NotificationBell'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { CommandPalette } from './components/CommandPalette'
+import { OnboardingWidget } from './components/OnboardingWidget'
 
 interface Workspace { id: string; name: string }
 
@@ -366,6 +367,12 @@ function MobileBottomNav() {
   )
 }
 
+function OnboardingWidgetConnector() {
+  const { activeWorkspace } = useWorkspace()
+  if (!activeWorkspace?.id) return null
+  return <OnboardingWidget workspaceId={activeWorkspace.id} />
+}
+
 export function DashboardShell({
   children,
   token,
@@ -386,6 +393,7 @@ export function DashboardShell({
         <MobileBottomNav />
         <ToastViewport />
         <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} token={token} />
+        <OnboardingWidgetConnector />
       </ToastProvider>
     </WorkspaceProvider>
   )
