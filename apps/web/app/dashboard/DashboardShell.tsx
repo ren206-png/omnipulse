@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, type ReactNode } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext'
@@ -13,6 +13,7 @@ import { NotificationBell } from './NotificationBell'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { CommandPalette } from './components/CommandPalette'
 import { OnboardingWidget } from './components/OnboardingWidget'
+import { SESSION_EXPIRED_EVENT } from './hooks/useAuthFetch'
 
 interface Workspace { id: string; name: string }
 
@@ -373,6 +374,20 @@ function OnboardingWidgetConnector() {
   return <OnboardingWidget workspaceId={activeWorkspace.id} />
 }
 
+/** Banner shown when useAuthFetch detects a 401 / expired JWT. */
+function SessionExpiredBanner({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      aria-live="assertive"
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-5 py-3 text-sm font-medium text-destructive shadow-lg backdrop-blur-sm"
+    >
+      <span>⚠️</span>
+      <span>{message}</span>
+    </div>
+  )
+}
+
 export function DashboardShell({
   children,
   token,
@@ -383,9 +398,23 @@ export function DashboardShell({
   initialWorkspaces: Workspace[]
 }) {
   const [cmdOpen, setCmdOpen] = useState(false)
+  const [expiredMessage, setExpiredMessage] = useState<string | null>(null)
+
+  useEffect(() => {
+    function handleExpired(e: Event) {
+      const detail = (e as CustomEvent<{ message: string }>).detail
+      setExpiredMessage(detail?.message ?? 'Session expired — please sign in again')
+      // Auto-dismiss after 3 s (redirect from useAuthFetch fires at 2 s)
+      setTimeout(() => setExpiredMessage(null), 3000)
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleExpired)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleExpired)
+  }, [])
+
   return (
     <WorkspaceProvider initialWorkspaces={initialWorkspaces}>
       <ToastProvider>
+        {expiredMessage && <SessionExpiredBanner message={expiredMessage} />}
         <div className="flex min-h-screen">
           <Sidebar token={token} onOpenCmd={() => setCmdOpen(true)} />
           <main className="flex-1 overflow-auto p-6 pt-20 pb-20 md:pt-6 md:pb-6 md:ml-0">{children}</main>
