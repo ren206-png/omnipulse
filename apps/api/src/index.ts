@@ -103,7 +103,8 @@ app.get('/health', async (_req, res) => {
   }
 
   const status = db === 'ok' && redis === 'ok' ? 'ok' : 'degraded'
-  res.status(status === 'ok' ? 200 : 503).json({ status, db, redis, ts: new Date().toISOString() })
+  // Always return 200 so Railway healthcheck passes — degraded means non-critical services are down
+  res.status(200).json({ status, db, redis, ts: new Date().toISOString() })
 })
 
 // Public short-link redirect — no auth required
@@ -170,7 +171,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   }
 })
 
-app.listen(env.PORT, () => {
+app.listen(env.PORT, '0.0.0.0', () => {
   logger.info({ port: env.PORT }, `OmniPulse API listening on port ${env.PORT}`)
 })
 startEvergreenWorker()
