@@ -44,4 +44,7 @@ export const env = {
   // AI feature daily caps (per-user)
   AI_MULTIPLIER_DAILY_LIMIT: parseInt(process.env.AI_MULTIPLIER_DAILY_LIMIT ?? '50', 10),
   AI_VISION_DAILY_LIMIT: parseInt(process.env.AI_VISION_DAILY_LIMIT ?? '50', 10),
+  // SEO Data Gateway
+  SEO_DATA_PROVIDER: process.env.SEO_DATA_PROVIDER ?? 'mock',
+  SEO_DATA_API_KEY: process.env.SEO_DATA_API_KEY ?? '',
 }
