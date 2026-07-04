@@ -1,5 +1,4 @@
 import 'dotenv/config'
-import { logger } from '../lib/logger.js'
 
 const required = ['DATABASE_URL', 'REDIS_URL', 'JWT_SECRET', 'JWT_EXPIRES_IN'] as const
 
@@ -15,8 +14,9 @@ for (const key of required) {
 if (process.env.NODE_ENV === 'production') {
   const encKey = process.env.TOKEN_ENCRYPTION_KEY ?? ''
   if (!encKey || encKey.length !== 64) {
-    logger.error(
-      'TOKEN_ENCRYPTION_KEY must be a 64-character hex string (32 bytes) in production. ' +
+    // Use console.error here — logger cannot be imported into env.ts (circular dependency)
+    console.error(
+      '[STARTUP] TOKEN_ENCRYPTION_KEY must be a 64-character hex string (32 bytes) in production. ' +
         'Social account tokens will not be encrypted correctly.',
     )
   }
