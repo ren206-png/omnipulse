@@ -10,13 +10,27 @@ router.use(requireAuth)
 
 const db = prisma as any
 
+async function getWorkspaceRole(
+  workspaceId: string,
+  userId: string,
+): Promise<'OWNER' | 'ADMIN' | 'MEMBER' | null> {
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  if (!workspace) return null
+  if (workspace.ownerId === userId) return 'OWNER'
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+  })
+  return (membership?.role as 'ADMIN' | 'MEMBER') ?? null
+}
+
 // GET /api/v1/competitors?workspaceId=
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE', 'workspaceId required'); return }
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-    if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     const competitors = await db.competitorAccount.findMany({
       where: { workspaceId },
       include: { snapshots: { orderBy: { recordedAt: 'desc' }, take: 30 } },
@@ -47,8 +61,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-    if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
 
     const competitor = await db.competitorAccount.create({
       data: {
@@ -93,8 +107,8 @@ router.post('/:id/snapshot', async (req: Request, res: Response): Promise<void> 
   try {
     const competitor = await db.competitorAccount.findUnique({ where: { id } })
     if (!competitor) { sendError(res, 404, 'NOT_FOUND', 'Not found'); return }
-    const workspace = await prisma.workspace.findUnique({ where: { id: competitor.workspaceId } })
-    if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const role = await getWorkspaceRole(competitor.workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
 
     const snapshot = await db.competitorSnapshot.create({
       data: {
@@ -119,8 +133,8 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const competitor = await db.competitorAccount.findUnique({ where: { id } })
     if (!competitor) { sendError(res, 404, 'NOT_FOUND', 'Not found'); return }
-    const workspace = await prisma.workspace.findUnique({ where: { id: competitor.workspaceId } })
-    if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const role = await getWorkspaceRole(competitor.workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     await db.competitorAccount.delete({ where: { id } })
     res.json({ message: 'Removed' })
   } catch (err) {

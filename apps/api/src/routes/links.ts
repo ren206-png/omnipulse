@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
+import { env } from '../config/env.js'
 
 const router = Router()
 router.use(requireAuth)
@@ -73,7 +74,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     res.status(201).json({
       id: link.id,
       slug: link.slug,
-      shortUrl: `https://getomnipulse.com/l/${link.slug}`,
+      shortUrl: `${env.APP_URL}/l/${link.slug}`,
       originalUrl: link.originalUrl,
       clicks: link.clicks,
       createdAt: link.createdAt,

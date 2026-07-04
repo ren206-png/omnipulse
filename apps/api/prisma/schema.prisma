@@ -162,6 +162,8 @@ model ScheduledPost {
   campaignId           String?
   campaign             Campaign?             @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   seoMetadata         PostSeoMetadata?
+
+  @@index([status, scheduledFor])
 }
 
 model PostComment {

@@ -11,6 +11,20 @@ const router = Router()
 
 router.use(requireAuth)
 
+async function getWorkspaceRole(
+  workspaceId: string,
+  userId: string,
+): Promise<'OWNER' | 'ADMIN' | 'MEMBER' | null> {
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  if (!workspace) return null
+  if (workspace.ownerId === userId) return 'OWNER'
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+  })
+  return (membership?.role as 'ADMIN' | 'MEMBER') ?? null
+}
+
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }
   if (!workspaceId) {
@@ -19,8 +33,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-    if (!workspace || workspace.ownerId !== req.user!.id) {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
       return
     }
@@ -62,8 +76,8 @@ router.get('/best-times', async (req: Request, res: Response): Promise<void> => 
   }
 
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-    if (!workspace || workspace.ownerId !== req.user!.id) {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
       return
     }
@@ -106,8 +120,8 @@ router.get('/top-posts', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-    if (!workspace || workspace.ownerId !== req.user!.id) {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
       return
     }
@@ -141,8 +155,8 @@ router.post('/sync', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }
 
   if (workspaceId) {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-    if (!workspace || workspace.ownerId !== req.user!.id) {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
       return
     }
@@ -164,8 +178,8 @@ router.get('/insights', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-    if (!workspace) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
 
     const daysNum = Math.min(Math.max(parseInt(days, 10) || 30, 7), 365)
     const since = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000)

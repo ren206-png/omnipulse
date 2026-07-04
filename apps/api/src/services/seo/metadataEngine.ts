@@ -103,15 +103,18 @@ keywords must be an array of exactly 5 strings relevant to the post content.`
     } catch {
       // retry once with stricter instruction
       logger.warn({ text }, '[seo] JSON parse failed on first attempt — retrying')
-      const retry = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 512,
-        messages: [
-          { role: 'user', content: prompt },
-          { role: 'assistant', content: text },
-          { role: 'user', content: 'Your response was not valid JSON. Reply with ONLY the raw JSON object, nothing else.' },
-        ],
-      })
+      const retry = await client.messages.create(
+        {
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 512,
+          messages: [
+            { role: 'user', content: prompt },
+            { role: 'assistant', content: text },
+            { role: 'user', content: 'Your response was not valid JSON. Reply with ONLY the raw JSON object, nothing else.' },
+          ],
+        },
+        { signal: controller.signal },
+      )
       const retryText = retry.content[0]?.type === 'text' ? retry.content[0].text.trim() : ''
       try {
         parsed = JSON.parse(retryText)

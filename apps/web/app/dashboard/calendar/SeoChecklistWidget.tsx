@@ -64,7 +64,7 @@ export function SeoChecklistWidget({
       )
       if (!res.ok) return
       const data = await res.json()
-      const parsed: SeoMetadata = data ?? null
+      const parsed: SeoMetadata = data?.seo ?? null
       setSeoData(parsed)
       if (parsed) {
         setEditTitle(parsed.metaTitle ?? '')
@@ -89,7 +89,7 @@ export function SeoChecklistWidget({
       })
       if (!res.ok) return
       const data = await res.json()
-      setKeywordVolume(data ?? null)
+      setKeywordVolume(data?.results ?? null)
     } catch {
       // silently fail
     } finally {
