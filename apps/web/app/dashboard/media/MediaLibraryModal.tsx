@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { Input } from '@/components/ui/input'
 
 interface MediaAsset {
   id: string
@@ -9,6 +10,7 @@ interface MediaAsset {
   size: number
   url: string
   createdAt: string
+  altText?: string | null
 }
 
 interface Props {
@@ -29,6 +31,7 @@ export function MediaLibraryModal({ token, workspaceId, onSelect, onClose }: Pro
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [altTextMap, setAltTextMap] = useState<Record<string, string>>({})
   const fileRef = useRef<HTMLInputElement>(null)
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
 
@@ -39,7 +42,13 @@ export function MediaLibraryModal({ token, workspaceId, onSelect, onClose }: Pro
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await res.json() as { assets: MediaAsset[] }
-      setAssets(data.assets ?? [])
+      const fetched = data.assets ?? []
+      setAssets(fetched)
+      const map: Record<string, string> = {}
+      for (const a of fetched) {
+        map[a.id] = a.altText ?? ''
+      }
+      setAltTextMap(map)
     } catch {
       setError('Failed to load media')
     } finally {
@@ -77,6 +86,31 @@ export function MediaLibraryModal({ token, workspaceId, onSelect, onClose }: Pro
       headers: { Authorization: `Bearer ${token}` },
     })
     setAssets((prev) => prev.filter((a) => a.id !== id))
+  }
+
+  async function handleAltTextBlur(assetId: string, prevValue: string) {
+    const newValue = altTextMap[assetId] ?? ''
+    if (newValue === prevValue) return
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/media/library/${assetId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ altText: newValue }),
+      })
+      if (!res.ok) {
+        setAltTextMap((prev) => ({ ...prev, [assetId]: prevValue }))
+        return
+      }
+      setAssets((prev) =>
+        prev.map((a) => a.id === assetId ? { ...a, altText: newValue } : a)
+      )
+    } catch {
+      console.error('Failed to update alt text')
+      setAltTextMap((prev) => ({ ...prev, [assetId]: prevValue }))
+    }
   }
 
   return (
@@ -147,37 +181,51 @@ export function MediaLibraryModal({ token, workspaceId, onSelect, onClose }: Pro
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-2">
               {assets.map((asset) => (
-                <div
-                  key={asset.id}
-                  className="group relative aspect-square rounded-lg overflow-hidden border bg-muted cursor-pointer hover:border-primary transition-colors"
-                  onClick={() => onSelect(asset.url)}
-                >
-                  {asset.mimeType.startsWith('video/') ? (
-                    <video
-                      src={asset.url}
-                      className="w-full h-full object-cover"
-                      muted
-                    />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={asset.url}
-                      alt={asset.originalName}
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                  {/* Overlay */}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex flex-col justify-between p-1.5 opacity-0 group-hover:opacity-100">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(asset.id) }}
-                      className="self-end rounded bg-destructive/90 px-1.5 py-0.5 text-xs text-white"
-                    >
-                      ✕
-                    </button>
-                    <p className="text-xs text-white bg-black/50 rounded px-1 truncate">
-                      {formatBytes(asset.size)}
-                    </p>
+                <div key={asset.id} className="flex flex-col gap-1">
+                  <div
+                    className="group relative aspect-square rounded-lg overflow-hidden border bg-muted cursor-pointer hover:border-primary transition-colors"
+                    onClick={() => onSelect(asset.url)}
+                  >
+                    {asset.mimeType.startsWith('video/') ? (
+                      <video
+                        src={asset.url}
+                        className="w-full h-full object-cover"
+                        muted
+                      />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={asset.url}
+                        alt={asset.originalName}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                    {/* Overlay */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex flex-col justify-between p-1.5 opacity-0 group-hover:opacity-100">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDelete(asset.id) }}
+                        className="self-end rounded bg-destructive/90 px-1.5 py-0.5 text-xs text-white"
+                      >
+                        ✕
+                      </button>
+                      <p className="text-xs text-white bg-black/50 rounded px-1 truncate">
+                        {formatBytes(asset.size)}
+                      </p>
+                    </div>
                   </div>
+                  {asset.mimeType.startsWith('image/') && (
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground">Alt text</p>
+                      <Input
+                        value={altTextMap[asset.id] ?? ''}
+                        onChange={(e) => setAltTextMap((prev) => ({ ...prev, [asset.id]: e.target.value }))}
+                        onBlur={() => handleAltTextBlur(asset.id, asset.altText ?? '')}
+                        onClick={(e) => e.stopPropagation()}
+                        placeholder="Describe this image..."
+                        className="h-7 text-xs px-2"
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
