@@ -13,6 +13,7 @@ import { PostPreviewCard } from './PostPreviewCard'
 import PostPreview from './PostPreview'
 import { UpgradeModal } from '../components/UpgradeModal'
 import { HookLibrary } from '../components/HookLibrary'
+import { SeoChecklistWidget } from './SeoChecklistWidget'
 
 const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
 type Platform = (typeof PLATFORMS)[number]
@@ -2154,6 +2155,16 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
           </div>
         </div>
       </div>
+
+      {/* SEO Checklist */}
+      <SeoChecklistWidget
+        content={content}
+        platforms={selectedPlatforms}
+        mediaUrls={mediaUrls}
+        postId={draftId}
+        workspaceId={workspaceId}
+        token={token}
+      />
 
       {/* Advanced options */}
       <div className="rounded-lg border border-dashed overflow-hidden">
