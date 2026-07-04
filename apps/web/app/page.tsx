@@ -2,13 +2,16 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'OmniPulse — Social Media Management Platform',
+  title: 'OmniPulse — AI-Powered Social Media Management',
   description:
-    'Schedule posts, track analytics, manage your inbox, and grow your brand across Instagram, X, LinkedIn, TikTok, and Facebook — all in one place.',
+    'Schedule posts, track analytics, generate AI captions, and boost SEO across Instagram, X, LinkedIn, TikTok, and Facebook — all in one place.',
   alternates: { canonical: 'https://getomnipulse.com' },
+  robots: { index: true, follow: true },
   openGraph: {
-    title: 'OmniPulse — Social Media Management Platform',
-    description: 'Schedule posts, track analytics, and grow your brand across every platform.',
+    title: 'OmniPulse — AI-Powered Social Media Management',
+    description:
+      'Schedule posts, track analytics, generate AI captions, and boost SEO across Instagram, X, LinkedIn, TikTok, and Facebook — all in one place.',
+    type: 'website',
     url: 'https://getomnipulse.com',
     images: [{ url: 'https://getomnipulse.com/og-image.png', width: 1200, height: 630 }],
   },
@@ -277,18 +280,31 @@ export default function HomePage() {
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             '@context': 'https://schema.org',
-            '@type': 'SoftwareApplication',
+            '@type': ['SoftwareApplication', 'WebApplication'],
             name: 'OmniPulse',
             applicationCategory: 'BusinessApplication',
             operatingSystem: 'Web',
             description:
-              'Social media management platform for scheduling, analytics, and team collaboration.',
+              'AI-powered social media management platform for scheduling, analytics, AI captions, SEO, and team collaboration.',
             url: 'https://getomnipulse.com',
             offers: [
               { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free Plan' },
               { '@type': 'Offer', price: '29', priceCurrency: 'USD', name: 'Pro Plan' },
               { '@type': 'Offer', price: '99', priceCurrency: 'USD', name: 'Agency Plan' },
             ],
+          }),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'Organization',
+            name: 'OmniPulse',
+            url: 'https://getomnipulse.com',
+            logo: 'https://getomnipulse.com/og-image.png',
+            sameAs: [],
           }),
         }}
       />
