@@ -692,6 +692,9 @@ router.get('/content-health', async (req: Request, res: Response): Promise<void>
   const { workspaceId } = req.query as { workspaceId?: string }
   if (!workspaceId) { sendError(res, 400, 'BAD_REQUEST', 'workspaceId required'); return }
 
+  const role = await getWorkspaceRole(workspaceId, req.user!.id)
+  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+
   const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   const posts = await prisma.scheduledPost.findMany({
     where: {

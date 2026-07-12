@@ -360,16 +360,19 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
 
     const displayName = profileName || externalProfileId
 
+    // TODO: run token re-encryption migration for existing records
+    const encryptedAccessToken = encryptToken(accessToken)
+
     // SocialAccount has no unique constraint on workspaceId+platform, so use findFirst + create/update
     const existing = await prisma.socialAccount.findFirst({ where: { workspaceId, platform: platform as typeof VALID_PLATFORMS[number] } })
     if (existing) {
       await prisma.socialAccount.update({
         where: { id: existing.id },
-        data: { accessToken, externalProfileId: displayName },
+        data: { accessToken: encryptedAccessToken, externalProfileId: displayName },
       })
     } else {
       await prisma.socialAccount.create({
-        data: { workspaceId, platform: platform as typeof VALID_PLATFORMS[number], accessToken, externalProfileId: displayName },
+        data: { workspaceId, platform: platform as typeof VALID_PLATFORMS[number], accessToken: encryptedAccessToken, externalProfileId: displayName },
       })
     }
 

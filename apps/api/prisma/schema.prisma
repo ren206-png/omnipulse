@@ -20,6 +20,7 @@ model User {
   twoFactorSecret      String?
   twoFactorEnabled     Boolean               @default(false)
   twoFactorBackupCodes String[]
+  passwordChangedAt    DateTime?
 }
 
 enum Role {
