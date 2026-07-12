@@ -63,6 +63,7 @@ model Workspace {
   brandColor             String?              @default("#6366f1")
   customDomain           String?              @unique
   seoMetadata         PostSeoMetadata[]
+  postDlq             PostDlq[]
 }
 
 enum Plan {
@@ -216,6 +217,7 @@ enum PostStatus {
   PENDING_REVIEW
   APPROVED
   SCHEDULED
+  PROCESSING
   PUBLISHED
   FAILED
 }
@@ -489,6 +491,24 @@ model ShortLink {
   createdAt   DateTime  @default(now())
 
   @@index([workspaceId])
+}
+
+model PostDlq {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  postId        String
+  platform      String
+  errorCode     Int?
+  errorMessage  String
+  attempts      Int       @default(1)
+  lastAttemptAt DateTime  @default(now())
+  resolvedAt    DateTime?
+  resolvedBy    String?
+  createdAt     DateTime  @default(now())
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([resolvedAt])
 }
 
 model PostSeoMetadata {

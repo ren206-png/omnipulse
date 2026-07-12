@@ -10,6 +10,8 @@ import { decryptToken } from '../lib/tokenEncryption.js'
 import { isLinkedInTokenExpired, refreshLinkedInToken } from '../lib/linkedinToken.js'
 import { publishLinkedInText, publishLinkedInImage, publishLinkedInVideo } from '../lib/linkedinPublisher.js'
 import { scheduleEngagementCheck } from './engagementAlert.worker.js'
+import { FF_PUBLISH_RELIABILITY } from '../lib/featureFlags.js'
+import { reliablePublish } from '../lib/reliablePublish.js'
 
 async function postFirstComment(
   platform: string,
@@ -345,10 +347,41 @@ const worker = new Worker(
       // ── End LinkedIn ─────────────────────────────────────────────────────────
 
       try {
-        const externalId = await publishToPlatform(
-          { content, mediaUrls },
-          { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
-        )
+        let externalId: string
+        if (FF_PUBLISH_RELIABILITY) {
+          // Capture externalId via closure so reliablePublish drives the retry loop
+          // without a second call to publishToPlatform on success.
+          let capturedExternalId = ''
+          const result = await reliablePublish({
+            postId: post.id,
+            workspaceId: post.workspaceId,
+            platform,
+            publishFn: async () => {
+              try {
+                capturedExternalId = await publishToPlatform(
+                  { content, mediaUrls },
+                  { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
+                )
+                return { success: true, statusCode: 200 }
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err)
+                // Heuristic: treat 4xx-like messages as terminal
+                const is4xx = /4\d\d|unauthorized|forbidden|invalid/i.test(msg)
+                return { success: false, error: msg, statusCode: is4xx ? 400 : 500 }
+              }
+            },
+          })
+          if (!result.success) {
+            errors[platform] = `Terminal failure — DLQ id: ${result.dlqId ?? 'unknown'}`
+            continue
+          }
+          externalId = capturedExternalId
+        } else {
+          externalId = await publishToPlatform(
+            { content, mediaUrls },
+            { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
+          )
+        }
         responseLog[platform] = externalId
 
         // ── X Thread: reply with each subsequent slide ────────────────────────

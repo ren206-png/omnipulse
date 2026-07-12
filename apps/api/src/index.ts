@@ -50,7 +50,9 @@ import linksRouter from './routes/links.js'
 import searchRouter from './routes/search.js'
 import seoRouter from './routes/seo.js'
 import seoDataRouter from './routes/seoData.js'
+import dlqRouter from './routes/dlq.js'
 import { startEvergreenWorker } from './workers/evergreen.worker.js'
+import { startStuckJobSweeperWorker } from './workers/stuckJobSweeper.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
 import { sendWeeklyDigest } from './lib/digest.js'
 import { startGuardianWorker } from './workers/guardian.worker.js'
@@ -132,6 +134,7 @@ app.use('/api/v1/client-portal', clientPortalRouter)
 app.use('/api/v1/digest', digestRouter)
 app.use('/api/v1/competitors', competitorsRouter)
 app.use('/api/v1/admin', adminRouter)
+app.use('/api/v1/admin/dlq', dlqRouter)
 app.use('/api/v1/onboarding', onboardingRouter)
 app.use('/api/v1/queue-slots', queueSlotsRouter)
 app.use('/api/v1/2fa', twoFactorRouter)
@@ -162,6 +165,8 @@ app.listen(env.PORT, '0.0.0.0', () => {
 startEvergreenWorker()
 // Guardian — self-healing system (scans every 5 min for zombie posts)
 startGuardianWorker().catch((err) => logger.error({ err }, 'Failed to start guardian worker'))
+// Stuck-Job Sweeper — requeues or DLQs posts stuck in PROCESSING for >15 min
+startStuckJobSweeperWorker().catch((err) => logger.error({ err }, 'Failed to start stuck job sweeper worker'))
 // Engagement Alert worker — notifies on standout/underperforming posts 2h after publish
 void engagementAlertWorker
 // Sync analytics every 6 hours

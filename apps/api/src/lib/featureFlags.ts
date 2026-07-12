@@ -1,0 +1,6 @@
+export const FF_PUBLISH_RELIABILITY = process.env.FF_PUBLISH_RELIABILITY === 'true'
+export const FF_TRADEFLOW_BRIDGE = process.env.FF_TRADEFLOW_BRIDGE === 'true'
+export const FF_PHOTO_TO_POST = process.env.FF_PHOTO_TO_POST === 'true'
+export const FF_OUTCOME_ANALYTICS = process.env.FF_OUTCOME_ANALYTICS === 'true'
+export const FF_AGENCY_APPROVALS = process.env.FF_AGENCY_APPROVALS === 'true'
+export const FF_EVERGREEN_QUEUE = process.env.FF_EVERGREEN_QUEUE === 'true'
