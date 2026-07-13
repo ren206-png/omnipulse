@@ -62,9 +62,10 @@ import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { startEvergreenRecyclerWorker } from './workers/evergreenRecycler.worker.js'
 import { startStuckJobSweeperWorker } from './workers/stuckJobSweeper.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
-import { sendWeeklyDigest } from './lib/digest.js'
 import { startGuardianWorker } from './workers/guardian.worker.js'
 import { engagementAlertWorker } from './workers/engagementAlert.worker.js'
+import { startRssFeedWorker } from './workers/rssFeed.worker.js'
+import { startWeeklyDigestWorker } from './workers/weeklyDigest.worker.js'
 import { prisma } from './lib/prisma.js'
 import IORedis from 'ioredis'
 
@@ -189,16 +190,10 @@ startStuckJobSweeperWorker().catch((err) => logger.error({ err }, 'Failed to sta
 void engagementAlertWorker
 // Sync analytics every 6 hours
 setInterval(() => { syncAnalytics().catch(() => {}) }, 6 * 60 * 60 * 1000)
-// Weekly digest — every Monday 9am UTC
-const now = new Date()
-const nextMonday = new Date(now)
-nextMonday.setUTCDate(now.getUTCDate() + ((1 - now.getUTCDay() + 7) % 7 || 7))
-nextMonday.setUTCHours(9, 0, 0, 0)
-const msUntilMonday = nextMonday.getTime() - now.getTime()
-setTimeout(() => {
-  sendWeeklyDigest().catch(() => {})
-  setInterval(() => sendWeeklyDigest().catch(() => {}), 7 * 24 * 60 * 60 * 1000)
-}, msUntilMonday)
+// RSS Feed worker — polls active feeds on their configured interval (every 5 min check)
+startRssFeedWorker()
+// Weekly Digest worker — sends Monday 08:00 UTC performance emails
+startWeeklyDigestWorker()
 
 // ─── Global crash protection (single registration point) ───────────────────
 // Workers previously registered these individually — consolidated here to
