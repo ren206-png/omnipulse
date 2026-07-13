@@ -79,6 +79,7 @@ const NAV_GROUPS = [
       { href: '/dashboard/settings/branding', label: 'Branding', icon: '🎨' },
       { href: '/dashboard/settings/client-portal', label: 'Client Portal', icon: '👤' },
       { href: '/dashboard/admin/dlq', label: 'Failed Posts', icon: '💀' },
+      { href: '/dashboard/admin/platform-setup', label: 'Platform Setup', icon: '🔌' },
     ],
   },
 ]

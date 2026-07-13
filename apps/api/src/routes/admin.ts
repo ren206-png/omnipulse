@@ -110,4 +110,99 @@ router.get('/users', async (req: Request, res: Response): Promise<void> => {
   }
 })
 
+// GET /api/v1/admin/platform-status — reports which OAuth env vars are configured
+// Never returns actual secret values — only boolean configured/missing.
+router.get('/platform-status', async (_req: Request, res: Response): Promise<void> => {
+  const CALLBACK_URL = `${process.env.API_URL ?? 'https://api.getomnipulse.com'}/api/v1/social-accounts/oauth/callback`
+
+  const platforms = [
+    {
+      id: 'LINKEDIN',
+      name: 'LinkedIn',
+      emoji: '💼',
+      configured: !!(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET),
+      vars: [
+        { name: 'LINKEDIN_CLIENT_ID', set: !!process.env.LINKEDIN_CLIENT_ID },
+        { name: 'LINKEDIN_CLIENT_SECRET', set: !!process.env.LINKEDIN_CLIENT_SECRET },
+      ],
+      devUrl: 'https://www.linkedin.com/developers/apps',
+      scopes: 'openid, profile, email, w_member_social, w_organization_social',
+      callbackUrl: CALLBACK_URL,
+      notes: 'Create an app → Auth tab → add OAuth 2.0 redirect URL → request w_member_social + w_organization_social products',
+    },
+    {
+      id: 'FACEBOOK',
+      name: 'Facebook & Instagram',
+      emoji: '📘',
+      configured: !!(process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET),
+      vars: [
+        { name: 'FACEBOOK_CLIENT_ID', set: !!process.env.FACEBOOK_CLIENT_ID },
+        { name: 'FACEBOOK_CLIENT_SECRET', set: !!process.env.FACEBOOK_CLIENT_SECRET },
+      ],
+      devUrl: 'https://developers.facebook.com/apps',
+      scopes: 'pages_manage_posts, pages_read_engagement, instagram_basic, instagram_content_publish',
+      callbackUrl: CALLBACK_URL,
+      notes: 'Create a Business app → Add Facebook Login product → Add redirect URI → Enable pages_manage_posts + instagram_content_publish permissions',
+    },
+    {
+      id: 'X',
+      name: 'X (Twitter)',
+      emoji: '🐦',
+      configured: !!(process.env.X_CLIENT_ID && process.env.X_CLIENT_SECRET),
+      vars: [
+        { name: 'X_CLIENT_ID', set: !!process.env.X_CLIENT_ID },
+        { name: 'X_CLIENT_SECRET', set: !!process.env.X_CLIENT_SECRET },
+      ],
+      devUrl: 'https://developer.twitter.com/en/portal/projects-and-apps',
+      scopes: 'tweet.read, tweet.write, users.read (OAuth 2.0 PKCE)',
+      callbackUrl: CALLBACK_URL,
+      notes: 'Create a project+app → User authentication settings → OAuth 2.0 → set callback URL → enable Read+Write permissions',
+    },
+    {
+      id: 'TIKTOK',
+      name: 'TikTok',
+      emoji: '🎵',
+      configured: !!(process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET),
+      vars: [
+        { name: 'TIKTOK_CLIENT_KEY', set: !!process.env.TIKTOK_CLIENT_KEY },
+        { name: 'TIKTOK_CLIENT_SECRET', set: !!process.env.TIKTOK_CLIENT_SECRET },
+      ],
+      devUrl: 'https://developers.tiktok.com/apps',
+      scopes: 'user.info.basic, video.upload',
+      callbackUrl: CALLBACK_URL,
+      notes: 'Create an app → Add Login Kit product → set redirect domain to api.getomnipulse.com → enable video.upload scope',
+    },
+    {
+      id: 'GOOGLE',
+      name: 'YouTube',
+      emoji: '▶️',
+      configured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+      vars: [
+        { name: 'GOOGLE_CLIENT_ID', set: !!process.env.GOOGLE_CLIENT_ID },
+        { name: 'GOOGLE_CLIENT_SECRET', set: !!process.env.GOOGLE_CLIENT_SECRET },
+      ],
+      devUrl: 'https://console.cloud.google.com/apis/credentials',
+      scopes: 'https://www.googleapis.com/auth/youtube.upload',
+      callbackUrl: CALLBACK_URL,
+      notes: 'Create OAuth 2.0 Client ID (Web application) → add Authorised redirect URI → enable YouTube Data API v3',
+    },
+  ]
+
+  const stripeConfigured = !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET)
+  const stripeProPrice = !!process.env.STRIPE_PRO_PRICE_ID
+  const stripeAgencyPrice = !!process.env.STRIPE_AGENCY_PRICE_ID
+
+  res.json({
+    callbackUrl: CALLBACK_URL,
+    platforms,
+    billing: {
+      stripeConfigured,
+      stripeProPriceId: stripeProPrice,
+      stripeAgencyPriceId: stripeAgencyPrice,
+      stripePublishableKey: !!process.env.STRIPE_PUBLISHABLE_KEY,
+      dashboardUrl: 'https://dashboard.stripe.com/products',
+    },
+  })
+})
+
 export default router
