@@ -64,6 +64,10 @@ model Workspace {
   customDomain           String?              @unique
   seoMetadata         PostSeoMetadata[]
   postDlq             PostDlq[]
+  tradeFlowMapping    TradeFlowTenantMapping?
+  ingestedJobEvents   IngestedJobEvent[]
+  postAttributions    PostAttribution[]
+  attributionEvents   AttributionEvent[]
 }
 
 enum Plan {
@@ -164,6 +168,7 @@ model ScheduledPost {
   campaignId           String?
   campaign             Campaign?             @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   seoMetadata         PostSeoMetadata?
+  attribution         PostAttribution?
 
   @@index([status, scheduledFor])
 }
@@ -527,5 +532,63 @@ model PostSeoMetadata {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
+  @@index([workspaceId])
+}
+
+model TradeFlowTenantMapping {
+  id                  String    @id @default(cuid())
+  workspaceId         String    @unique
+  tradeFlowAccountId  String    @unique
+  linkedAt            DateTime  @default(now())
+  linkedBy            String    // userId who created the link
+  active              Boolean   @default(true)
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  @@index([tradeFlowAccountId])
+}
+
+model IngestedJobEvent {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  tradeFlowAccountId  String
+  eventType           String    // 'job.booked' | 'job.completed'
+  jobId               String
+  jobType             String?
+  city                String?
+  rawPayload          Json
+  nonce               String    @unique  // replay protection
+  receivedAt          DateTime  @default(now())
+  workspace           Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  @@index([workspaceId])
+  @@index([jobId])
+  @@index([nonce])
+}
+
+model PostAttribution {
+  id              String        @id @default(cuid())
+  postId          String
+  workspaceId     String
+  trackedNumber   String?       // Twilio/provider phone number (nullable — UTM-only attribution)
+  utmTag          String?       // UTM campaign tag for link-based attribution
+  callsReceived   Int           @default(0)
+  bookingsCreated Int           @default(0)
+  lastUpdatedAt   DateTime      @default(now())
+  createdAt       DateTime      @default(now())
+  post            ScheduledPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  @@unique([postId])
+  @@index([workspaceId])
+  @@index([trackedNumber])
+  @@index([utmTag])
+}
+
+model AttributionEvent {
+  id            String   @id @default(cuid())
+  postId        String
+  workspaceId   String
+  eventType     String   // 'call' | 'booking'
+  source        String   // 'phone' | 'utm_link'
+  metadata      Json?    // raw event data from TradeFlow/Twilio adapter
+  receivedAt    DateTime @default(now())
+  @@index([postId])
   @@index([workspaceId])
 }

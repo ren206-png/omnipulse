@@ -58,4 +58,8 @@ export const env = {
   // SEO Data Gateway
   SEO_DATA_PROVIDER: process.env.SEO_DATA_PROVIDER ?? 'mock',
   SEO_DATA_API_KEY: process.env.SEO_DATA_API_KEY ?? '',
+  // TradeFlow Bridge
+  TRADEFLOW_WEBHOOK_SECRET: process.env.TRADEFLOW_WEBHOOK_SECRET ?? '',
+  // Internal service-to-service secret (for /ingest endpoint)
+  INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET ?? '',
 }

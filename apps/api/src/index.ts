@@ -51,6 +51,9 @@ import searchRouter from './routes/search.js'
 import seoRouter from './routes/seo.js'
 import seoDataRouter from './routes/seoData.js'
 import dlqRouter from './routes/dlq.js'
+import tradeflowRouter from './routes/tradeflow.js'
+import photoToPostRouter from './routes/photoToPost.js'
+import outcomeAnalyticsRouter from './routes/outcomeAnalytics.js'
 import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { startStuckJobSweeperWorker } from './workers/stuckJobSweeper.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
@@ -80,6 +83,8 @@ app.use(cors({
 }))
 // Raw body for Stripe webhooks — must be registered before express.json()
 app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }))
+// Raw body for TradeFlow webhooks — before express.json()
+app.use('/api/v1/tradeflow/webhook', express.raw({ type: 'application/json' }))
 
 app.use(cookieParser())
 app.use(express.json())
@@ -144,6 +149,9 @@ app.use('/api/v1/links', linksRouter)
 app.use('/api/v1/search', searchRouter)
 app.use('/api/v1/seo', seoRouter)
 app.use('/api/v1/seo-data', seoDataRouter)
+app.use('/api/v1/tradeflow', tradeflowRouter)
+app.use('/api/v1/photo-to-post', photoToPostRouter)
+app.use('/api/v1/outcome-analytics', outcomeAnalyticsRouter)
 app.use('/uploads', express.static('public/uploads'))
 
 // Sentry error handler — must be after all routes
