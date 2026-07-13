@@ -351,3 +351,25 @@ Re-read of findings to flag any inference not directly verified:
 | Next.js CVE-2025-29927 affected? | **NO** (UNVERIFIED) | `next@16.2.9` is outside reported affected range |
 | Are OAuth tokens encrypted at rest? | **Partial** | LinkedIn only; FB/X/TikTok/Google stored plaintext |
 | Incoming webhooks verified? | **Yes (Stripe only)** | `billing.ts:156` — Stripe signature check; no other incoming webhooks |
+
+---
+
+## RESOLUTION MAP — Final Close-Out
+
+| Finding | Severity | Resolution | File:Line | Status |
+|---------|----------|------------|-----------|--------|
+| Cross-tenant data leak: content-health endpoint | CRITICAL | `getWorkspaceRole` membership check before query | `posts.ts:693–694` | ✅ FIXED |
+| `/api/me` cross-tenant identity leak | CRITICAL | Was safe — JWT-only identity, no DB session | `auth.ts:255`, `middleware/auth.ts:21` | ✅ CONFIRMED SAFE |
+| OAuth tokens unencrypted (FB/IG/X/TikTok/Google) | HIGH | `encryptToken()` applied to all platforms on write | `socialAccounts.ts:362–373` | ✅ FIXED |
+| JWT valid after password reset | HIGH | `passwordChangedAt` + `iat` check in middleware | `auth.ts:243`, `middleware/auth.ts` | ✅ FIXED |
+| BullMQ deprecated `repeat:` in guardian worker | MEDIUM | Migrated to `upsertJobScheduler` | `guardian.worker.ts:22–29` | ✅ FIXED |
+| Ayrshare old package name | MEDIUM | Already on `social-media-api` — confirmed | `integrations/ayrshare.ts` | ✅ CONFIRMED FIXED |
+| No publish retry / silent failure | HIGH | `reliablePublish.ts` — backoff, DLQ, alerts | `lib/reliablePublish.ts` | ✅ FIXED (FF_PUBLISH_RELIABILITY) |
+| No stuck-job detection | MEDIUM | `stuckJobSweeper.worker.ts` every 10min | `workers/stuckJobSweeper.worker.ts` | ✅ FIXED |
+| No tenant isolation test suite | HIGH | `tenantIsolation.test.ts` — 5 cross-tenant tests | `routes/__tests__/tenantIsolation.test.ts` | ✅ FIXED |
+| Token re-encryption for existing records | LOW | New writes encrypted; existing records unencrypted | `socialAccounts.ts` TODO comment | ⚠️ DEFERRED — requires data migration with downtime window |
+| Concurrent evergreen recycler double-post | MEDIUM | Optimistic lock via `updateMany` count check | `evergreenRecycler.worker.ts:140–151` | ✅ FIXED |
+| Global Ayrshare key (not per-tenant) | LOW | Single key used only for analytics sync | `workers/analytics.worker.ts` | ⚠️ DEFERRED — acceptable for current scale; per-tenant keys require billing tier |
+
+**TradeFlow Bridge, Photo-to-Post, Outcome Analytics, Agency Approvals, Evergreen Queue:**
+All delivered as additive flag-gated features. None enabled by default. Each independently toggleable.
