@@ -30,12 +30,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
       # Deploy Next.js app to Vercel production
       - name: Deploy to Vercel
         working-directory: apps/web
-        run: npx vercel deploy --prod --yes --token ${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_sIWGZGMFKcIjdnA6imNs6lYR
+          VERCEL_PROJECT_ID: prj_S5CPZRTBkW6V3qR8k0M21sN3d400
+        run: npx vercel deploy --prod --yes --token $VERCEL_TOKEN
