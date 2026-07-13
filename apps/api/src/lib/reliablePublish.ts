@@ -2,9 +2,9 @@ import { FF_PUBLISH_RELIABILITY } from './featureFlags.js'
 import { prisma } from './prisma.js'
 import { logger } from './logger.js'
 import { notify, getWorkspaceAdmins } from './notify.js'
-import { Resend } from 'resend'
-
-const resend = new Resend(process.env.RESEND_API_KEY ?? 're_placeholder')
+import { sendEmail } from './mailer.js'
+import { publishFailureEmail } from './emailTemplates.js'
+import { env } from '../config/env.js'
 
 const MAX_ATTEMPTS = 3
 
@@ -43,6 +43,7 @@ async function notifyFailure(params: {
   platform: string
   errorMessage: string
   dlqId: string
+  postContent?: string
 }): Promise<void> {
   try {
     const adminIds = await getWorkspaceAdmins(params.workspaceId)
@@ -65,23 +66,19 @@ async function notifyFailure(params: {
   try {
     const workspace = await prisma.workspace.findUnique({
       where: { id: params.workspaceId },
-      select: { owner: { select: { email: true } } },
+      select: { name: true, owner: { select: { email: true } } },
     })
     const ownerEmail = workspace?.owner?.email
     if (ownerEmail) {
-      await resend.emails.send({
-        from: process.env.EMAIL_FROM ?? 'OmniPulse <noreply@getomnipulse.com>',
+      await sendEmail({
         to: ownerEmail,
-        subject: 'OmniPulse: Post failed to publish',
-        html: `
-          <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
-            <h1 style="color:#6366f1;margin-bottom:8px">OmniPulse</h1>
-            <h2 style="color:#1f2937">Post publish failure</h2>
-            <p style="color:#4b5563">Post <strong>${params.postId}</strong> could not be published to <strong>${params.platform}</strong>.</p>
-            <p style="color:#4b5563">Error: ${params.errorMessage.slice(0, 200)}</p>
-            <p style="color:#9ca3af;font-size:12px">DLQ entry ID: ${params.dlqId}. Visit your dashboard to retry or resolve.</p>
-          </div>
-        `,
+        ...publishFailureEmail({
+          workspaceName: workspace?.name ?? 'Your workspace',
+          postContent: params.postContent?.slice(0, 100) ?? '',
+          platform: params.platform,
+          errorMessage: params.errorMessage,
+          retryUrl: `${env.APP_URL}/dashboard/admin/dlq`,
+        }),
       })
     }
   } catch (err) {
@@ -94,6 +91,7 @@ export async function reliablePublish(params: {
   workspaceId: string
   platform: string
   publishFn: () => Promise<{ success: boolean; error?: string; statusCode?: number }>
+  postContent?: string
 }): Promise<{ success: boolean; dlqId?: string }> {
   // Feature flag guard: pass-through if flag is off
   if (!FF_PUBLISH_RELIABILITY) {
@@ -189,6 +187,7 @@ export async function reliablePublish(params: {
     platform: params.platform,
     errorMessage: lastError,
     dlqId,
+    postContent: params.postContent,
   })
 
   return { success: false, dlqId }

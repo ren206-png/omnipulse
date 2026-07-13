@@ -62,4 +62,7 @@ export const env = {
   TRADEFLOW_WEBHOOK_SECRET: process.env.TRADEFLOW_WEBHOOK_SECRET ?? '',
   // Internal service-to-service secret (for /ingest endpoint)
   INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET ?? '',
+  // Email (Resend)
+  RESEND_API_KEY: process.env.RESEND_API_KEY ?? '',
+  EMAIL_FROM: process.env.EMAIL_FROM ?? 'OmniPulse <noreply@getomnipulse.com>',
 }

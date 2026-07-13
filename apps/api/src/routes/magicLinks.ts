@@ -5,6 +5,9 @@ import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 import { FF_AGENCY_APPROVALS } from '../lib/featureFlags.js'
+import { sendEmail } from '../lib/mailer.js'
+import { magicLinkEmail } from '../lib/emailTemplates.js'
+import { env } from '../config/env.js'
 
 const router = Router()
 
@@ -57,14 +60,30 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
 
   try {
-    const link = await (prisma as any).approvalMagicLink.create({
-      data: {
-        workspaceId,
-        email: email.toLowerCase().trim(),
-        createdBy: req.user!.id,
-        expiresAt,
-      },
+    const [link, workspace] = await Promise.all([
+      (prisma as any).approvalMagicLink.create({
+        data: {
+          workspaceId,
+          email: email.toLowerCase().trim(),
+          createdBy: req.user!.id,
+          expiresAt,
+        },
+      }),
+      prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }),
+    ])
+
+    // Send magic link email to recipient
+    const linkUrl = `${env.APP_URL}/approval/${link.token}`
+    await sendEmail({
+      to: link.email,
+      ...magicLinkEmail({
+        workspaceName: workspace?.name ?? 'your workspace',
+        inviterName: req.user!.email,
+        magicLinkUrl: linkUrl,
+        expiresAt: link.expiresAt,
+      }),
     })
+
     res.status(201).json({ link })
   } catch (err) {
     logger.error({ err }, 'Create magic link error')

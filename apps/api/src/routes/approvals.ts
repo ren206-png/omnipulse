@@ -6,6 +6,9 @@ import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 import { notify, getWorkspaceAdmins } from '../lib/notify.js'
 import { FF_AGENCY_APPROVALS } from '../lib/featureFlags.js'
+import { sendEmail } from '../lib/mailer.js'
+import { approvalDecisionEmail } from '../lib/emailTemplates.js'
+import { env } from '../config/env.js'
 
 const router = Router()
 
@@ -189,6 +192,21 @@ router.post('/:postId/approve', async (req: Request, res: Response): Promise<voi
       ),
     )
 
+    // Email the post submitter
+    if (post.submittedBy) {
+      const submitter = await prisma.user.findUnique({ where: { id: post.submittedBy }, select: { email: true } })
+      if (submitter?.email) {
+        await sendEmail({
+          to: submitter.email,
+          ...approvalDecisionEmail({
+            decision: 'approved',
+            postContent: (post as any).content ?? '',
+            postUrl: `${env.APP_URL}/dashboard/approvals/${postId}?workspaceId=${post.workspaceId}`,
+          }),
+        })
+      }
+    }
+
     res.json({ post: updated })
   } catch (err: any) {
     // P2025 = record not found for update — means status was already changed (race)
@@ -257,6 +275,22 @@ router.post('/:postId/reject', async (req: Request, res: Response): Promise<void
         }),
       ),
     )
+
+    // Email the post submitter
+    if (post.submittedBy) {
+      const submitter = await prisma.user.findUnique({ where: { id: post.submittedBy }, select: { email: true } })
+      if (submitter?.email) {
+        await sendEmail({
+          to: submitter.email,
+          ...approvalDecisionEmail({
+            decision: 'rejected',
+            postContent: (post as any).content ?? '',
+            reason: reason.trim(),
+            postUrl: `${env.APP_URL}/dashboard/approvals/${postId}?workspaceId=${post.workspaceId}`,
+          }),
+        })
+      }
+    }
 
     res.json({ post: updated })
   } catch (err: any) {
