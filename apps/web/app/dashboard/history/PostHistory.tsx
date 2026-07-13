@@ -36,6 +36,12 @@ interface PostMetrics {
   shares: number
 }
 
+interface PostAttribution {
+  calls: number
+  bookings: number
+  utmTag: string | null
+}
+
 interface Post {
   id: string
   content: string
@@ -105,6 +111,12 @@ export function PostHistory({ token }: { token: string }) {
   // Bulk selection state
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
+  // Attribution state
+  const [attributions, setAttributions] = useState<Record<string, PostAttribution | null>>({})
+  const [setupTrackingId, setSetupTrackingId] = useState<string | null>(null)
+  const [utmTagInput, setUtmTagInput] = useState('')
+  const [utmSaving, setUtmSaving] = useState(false)
+
   // Repurpose modal state
   const [repurposePost, setRepurposePost] = useState<Post | null>(null)
   const [repurposeLoading, setRepurposeLoading] = useState(false)
@@ -163,6 +175,29 @@ export function PostHistory({ token }: { token: string }) {
   useEffect(() => {
     fetchHistory()
   }, [fetchHistory])
+
+  // Fetch attribution for published posts
+  useEffect(() => {
+    const published = posts.filter((p) => p.status === 'PUBLISHED')
+    published.forEach(async (post) => {
+      if (post.id in attributions) return
+      try {
+        const res = await fetch(`${apiUrl}/api/v1/outcome-analytics/${post.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) {
+          setAttributions((prev) => ({ ...prev, [post.id]: null }))
+          return
+        }
+        const data = (await res.json()) as { attribution?: PostAttribution; calls?: number; bookings?: number; utmTag?: string | null }
+        const attr: PostAttribution = data.attribution ?? { calls: data.calls ?? 0, bookings: data.bookings ?? 0, utmTag: data.utmTag ?? null }
+        setAttributions((prev) => ({ ...prev, [post.id]: attr }))
+      } catch {
+        setAttributions((prev) => ({ ...prev, [post.id]: null }))
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts])
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -227,6 +262,26 @@ export function PostHistory({ token }: { token: string }) {
       params.set('mediaUrls', post.mediaUrls.join(','))
     }
     router.push(`/dashboard/calendar?${params.toString()}`)
+  }
+
+  async function saveUtmTag(postId: string) {
+    setUtmSaving(true)
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/outcome-analytics/${postId}/setup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ utmTag: utmTagInput }),
+      })
+      if (res.ok) {
+        setAttributions((prev) => ({ ...prev, [postId]: { calls: 0, bookings: 0, utmTag: utmTagInput } }))
+        setSetupTrackingId(null)
+        setUtmTagInput('')
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setUtmSaving(false)
+    }
   }
 
   async function handleRepurpose(post: Post) {
@@ -536,6 +591,54 @@ export function PostHistory({ token }: { token: string }) {
                 </Link>
               ) : (
                 <p className="text-sm line-clamp-2 leading-relaxed">{post.content}</p>
+              )}
+
+              {/* Attribution badge (published posts only) */}
+              {post.status === 'PUBLISHED' && (
+                <div className="flex flex-col gap-1">
+                  {attributions[post.id] && (attributions[post.id]!.calls > 0 || attributions[post.id]!.bookings > 0) ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 font-medium">
+                        📞 {attributions[post.id]!.calls} calls
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 font-medium">
+                        📅 {attributions[post.id]!.bookings} bookings
+                      </span>
+                    </div>
+                  ) : attributions[post.id] === null ? (
+                    <div>
+                      {setupTrackingId === post.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            className="border rounded px-2 py-0.5 text-xs h-7 bg-background"
+                            placeholder="UTM tag e.g. fb-post-june"
+                            value={utmTagInput}
+                            onChange={(e) => setUtmTagInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') saveUtmTag(post.id); if (e.key === 'Escape') { setSetupTrackingId(null); setUtmTagInput('') } }}
+                            autoFocus
+                          />
+                          <button
+                            className="text-xs px-2 py-0.5 rounded bg-primary text-primary-foreground"
+                            onClick={() => saveUtmTag(post.id)}
+                            disabled={utmSaving}
+                          >
+                            {utmSaving ? '…' : 'Save'}
+                          </button>
+                          <button className="text-xs text-muted-foreground" onClick={() => { setSetupTrackingId(null); setUtmTagInput('') }}>
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="text-xs text-muted-foreground hover:text-primary underline underline-offset-2"
+                          onClick={() => setSetupTrackingId(post.id)}
+                        >
+                          Set up tracking
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
               )}
 
               {/* Engagement metrics + actions */}

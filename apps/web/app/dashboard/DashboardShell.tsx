@@ -35,6 +35,7 @@ const NAV_GROUPS = [
     links: [
       { href: '/dashboard/approvals', label: 'Approvals', icon: '✅' },
       { href: '/dashboard/history', label: 'History', icon: '📜' },
+      { href: '/dashboard/evergreen', label: 'Evergreen', icon: '♻️' },
       { href: '/dashboard/templates', label: 'Templates', icon: '📝' },
       { href: '/dashboard/campaigns', label: 'Campaigns', icon: '🏷️' },
       { href: '/dashboard/ab-test', label: 'A/B Tests', icon: '🧪' },
@@ -65,6 +66,7 @@ const NAV_GROUPS = [
       { href: '/dashboard/listening', label: 'Social Listening', icon: '👂' },
       { href: '/dashboard/brand-voice', label: 'Brand Voice', icon: '🎤' },
       { href: '/dashboard/repurpose', label: 'Repurpose', icon: '♻️' },
+      { href: '/dashboard/photo-to-post', label: 'Photo to Post', icon: '📸' },
     ],
   },
   {
@@ -76,6 +78,7 @@ const NAV_GROUPS = [
       { href: '/dashboard/settings', label: 'Settings', icon: '⚙️' },
       { href: '/dashboard/settings/branding', label: 'Branding', icon: '🎨' },
       { href: '/dashboard/settings/client-portal', label: 'Client Portal', icon: '👤' },
+      { href: '/dashboard/admin/dlq', label: 'Failed Posts', icon: '💀' },
     ],
   },
 ]
