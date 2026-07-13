@@ -14,6 +14,8 @@ import { redisConnection } from '../lib/queue.js'
 import { logger } from '../lib/logger.js'
 import { prisma } from '../lib/prisma.js'
 import { notify } from '../lib/notify.js'
+import { sendEmail } from '../lib/mailer.js'
+import { viralPostEmail, underperformingPostEmail } from '../lib/emailTemplates.js'
 
 export const engagementAlertQueue = new Queue('engagement-alert', { connection: redisConnection })
 
@@ -78,6 +80,17 @@ const worker = new Worker(
 
     if (!post.submittedBy) return
 
+    // Fetch the author's email for email alerts
+    const author = await prisma.user.findUnique({
+      where: { id: post.submittedBy },
+      select: { email: true },
+    })
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: post.workspaceId },
+      select: { name: true },
+    })
+    const webUrl = process.env.WEB_URL ?? process.env.APP_URL ?? 'https://getomnipulse.com'
+
     if (ratio >= 2) {
       // 🔥 Standout performer
       await notify({
@@ -87,6 +100,17 @@ const worker = new Worker(
         body: `Your post is getting ${Math.round(ratio)}× more engagement than average: "${truncated}"`,
         link: '/dashboard/analytics',
       })
+      // Also send email
+      if (author?.email && workspace) {
+        const tpl = viralPostEmail({
+          workspaceName: workspace.name,
+          postSnippet: truncated,
+          ratio,
+          totalEngagement,
+          dashboardUrl: `${webUrl}/dashboard/analytics`,
+        })
+        await sendEmail({ to: author.email, subject: tpl.subject, html: tpl.html })
+      }
       logger.info({ postId, ratio, totalEngagement, avgEngagement }, '[EngagementAlert] Standout post notified')
     } else if (ratio <= 0.3 && totalEngagement === 0) {
       // ❄️ Underperformer — only alert if truly zero engagement
@@ -97,6 +121,15 @@ const worker = new Worker(
         body: `Your post has gotten little engagement 2 hours after publishing. Consider repurposing or resharing: "${truncated}"`,
         link: '/dashboard/content-health',
       })
+      // Also send email
+      if (author?.email && workspace) {
+        const tpl = underperformingPostEmail({
+          workspaceName: workspace.name,
+          postSnippet: truncated,
+          dashboardUrl: `${webUrl}/dashboard/content-health`,
+        })
+        await sendEmail({ to: author.email, subject: tpl.subject, html: tpl.html })
+      }
       logger.info({ postId, ratio, totalEngagement, avgEngagement }, '[EngagementAlert] Underperformer post notified')
     }
   },

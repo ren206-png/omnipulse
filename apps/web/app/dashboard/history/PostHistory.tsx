@@ -107,6 +107,8 @@ export function PostHistory({ token }: { token: string }) {
   const [retryMessage, setRetryMessage] = useState<string | null>(null)
   const [duplicatingPostId, setDuplicatingPostId] = useState<string | null>(null)
   const [duplicateToast, setDuplicateToast] = useState<string | null>(null)
+  const [smartSchedulingId, setSmartSchedulingId] = useState<string | null>(null)
+  const [smartScheduleToast, setSmartScheduleToast] = useState<string | null>(null)
 
   // Bulk selection state
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -249,6 +251,27 @@ export function PostHistory({ token }: { token: string }) {
       setDuplicateToast('Network error — please try again')
     } finally {
       setDuplicatingPostId(null)
+    }
+  }
+
+  async function smartSchedulePost(postId: string) {
+    setSmartSchedulingId(postId)
+    try {
+      const res = await fetch(`${apiUrl}/api/v1/posts/${postId}/smart-schedule`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('Failed')
+      const data = await res.json() as { scheduledFor: string; bestHour: number }
+      const time = new Date(data.scheduledFor).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      setSmartScheduleToast(`✅ Scheduled for ${time} (best time for your audience)`)
+      setTimeout(() => setSmartScheduleToast(null), 4000)
+      await fetchHistory()
+    } catch {
+      setSmartScheduleToast('❌ Failed to smart-schedule — try again')
+      setTimeout(() => setSmartScheduleToast(null), 3000)
+    } finally {
+      setSmartSchedulingId(null)
     }
   }
 
@@ -481,6 +504,16 @@ export function PostHistory({ token }: { token: string }) {
           {duplicateToast.startsWith('Duplicated') ? `✅ ${duplicateToast}` : duplicateToast}
         </div>
       )}
+      {smartScheduleToast && (
+        <div className={cn(
+          'rounded-lg border px-4 py-3 text-sm',
+          smartScheduleToast.startsWith('✅')
+            ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+            : 'border-destructive/30 bg-destructive/10 text-destructive',
+        )}>
+          {smartScheduleToast}
+        </div>
+      )}
 
       {/* Error state */}
       {error && (
@@ -688,6 +721,17 @@ export function PostHistory({ token }: { token: string }) {
                   >
                     ♻️ Reuse
                   </button>
+                  {post.status === 'DRAFT' && (
+                    <button
+                      type="button"
+                      onClick={() => smartSchedulePost(post.id)}
+                      disabled={smartSchedulingId === post.id}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 border border-indigo-200 hover:border-indigo-400 rounded-md px-2 py-0.5 transition-colors flex items-center gap-1 shrink-0 disabled:opacity-50"
+                      title="Auto-schedule at the best time for your audience"
+                    >
+                      {smartSchedulingId === post.id ? '⏳' : '⚡'} Smart Schedule
+                    </button>
+                  )}
                 </div>
               </div>
               </div>{/* end flex-1 */}

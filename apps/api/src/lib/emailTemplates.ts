@@ -40,6 +40,49 @@ function postPreview(content: string): string {
   `
 }
 
+// ── 0. Engagement alerts ─────────────────────────────────────────────────────
+export function viralPostEmail(params: {
+  workspaceName: string
+  postSnippet: string
+  ratio: number
+  totalEngagement: number
+  dashboardUrl: string
+}): { subject: string; html: string } {
+  const subject = `🔥 Your post is on fire — ${params.ratio}× average engagement`
+  const html = body(`
+    ${header('Post Performance Alert')}
+    <p style="color:#374151;font-size:15px;margin:0 0 8px">Great news for <strong>${params.workspaceName}</strong>!</p>
+    <p style="color:#374151;font-size:15px;margin:0 0 20px">One of your posts is getting <strong>${Math.round(params.ratio)}× more engagement</strong> than your average — ${params.totalEngagement.toLocaleString()} total interactions.</p>
+    <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:16px;margin:0 0 20px">
+      <p style="color:#92400e;font-size:13px;margin:0;font-style:italic">"${params.postSnippet}"</p>
+    </div>
+    <p style="color:#6b7280;font-size:14px;margin:0 0 20px">💡 Consider boosting this post or repurposing it on other platforms while it's trending.</p>
+    ${ctaButton('View Analytics', params.dashboardUrl)}
+    </div>
+  `)
+  return { subject, html }
+}
+
+export function underperformingPostEmail(params: {
+  workspaceName: string
+  postSnippet: string
+  dashboardUrl: string
+}): { subject: string; html: string } {
+  const subject = `📉 Post needs a boost — ${params.workspaceName}`
+  const html = body(`
+    ${header('Post Performance Alert')}
+    <p style="color:#374151;font-size:15px;margin:0 0 8px">Heads up for <strong>${params.workspaceName}</strong>.</p>
+    <p style="color:#374151;font-size:15px;margin:0 0 20px">A post from 2 hours ago has gotten little engagement. It might be worth giving it a boost or trying a different angle.</p>
+    <div style="background:#f3f4f6;border-radius:8px;padding:16px;margin:0 0 20px">
+      <p style="color:#374151;font-size:13px;margin:0;font-style:italic">"${params.postSnippet}"</p>
+    </div>
+    <p style="color:#6b7280;font-size:14px;margin:0 0 20px">💡 Try repurposing this content with a different hook, or check Content Health for suggestions.</p>
+    ${ctaButton('View Content Health', params.dashboardUrl)}
+    </div>
+  `)
+  return { subject, html }
+}
+
 // ── 1. Publish failure ────────────────────────────────────────────────────────
 export function publishFailureEmail(params: {
   workspaceName: string

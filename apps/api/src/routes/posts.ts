@@ -11,6 +11,7 @@ import { checkLimit } from '../lib/planLimits.js'
 import { notify, notifyMany, getWorkspaceAdmins } from '../lib/notify.js'
 import { getNextAvailableSlot } from '../lib/queueScheduler.js'
 import { sendPostSubmittedEmail, sendPostApprovedEmail, sendPostRejectedEmail } from '../lib/email.js'
+import { computeRecommendations } from '../lib/bestTimes.js'
 
 const router = Router()
 const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
@@ -1328,6 +1329,113 @@ router.delete('/:id/comments/:commentId', async (req: Request, res: Response): P
     res.json({ success: true })
   } catch (err) {
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to delete comment')
+  }
+})
+
+// POST /api/v1/posts/:id/smart-schedule
+// Picks the best available time slot for a DRAFT post and schedules it.
+// Uses workspace analytics history to pick the best hour, then finds the
+// next available day with no existing post in that hour window.
+router.post('/:id/smart-schedule', async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params
+  try {
+    const post = await prisma.scheduledPost.findUnique({
+      where: { id },
+      select: { id: true, workspaceId: true, platforms: true, status: true },
+    })
+    if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
+
+    // Auth: workspace owner or member
+    const workspace = await prisma.workspace.findUnique({ where: { id: post.workspaceId }, select: { ownerId: true } })
+    if (!workspace) { sendError(res, 404, 'NOT_FOUND', 'Workspace not found'); return }
+    const isMember = workspace.ownerId === req.user!.id ||
+      !!(await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId: post.workspaceId, userId: req.user!.id } },
+      }))
+    if (!isMember) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+
+    if (post.status !== 'DRAFT') {
+      sendError(res, 400, 'INVALID_STATUS', 'Only DRAFT posts can be smart-scheduled')
+      return
+    }
+
+    // Get analytics history to find best posting hours
+    const snapshots = await prisma.postMetric.findMany({
+      where: { post: { workspaceId: post.workspaceId, status: 'PUBLISHED' } },
+      include: { post: { select: { scheduledFor: true, platforms: true } } },
+      orderBy: { recordedAt: 'desc' },
+      take: 200,
+    })
+
+    // Compute best hour using bestTimes lib (falls back to benchmarks if insufficient data)
+    // Use the first platform as the primary signal
+    const primaryPlatform = (post.platforms as string[])[0] ?? 'INSTAGRAM'
+    const publishedHours: number[] = []
+    for (const m of snapshots as any[]) {
+      if (m.post.platforms.includes(primaryPlatform)) {
+        publishedHours.push(new Date(m.post.scheduledFor).getUTCHours())
+      }
+    }
+
+    const rec = computeRecommendations(primaryPlatform, publishedHours)
+    const bestHour = rec.topHours[0] ?? 9 // default 9am UTC
+
+    // Find the next day (1-14 days out) with no existing post in ±1h window of bestHour
+    const now = new Date()
+    let scheduledFor: Date | null = null
+
+    for (let daysOut = 1; daysOut <= 14; daysOut++) {
+      const candidate = new Date(now)
+      candidate.setUTCDate(candidate.getUTCDate() + daysOut)
+      candidate.setUTCHours(bestHour, 0, 0, 0)
+
+      const windowStart = new Date(candidate)
+      windowStart.setUTCHours(bestHour - 1, 0, 0, 0)
+      const windowEnd = new Date(candidate)
+      windowEnd.setUTCHours(bestHour + 1, 59, 59, 999)
+
+      const conflict = await prisma.scheduledPost.findFirst({
+        where: {
+          workspaceId: post.workspaceId,
+          id: { not: id },
+          scheduledFor: { gte: windowStart, lte: windowEnd },
+          status: { in: ['DRAFT', 'SCHEDULED', 'QUEUED', 'PENDING_REVIEW', 'APPROVED'] },
+        },
+        select: { id: true },
+      })
+
+      if (!conflict) {
+        scheduledFor = candidate
+        break
+      }
+    }
+
+    // Fallback: 7 days + random minute offset to avoid exact collision
+    if (!scheduledFor) {
+      scheduledFor = new Date(now)
+      scheduledFor.setUTCDate(scheduledFor.getUTCDate() + 7)
+      scheduledFor.setUTCHours(bestHour, Math.floor(Math.random() * 60), 0, 0)
+    }
+
+    // Update the post to SCHEDULED
+    const updated = await prisma.scheduledPost.update({
+      where: { id },
+      data: { status: 'SCHEDULED', scheduledFor },
+    })
+
+    // Queue the publish job
+    const delay = Math.max(scheduledFor.getTime() - Date.now(), 1000)
+    await publishPostQueue.add(
+      'publish-post',
+      { postId: id },
+      { delay, attempts: 3, backoff: { type: 'exponential', delay: 5000 }, jobId: `publish-${id}` },
+    )
+
+    logger.info({ postId: id, scheduledFor, bestHour }, '[SmartSchedule] Post scheduled at best time')
+    res.json({ post: updated, scheduledFor, bestHour })
+  } catch (err) {
+    logger.error({ err, postId: id }, '[SmartSchedule] Error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to smart-schedule post')
   }
 })
 
