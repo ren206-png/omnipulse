@@ -9,7 +9,9 @@
     "start": "node dist/index.js",
     "prisma": "prisma",
     "seed": "tsx prisma/seed.ts",
-    "tsc": "tsc"
+    "tsc": "tsc",
+    "reencrypt-tokens:dry": "tsx scripts/reencryptTokens.ts",
+    "reencrypt-tokens": "tsx scripts/reencryptTokens.ts --execute"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
