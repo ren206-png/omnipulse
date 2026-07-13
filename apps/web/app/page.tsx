@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { OmniPulseLogo } from '@/components/OmniPulseLogo'
 
 export const metadata: Metadata = {
   title: 'OmniPulse — AI-Powered Social Media Management',
@@ -104,9 +105,7 @@ export default function HomePage() {
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
           <div className="flex items-center gap-2">
-            <span className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              OmniPulse
-            </span>
+            <OmniPulseLogo variant="wordmark" height={36} />
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-600 dark:text-gray-400">
             <a href="#features" className="hover:text-gray-900 dark:hover:text-white transition-colors">Features</a>
@@ -256,9 +255,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
             <div className="text-center sm:text-left">
-              <div className="text-lg font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-1">
-                OmniPulse
-              </div>
+              <OmniPulseLogo variant="wordmark" height={32} className="mb-1 opacity-80 dark:opacity-90" />
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Your all-in-one social media command center.
               </p>

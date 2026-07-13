@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import { OmniPulseLogo } from '@/components/OmniPulseLogo'
 import { loginAction, verifyTwoFactorAction } from './actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -107,8 +108,8 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30">
       <div className="w-full max-w-sm space-y-6 bg-background p-8 rounded-lg border shadow-sm">
-        <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold">OmniPulse</h1>
+        <div className="space-y-2 text-center flex flex-col items-center">
+          <OmniPulseLogo variant="wordmark" height={36} className="mb-1" />
           <p className="text-sm text-muted-foreground">Sign in to your account</p>
         </div>
 

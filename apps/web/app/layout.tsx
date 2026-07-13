@@ -62,12 +62,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {process.env.GOOGLE_SITE_VERIFICATION && (
           <meta name="google-site-verification" content={process.env.GOOGLE_SITE_VERIFICATION} />
         )}
+        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon.ico" sizes="32x32" />
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#6366f1" />
+        <meta name="theme-color" content="#0a0a0f" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="OmniPulse" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" href="/icon.svg" />
       </head>
       <body className="bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased">{children}</body>
     </html>

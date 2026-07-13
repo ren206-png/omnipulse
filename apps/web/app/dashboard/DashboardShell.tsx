@@ -14,6 +14,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { CommandPalette } from './components/CommandPalette'
 import { OnboardingWidget } from './components/OnboardingWidget'
 import { SESSION_EXPIRED_EVENT } from './hooks/useAuthFetch'
+import { OmniPulseLogo } from '@/components/OmniPulseLogo'
 
 interface Workspace { id: string; name: string }
 
@@ -209,7 +210,7 @@ function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNav
   return (
     <>
       <div className="p-4 border-b flex items-center justify-between">
-        <span className="font-bold text-lg">OmniPulse</span>
+        <OmniPulseLogo variant="wordmark" height={30} />
         <div className="flex items-center gap-1">
           <ThemeToggle />
           <NotificationBell token={token} />
@@ -306,7 +307,7 @@ function Sidebar({ token, onOpenCmd }: { token: string; onOpenCmd: () => void })
   return (
     <>
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 h-14 border-b bg-background">
-        <span className="font-bold text-lg">OmniPulse</span>
+        <OmniPulseLogo variant="wordmark" height={28} />
         <button onClick={() => setMobileOpen(o => !o)} className="p-1.5 rounded-md hover:bg-accent transition-colors" aria-label="Toggle menu">
           <HamburgerIcon open={mobileOpen} />
         </button>

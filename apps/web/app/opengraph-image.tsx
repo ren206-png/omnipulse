@@ -45,31 +45,41 @@ export default async function Image() {
         />
 
         {/* Logo + brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '40px' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '56px',
-              height: '56px',
-              borderRadius: '14px',
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              fontSize: '28px',
-            }}
-          >
-            ⚡
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '40px' }}>
+          {/* Icon: partial circle ring + pulse wave (inline SVG via img isn't supported in og, use divs) */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '72px',
+            height: '72px',
+            borderRadius: '50%',
+            border: '3px solid #60a5fa',
+            background: '#0a0a0f',
+            fontSize: '36px',
+          }}>
+            〜
           </div>
-          <span
-            style={{
-              fontSize: '40px',
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <span style={{
+              fontSize: '42px',
               fontWeight: 800,
-              color: '#ffffff',
-              letterSpacing: '-1px',
-            }}
-          >
-            OmniPulse
-          </span>
+              background: 'linear-gradient(90deg, #e2e8f0 0%, #93c5fd 60%, #818cf8 100%)',
+              WebkitBackgroundClip: 'text',
+              color: 'transparent',
+              letterSpacing: '3px',
+            }}>
+              OMNIPULSE
+            </span>
+            <span style={{
+              fontSize: '14px',
+              letterSpacing: '4px',
+              color: '#60a5fa',
+              fontWeight: 400,
+            }}>
+              ONE SYSTEM. EVERY PULSE.
+            </span>
+          </div>
         </div>
 
         {/* Tagline */}
