@@ -68,6 +68,9 @@ model Workspace {
   ingestedJobEvents   IngestedJobEvent[]
   postAttributions    PostAttribution[]
   attributionEvents   AttributionEvent[]
+  approvalMagicLinks  ApprovalMagicLink[]
+  branding            WorkspaceBranding?
+  evergreenQueue      EvergreenQueue[]
 }
 
 enum Plan {
@@ -106,6 +109,7 @@ enum WorkspaceRole {
   OWNER
   ADMIN
   MEMBER
+  CLIENT_APPROVER
 }
 
 model SocialAccount {
@@ -169,6 +173,7 @@ model ScheduledPost {
   campaign             Campaign?             @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   seoMetadata         PostSeoMetadata?
   attribution         PostAttribution?
+  evergreenQueue      EvergreenQueue?
 
   @@index([status, scheduledFor])
 }
@@ -591,4 +596,48 @@ model AttributionEvent {
   receivedAt    DateTime @default(now())
   @@index([postId])
   @@index([workspaceId])
+}
+
+model ApprovalMagicLink {
+  id          String    @id @default(cuid())
+  workspaceId String
+  token       String    @unique @default(cuid())
+  email       String
+  createdBy   String
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  @@index([workspaceId])
+  @@index([token])
+}
+
+model WorkspaceBranding {
+  id           String    @id @default(cuid())
+  workspaceId  String    @unique
+  logoUrl      String?
+  primaryColor String    @default("#6366f1")
+  companyName  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model EvergreenQueue {
+  id                  String        @id @default(cuid())
+  workspaceId         String
+  postId              String        @unique  // the original evergreen post
+  minIntervalDays     Int           @default(45)
+  lastRecycledAt      DateTime?
+  nextRecycleAfter    DateTime?     // computed: lastRecycledAt + minIntervalDays
+  autoPublish         Boolean       @default(false)  // explicit opt-in, off by default
+  seasonalExclusions  Json?         // array of { startMD: "12-20", endMD: "01-05", label: "Christmas" }
+  active              Boolean       @default(true)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  workspace           Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  post                ScheduledPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  @@index([workspaceId])
+  @@index([nextRecycleAfter, active])
 }

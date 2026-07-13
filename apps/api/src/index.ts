@@ -54,7 +54,12 @@ import dlqRouter from './routes/dlq.js'
 import tradeflowRouter from './routes/tradeflow.js'
 import photoToPostRouter from './routes/photoToPost.js'
 import outcomeAnalyticsRouter from './routes/outcomeAnalytics.js'
+import approvalsRouter from './routes/approvals.js'
+import magicLinksRouter from './routes/magicLinks.js'
+import agencyBrandingRouter from './routes/agencyBranding.js'
+import evergreenQueueRouter from './routes/evergreenQueue.js'
 import { startEvergreenWorker } from './workers/evergreen.worker.js'
+import { startEvergreenRecyclerWorker } from './workers/evergreenRecycler.worker.js'
 import { startStuckJobSweeperWorker } from './workers/stuckJobSweeper.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
 import { sendWeeklyDigest } from './lib/digest.js'
@@ -152,6 +157,10 @@ app.use('/api/v1/seo-data', seoDataRouter)
 app.use('/api/v1/tradeflow', tradeflowRouter)
 app.use('/api/v1/photo-to-post', photoToPostRouter)
 app.use('/api/v1/outcome-analytics', outcomeAnalyticsRouter)
+app.use('/api/v1/approvals', approvalsRouter)
+app.use('/api/v1/magic-links', magicLinksRouter)
+app.use('/api/v1/agency-branding', agencyBrandingRouter)
+app.use('/api/v1/evergreen', evergreenQueueRouter)
 app.use('/uploads', express.static('public/uploads'))
 
 // Sentry error handler — must be after all routes
@@ -171,6 +180,7 @@ app.listen(env.PORT, '0.0.0.0', () => {
   logger.info({ port: env.PORT }, `OmniPulse API listening on port ${env.PORT}`)
 })
 startEvergreenWorker()
+startEvergreenRecyclerWorker()
 // Guardian — self-healing system (scans every 5 min for zombie posts)
 startGuardianWorker().catch((err) => logger.error({ err }, 'Failed to start guardian worker'))
 // Stuck-Job Sweeper — requeues or DLQs posts stuck in PROCESSING for >15 min
