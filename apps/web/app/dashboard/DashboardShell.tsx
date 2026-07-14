@@ -72,7 +72,7 @@ const NAV_GROUPS = [
   },
   {
     label: 'Settings',
-    defaultOpen: false,
+    defaultOpen: true,
     links: [
       { href: '/dashboard/accounts', label: 'Accounts', icon: '🔌' },
       { href: '/dashboard/billing', label: 'Billing', icon: '💳' },
