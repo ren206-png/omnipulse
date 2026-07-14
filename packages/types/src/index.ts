@@ -5,6 +5,7 @@ export enum Platform {
   X = 'X',
   GOOGLE = 'GOOGLE',
   LINKEDIN = 'LINKEDIN',
+  YOUTUBE = 'YOUTUBE',
 }
 
 export enum Role {

@@ -59,6 +59,7 @@ const PLATFORM_LIMITS: Record<string, number> = {
   INSTAGRAM: 2200,
   TIKTOK:    2200,
   GOOGLE:    1500,
+  YOUTUBE:   5000,
 }
 
 const PLATFORM_GUIDANCE: Record<string, string> = {
@@ -947,7 +948,7 @@ router.post('/coach', aiLimiter, async (req: Request, res: Response): Promise<vo
   if (!instruction?.trim()) { sendError(res, 400, 'MISSING_INSTRUCTION', 'instruction required'); return }
 
   const platformContext = platform ? `This post is for ${platform}. ` : ''
-  const charLimit = platform === 'X' ? 280 : platform === 'INSTAGRAM' ? 2200 : 3000
+  const charLimit = platform === 'X' ? 280 : platform === 'INSTAGRAM' ? 2200 : platform === 'YOUTUBE' ? 5000 : 3000
 
   try {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })

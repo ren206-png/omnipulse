@@ -12,9 +12,10 @@ import { notify, notifyMany, getWorkspaceAdmins } from '../lib/notify.js'
 import { getNextAvailableSlot } from '../lib/queueScheduler.js'
 import { sendPostSubmittedEmail, sendPostApprovedEmail, sendPostRejectedEmail } from '../lib/email.js'
 import { computeRecommendations } from '../lib/bestTimes.js'
+import { Platform } from '../../generated/prisma/enums.js'
 
 const router = Router()
-const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
+const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'] as const
 
 router.use(requireAuth)
 
@@ -332,7 +333,7 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
   if (!platforms || !Array.isArray(platforms) || platforms.length === 0) { sendError(res, 400, 'MISSING_FIELD', 'platforms array is required'); return }
   if (!scheduledFor) { sendError(res, 400, 'MISSING_FIELD', 'scheduledFor is required'); return }
 
-  const invalidPlatforms = platforms.filter((p) => !VALID_PLATFORMS.includes(p as typeof VALID_PLATFORMS[number]))
+  const invalidPlatforms = platforms.filter((p) => !VALID_PLATFORMS.includes(p as Platform))
   if (invalidPlatforms.length > 0) { sendError(res, 400, 'INVALID_PLATFORM', `Invalid platforms: ${invalidPlatforms.join(', ')}`); return }
 
   const scheduledDate = new Date(scheduledFor)
@@ -361,7 +362,7 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
         workspaceId,
         content: content.trim(),
         mediaUrls: mediaUrls ?? [],
-        platforms: platforms as (typeof VALID_PLATFORMS[number])[],
+        platforms: platforms as (Platform)[],
         scheduledFor: scheduledDate,
         status,
         submittedBy: req.user!.id,
@@ -423,7 +424,7 @@ router.post('/queue-schedule', async (req: Request, res: Response): Promise<void
   if (!content || content.trim().length === 0) { sendError(res, 400, 'MISSING_FIELD', 'content is required'); return }
   if (!platforms || !Array.isArray(platforms) || platforms.length === 0) { sendError(res, 400, 'MISSING_FIELD', 'platforms array is required'); return }
 
-  const invalidPlatforms = platforms.filter((p) => !VALID_PLATFORMS.includes(p as typeof VALID_PLATFORMS[number]))
+  const invalidPlatforms = platforms.filter((p) => !VALID_PLATFORMS.includes(p as Platform))
   if (invalidPlatforms.length > 0) { sendError(res, 400, 'INVALID_PLATFORM', `Invalid platforms: ${invalidPlatforms.join(', ')}`); return }
 
   const { variants, error: variantError } = validateVariants(platformVariants)
@@ -471,7 +472,7 @@ router.post('/queue-schedule', async (req: Request, res: Response): Promise<void
         workspaceId,
         content: content.trim(),
         mediaUrls: mediaUrls ?? [],
-        platforms: platforms as (typeof VALID_PLATFORMS[number])[],
+        platforms: platforms as (Platform)[],
         scheduledFor: nextSlot,
         status,
         submittedBy: req.user!.id,
@@ -535,8 +536,8 @@ router.post('/draft', async (req: Request, res: Response): Promise<void> => {
     if (!isNaN(d.getTime())) scheduledDate = d
   }
 
-  const validPlatforms = (platforms ?? []).filter((p): p is typeof VALID_PLATFORMS[number] =>
-    VALID_PLATFORMS.includes(p as typeof VALID_PLATFORMS[number]),
+  const validPlatforms = (platforms ?? []).filter((p): p is Platform =>
+    VALID_PLATFORMS.includes(p as Platform),
   )
 
   const { variants, error: variantError } = validateVariants(platformVariants)
@@ -619,7 +620,7 @@ router.post('/bulk-schedule', async (req: Request, res: Response): Promise<void>
     if (!p.content || !p.content.trim()) errs.push('content is required')
     if (!Array.isArray(p.platforms) || p.platforms.length === 0) errs.push('at least one platform is required')
     else {
-      const bad = p.platforms.filter((pl) => !VALID_PLATFORMS.includes(pl as typeof VALID_PLATFORMS[number]))
+      const bad = p.platforms.filter((pl) => !VALID_PLATFORMS.includes(pl as Platform))
       if (bad.length > 0) errs.push(`invalid platforms: ${bad.join(', ')}`)
     }
     if (!p.scheduledFor) {
@@ -645,7 +646,7 @@ router.post('/bulk-schedule', async (req: Request, res: Response): Promise<void>
           data: {
             workspaceId,
             content: p.content.trim(),
-            platforms: p.platforms as (typeof VALID_PLATFORMS[number])[],
+            platforms: p.platforms as (Platform)[],
             scheduledFor: new Date(p.scheduledFor),
             mediaUrls: p.mediaUrls?.filter(Boolean) ?? [],
             status: isPrivileged ? 'SCHEDULED' : 'PENDING_REVIEW',

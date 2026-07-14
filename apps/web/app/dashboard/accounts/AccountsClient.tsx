@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
-const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
+const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'] as const
 type Platform = (typeof PLATFORMS)[number]
 
 interface PlatformConfig {
@@ -53,6 +53,12 @@ const PLATFORM_CONFIG: Record<Platform, PlatformConfig> = {
     instructions:
       '1. Click Connect — you\'ll be redirected to LinkedIn to sign in\n2. Approve the requested permissions (w_member_social)\n3. You\'ll be redirected back automatically\n4. To connect a Company Page, use the "Connect Page" button after connecting your profile',
   },
+  YOUTUBE: {
+    color: '#FF0000',
+    handlePlaceholder: 'Channel Handle (e.g. @YourChannel)',
+    instructions:
+      '1. Click Connect — you\'ll be redirected to Google to sign in\n2. Select the Google account linked to your YouTube channel\n3. Approve the requested permissions (upload videos, read channel info)\n4. You\'ll be redirected back automatically',
+  },
 }
 
 function PlatformIcon({ platform, size = 20 }: { platform: Platform; size?: number }) {
@@ -67,7 +73,15 @@ function PlatformIcon({ platform, size = 20 }: { platform: Platform; size?: numb
     )
   }
 
-  const paths: Record<Exclude<Platform, 'TIKTOK'>, React.ReactNode> = {
+  if (platform === 'YOUTUBE') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="#FF0000" stroke="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+      </svg>
+    )
+  }
+
+  const paths: Record<Exclude<Platform, 'TIKTOK' | 'YOUTUBE'>, React.ReactNode> = {
     FACEBOOK: <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />,
     INSTAGRAM: (
       <>
@@ -97,7 +111,7 @@ function PlatformIcon({ platform, size = 20 }: { platform: Platform; size?: numb
       stroke="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      {paths[platform as Exclude<Platform, 'TIKTOK'>]}
+      {paths[platform as Exclude<Platform, 'TIKTOK' | 'YOUTUBE'>]}
     </svg>
   )
 }

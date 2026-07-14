@@ -32,6 +32,7 @@ const PLATFORM_MAP: Record<string, string> = {
   TIKTOK: 'tiktok',
   X: 'twitter',
   GOOGLE: 'gmb',
+  YOUTUBE: 'youtube',
 }
 
 export class AyrshareService {

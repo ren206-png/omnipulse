@@ -15,6 +15,7 @@ interface PlatformStat {
 
 const PLATFORM_COLORS: Record<string, string> = {
   LINKEDIN: '#0A66C2',
+  YOUTUBE: '#FF0000',
   INSTAGRAM: '#E1306C',
   FACEBOOK: '#1877F2',
   X: '#111111',

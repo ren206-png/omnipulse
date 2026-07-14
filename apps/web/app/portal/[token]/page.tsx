@@ -12,6 +12,7 @@ const PLATFORM_LABELS: Record<string, string> = {
   X: 'X (Twitter)',
   GOOGLE: 'Google',
   LINKEDIN: 'LinkedIn',
+  YOUTUBE: 'YouTube',
 }
 
 interface PostApproval {

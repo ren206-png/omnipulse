@@ -15,6 +15,7 @@ const PLATFORMS = [
   { id: 'X',         label: 'X (Twitter)', color: '#000', icon: '🐦' },
   { id: 'TIKTOK',   label: 'TikTok',    color: '#010101', icon: '🎵' },
   { id: 'LINKEDIN',  label: 'LinkedIn',  color: '#0A66C2', icon: '💼' },
+  { id: 'YOUTUBE',   label: 'YouTube',   color: '#FF0000', icon: '▶️' },
 ]
 
 const STEPS = [

@@ -7,17 +7,18 @@ import { logger } from '../lib/logger.js'
 import { checkLimit } from '../lib/planLimits.js'
 import { encryptToken, decryptToken } from '../lib/tokenEncryption.js'
 import { createOAuthState, extractOAuthStatePayload, TenantAccessError } from '../lib/tenantGuard.js'
+import { Platform } from '../../generated/prisma/enums.js'
 import { notify } from '../lib/notify.js'
 
 const router = Router()
-const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
+const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'] as const
 
 // OAuth endpoints — must be registered BEFORE the requireAuth middleware
 // GET /api/v1/social-accounts/oauth/connect?platform=INSTAGRAM&workspaceId=xxx
 router.get('/oauth/connect', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { platform, workspaceId } = req.query as Record<string, string>
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
-  if (!platform || !VALID_PLATFORMS.includes(platform as typeof VALID_PLATFORMS[number])) {
+  if (!platform || !VALID_PLATFORMS.includes(platform as Platform)) {
     sendError(res, 400, 'INVALID_PLATFORM', `platform must be one of: ${VALID_PLATFORMS.join(', ')}`)
     return
   }
@@ -35,6 +36,7 @@ router.get('/oauth/connect', requireAuth, async (req: Request, res: Response): P
     X: `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${process.env.X_CLIENT_ID ?? 'X_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=tweet.read+tweet.write+users.read&state=${state}&code_challenge=${pkceVerifier}&code_challenge_method=plain`,
     TIKTOK: `https://www.tiktok.com/v2/auth/authorize/?client_key=${process.env.TIKTOK_CLIENT_KEY ?? 'TIKTOK_CLIENT_KEY'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user.info.basic,video.upload&response_type=code&state=${state}`,
     GOOGLE: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID ?? 'GOOGLE_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=https://www.googleapis.com/auth/youtube.upload&response_type=code&state=${state}`,
+    YOUTUBE: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID ?? 'GOOGLE_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly')}&response_type=code&access_type=offline&prompt=consent&state=${state}`,
     // LinkedIn: personal profile scope. Add pages=true param to also request org scope.
     LINKEDIN: (() => {
       const pagesFlow = (req.query as Record<string, string>).pages === 'true'
@@ -76,6 +78,7 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
     const redirectUri = `${process.env.API_URL ?? 'http://localhost:4000'}/api/v1/social-accounts/oauth/callback`
 
     let accessToken = ''
+    let refreshToken: string | null = null
     let externalProfileId = ''
     let profileName = ''
 
@@ -243,6 +246,42 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
         externalProfileId = profile.id ?? ''
         profileName = profile.name ?? externalProfileId
       }
+    } else if (platform === 'YOUTUBE') {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID ?? '',
+          client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+          redirect_uri: redirectUri,
+          grant_type: 'authorization_code',
+          code,
+        }),
+      })
+      if (!tokenRes.ok) {
+        const errBody = await tokenRes.text()
+        logger.error({ status: tokenRes.status, body: errBody }, 'YouTube token exchange failed')
+        res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
+        return
+      }
+      const tokenData = await tokenRes.json() as { access_token?: string; refresh_token?: string; error?: string }
+      if (!tokenData.access_token) {
+        logger.error({ tokenData }, 'YouTube token exchange returned no access_token')
+        res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
+        return
+      }
+      accessToken = tokenData.access_token
+      refreshToken = tokenData.refresh_token ?? null
+      // Fetch YouTube channel info
+      try {
+        const channelRes = await fetch(
+          'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        )
+        const channelData = await channelRes.json() as { items?: { id: string; snippet: { title: string } }[] }
+        const channel = channelData.items?.[0]
+        externalProfileId = channel?.id ?? ''
+        profileName = channel?.snippet?.title ?? externalProfileId
+      } catch { profileName = externalProfileId }
     } else if (platform === 'LINKEDIN') {
       // Step 1: Exchange code for tokens
       const liVersion = process.env.LINKEDIN_API_VERSION ?? '202506'
@@ -364,15 +403,25 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
     const encryptedAccessToken = encryptToken(accessToken)
 
     // SocialAccount has no unique constraint on workspaceId+platform, so use findFirst + create/update
-    const existing = await prisma.socialAccount.findFirst({ where: { workspaceId, platform: platform as typeof VALID_PLATFORMS[number] } })
+    const existing = await prisma.socialAccount.findFirst({ where: { workspaceId, platform: platform as Platform } })
     if (existing) {
       await prisma.socialAccount.update({
         where: { id: existing.id },
-        data: { accessToken: encryptedAccessToken, externalProfileId: displayName },
+        data: {
+          accessToken: encryptedAccessToken,
+          externalProfileId: displayName,
+          ...(refreshToken ? { refreshToken } : {}),
+        },
       })
     } else {
       await prisma.socialAccount.create({
-        data: { workspaceId, platform: platform as typeof VALID_PLATFORMS[number], accessToken: encryptedAccessToken, externalProfileId: displayName },
+        data: {
+          workspaceId,
+          platform: platform as Platform,
+          accessToken: encryptedAccessToken,
+          externalProfileId: displayName,
+          ...(refreshToken ? { refreshToken } : {}),
+        },
       })
     }
 
@@ -422,7 +471,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
-  if (!platform || !VALID_PLATFORMS.includes(platform as typeof VALID_PLATFORMS[number])) {
+  if (!platform || !VALID_PLATFORMS.includes(platform as Platform)) {
     sendError(res, 400, 'INVALID_PLATFORM', `platform must be one of: ${VALID_PLATFORMS.join(', ')}`)
     return
   }
@@ -449,7 +498,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
 
     const existing = await prisma.socialAccount.findFirst({
-      where: { workspaceId, platform: platform as typeof VALID_PLATFORMS[number], externalProfileId: externalProfileId.trim() },
+      where: { workspaceId, platform: platform as Platform, externalProfileId: externalProfileId.trim() },
     })
     if (existing) {
       sendError(res, 409, 'ALREADY_CONNECTED', 'This account is already connected to the workspace')
@@ -459,7 +508,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const account = await prisma.socialAccount.create({
       data: {
         workspaceId,
-        platform: platform as typeof VALID_PLATFORMS[number],
+        platform: platform as Platform,
         externalProfileId: externalProfileId.trim(),
         accessToken: accessToken.trim(),
       },

@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { useWorkspace } from '../context/WorkspaceContext'
 
-const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE'] as const
+const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'] as const
 type Platform = (typeof PLATFORMS)[number]
 
 const PLATFORM_COLORS: Record<Platform, string> = {
@@ -18,6 +18,8 @@ const PLATFORM_COLORS: Record<Platform, string> = {
   TIKTOK:    'bg-slate-100 text-slate-700',
   X:         'bg-gray-100 text-gray-700',
   GOOGLE:    'bg-orange-100 text-orange-700',
+  LINKEDIN:  'bg-sky-100 text-sky-700',
+  YOUTUBE:   'bg-red-100 text-red-700',
 }
 
 interface Template {

@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { useWorkspace } from '../context/WorkspaceContext'
 
 const STATUS_FILTERS = ['ALL', 'DRAFT', 'SCHEDULED', 'PUBLISHED', 'FAILED'] as const
-const PLATFORM_FILTERS = ['ALL', 'FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
+const PLATFORM_FILTERS = ['ALL', 'FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'] as const
 
 const PLATFORM_COLORS: Record<string, string> = {
   FACEBOOK: 'bg-blue-100 text-blue-700',

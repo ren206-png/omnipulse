@@ -4,9 +4,10 @@ import { prisma } from '../lib/prisma.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
+import { Platform } from '../../generated/prisma/enums.js'
 
 const router = Router()
-const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
+const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'] as const
 
 router.use(requireAuth)
 
@@ -58,7 +59,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   const badPlatforms = (platforms ?? []).filter(
-    (p) => !VALID_PLATFORMS.includes(p as typeof VALID_PLATFORMS[number]),
+    (p) => !VALID_PLATFORMS.includes(p as Platform),
   )
   if (badPlatforms.length > 0) {
     sendError(res, 400, 'INVALID_PLATFORM', `Invalid platforms: ${badPlatforms.join(', ')}`); return
@@ -70,7 +71,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         workspaceId,
         name: name.trim(),
         content: content.trim(),
-        platforms: (platforms ?? []) as (typeof VALID_PLATFORMS[number])[],
+        platforms: (platforms ?? []) as (Platform)[],
         category: category?.trim() || null,
         createdBy: req.user!.id,
       },
@@ -98,7 +99,7 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
     }
 
     const badPlatforms = (platforms ?? []).filter(
-      (p) => !VALID_PLATFORMS.includes(p as typeof VALID_PLATFORMS[number]),
+      (p) => !VALID_PLATFORMS.includes(p as Platform),
     )
     if (badPlatforms.length > 0) {
       sendError(res, 400, 'INVALID_PLATFORM', `Invalid platforms: ${badPlatforms.join(', ')}`); return
@@ -109,7 +110,7 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
       data: {
         ...(name !== undefined && { name: name.trim() }),
         ...(content !== undefined && { content: content.trim() }),
-        ...(platforms !== undefined && { platforms: platforms as (typeof VALID_PLATFORMS[number])[] }),
+        ...(platforms !== undefined && { platforms: platforms as (Platform)[] }),
         ...(category !== undefined && { category: category.trim() || null }),
       },
     })

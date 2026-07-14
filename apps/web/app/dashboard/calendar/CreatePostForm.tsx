@@ -15,7 +15,7 @@ import { UpgradeModal } from '../components/UpgradeModal'
 import { HookLibrary } from '../components/HookLibrary'
 import { SeoChecklistWidget } from './SeoChecklistWidget'
 
-const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN'] as const
+const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'] as const
 type Platform = (typeof PLATFORMS)[number]
 
 // Platforms that support per-platform content variants
@@ -29,6 +29,7 @@ const PLATFORM_CHAR_LIMITS: Record<Platform, number> = {
   TIKTOK:    2200,
   GOOGLE:    1500,
   LINKEDIN:  3000,
+  YOUTUBE:   5000,
 }
 
 const PLATFORM_ICONS: Record<VariantPlatform, string> = {
@@ -1983,7 +1984,7 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
       {/* Post preview */}
       <PostPreviewCard
         content={content}
-        platforms={selectedPlatforms as ('FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'X' | 'GOOGLE' | 'LINKEDIN')[]}
+        platforms={selectedPlatforms as ('FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'X' | 'GOOGLE' | 'LINKEDIN' | 'YOUTUBE')[]}
         mediaUrls={mediaUrls.filter((u) => u.trim().length > 0)}
       />
 

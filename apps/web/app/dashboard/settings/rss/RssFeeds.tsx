@@ -19,7 +19,7 @@ interface Props {
 }
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
-const ALL_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN']
+const ALL_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE']
 
 const INTERVAL_OPTIONS = [
   { label: '30 min', value: '30' },

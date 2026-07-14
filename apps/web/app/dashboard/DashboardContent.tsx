@@ -39,8 +39,8 @@ const PLATFORM_ICONS: Record<string, string> = {
   LINKEDIN: '💼',
   FACEBOOK: '👤',
   TIKTOK: '🎵',
-  PINTEREST: '📌',
   YOUTUBE: '▶️',
+  PINTEREST: '📌',
 }
 
 function MetricSkeleton() {

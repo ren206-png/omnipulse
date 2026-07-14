@@ -6,6 +6,7 @@ export const PLATFORM_BENCHMARKS: Record<string, number[]> = {
   X:         [8, 9, 10, 11, 12, 17, 18, 19, 20],   // morning commute + evening
   TIKTOK:    [6, 7, 10, 11, 19, 20, 21, 22],        // early morning + late evening
   GOOGLE:    [9, 10, 11, 14, 15, 16],               // business hours
+  YOUTUBE:   [12, 13, 14, 15, 16, 17, 20, 21],     // lunch + afternoon + evening prime time
 }
 
 export interface HourScore {

@@ -9,7 +9,7 @@ interface PostPreviewProps {
   scheduledFor: string
 }
 
-type Platform = 'INSTAGRAM' | 'X' | 'FACEBOOK' | 'TIKTOK' | 'GOOGLE' | 'LINKEDIN'
+type Platform = 'INSTAGRAM' | 'X' | 'FACEBOOK' | 'TIKTOK' | 'GOOGLE' | 'LINKEDIN' | 'YOUTUBE'
 
 const PLATFORM_LABELS: Record<Platform, string> = {
   INSTAGRAM: 'Instagram',
@@ -18,6 +18,7 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   TIKTOK: 'TikTok',
   GOOGLE: 'Google',
   LINKEDIN: 'LinkedIn',
+  YOUTUBE: 'YouTube',
 }
 
 const PLATFORM_ICONS: Record<Platform, string> = {
@@ -27,6 +28,7 @@ const PLATFORM_ICONS: Record<Platform, string> = {
   TIKTOK: '🎵',
   GOOGLE: '🔍',
   LINKEDIN: '💼',
+  YOUTUBE: '▶️',
 }
 
 function InstagramPreview({ content, mediaUrls }: { content: string; mediaUrls: string[] }) {
@@ -260,7 +262,7 @@ function LinkedInPreview({ content, mediaUrls }: { content: string; mediaUrls: s
 
 export default function PostPreview({ content, mediaUrls, platforms, scheduledFor }: PostPreviewProps) {
   const validPlatforms = platforms.filter((p): p is Platform =>
-    ['INSTAGRAM', 'X', 'FACEBOOK', 'TIKTOK', 'GOOGLE', 'LINKEDIN'].includes(p)
+    ['INSTAGRAM', 'X', 'FACEBOOK', 'TIKTOK', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'].includes(p)
   )
 
   const [activeTab, setActiveTab] = useState<Platform>(validPlatforms[0] ?? 'INSTAGRAM')
@@ -275,6 +277,7 @@ export default function PostPreview({ content, mediaUrls, platforms, scheduledFo
       case 'TIKTOK':    return <TikTokPreview    content={content} mediaUrls={mediaUrls} />
       case 'GOOGLE':    return <GooglePreview    content={content} />
       case 'LINKEDIN':  return <LinkedInPreview  content={content} mediaUrls={mediaUrls} />
+      case 'YOUTUBE':   return <GooglePreview    content={content} />
     }
   }
 

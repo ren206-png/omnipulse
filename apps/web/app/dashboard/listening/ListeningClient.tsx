@@ -6,7 +6,7 @@ import { useWorkspace } from '../context/WorkspaceContext'
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
 const MAX_KEYWORDS = 10
 
-type Platform = 'FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'X' | 'GOOGLE' | 'LINKEDIN'
+type Platform = 'FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'X' | 'GOOGLE' | 'LINKEDIN' | 'YOUTUBE'
 
 interface ListeningKeyword {
   id: string
@@ -31,6 +31,7 @@ const PLATFORM_ICONS: Record<Platform, string> = {
   LINKEDIN: '💼',
   TIKTOK: '🎵',
   GOOGLE: '🔍',
+  YOUTUBE: '▶️',
 }
 
 function relativeTime(dateStr: string): string {

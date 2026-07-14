@@ -12,6 +12,7 @@ const PLATFORM_ICONS: Record<string, string> = {
   LINKEDIN: '💼',
   TIKTOK: '🎵',
   GOOGLE: '🔍',
+  YOUTUBE: '▶️',
 }
 
 const PLATFORM_COLORS: Record<string, string> = {
@@ -21,6 +22,7 @@ const PLATFORM_COLORS: Record<string, string> = {
   X: 'bg-gray-100 text-gray-700',
   GOOGLE: 'bg-orange-100 text-orange-700',
   LINKEDIN: 'bg-sky-100 text-sky-700',
+  YOUTUBE: 'bg-red-100 text-red-700',
 }
 
 interface PostMetric {

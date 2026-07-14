@@ -16,7 +16,7 @@ interface QueuePost {
   mediaUrls: string[]
 }
 
-const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE'] as const
+const PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'] as const
 
 const PLATFORM_BADGE: Record<string, string> = {
   FACEBOOK: 'bg-blue-100 text-blue-700',

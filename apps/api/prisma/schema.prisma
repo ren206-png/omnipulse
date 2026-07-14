@@ -139,6 +139,7 @@ enum Platform {
   X
   GOOGLE
   LINKEDIN
+  YOUTUBE
 }
 
 model ScheduledPost {

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 
-type Platform = 'FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'X' | 'GOOGLE' | 'LINKEDIN'
+type Platform = 'FACEBOOK' | 'INSTAGRAM' | 'TIKTOK' | 'X' | 'GOOGLE' | 'LINKEDIN' | 'YOUTUBE'
 
 interface Props {
   content: string
@@ -19,6 +19,7 @@ const PLATFORM_META: Record<Platform, { label: string; color: string; avatar: st
   TIKTOK:    { label: 'TikTok',      color: '#000000', avatar: '🎵' },
   GOOGLE:    { label: 'Google',      color: '#4285F4', avatar: '🔍' },
   LINKEDIN:  { label: 'LinkedIn',    color: '#0A66C2', avatar: '💼' },
+  YOUTUBE:   { label: 'YouTube',     color: '#FF0000', avatar: '▶️' },
 }
 
 function XPreview({ content, mediaUrls }: { content: string; mediaUrls?: string[] }) {
@@ -187,6 +188,7 @@ export function PostPreviewCard({ content, platforms, mediaUrls, scheduledFor }:
       case 'TIKTOK':    return <TikTokPreview     content={content} mediaUrls={mediaUrls} />
       case 'GOOGLE':    return <GooglePreview     content={content} />
       case 'LINKEDIN':  return <LinkedInPreview   content={content} mediaUrls={mediaUrls} />
+      case 'YOUTUBE':   return <GooglePreview     content={content} />
     }
   }
 

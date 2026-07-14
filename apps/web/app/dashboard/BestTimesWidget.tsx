@@ -10,6 +10,7 @@ const PLATFORM_ICONS: Record<string, string> = {
   TIKTOK: '🎵',
   GOOGLE: '▶️',
   LINKEDIN: '💼',
+  YOUTUBE: '▶️',
   PINTEREST: '📌',
 }
 
