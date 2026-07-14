@@ -6,6 +6,7 @@ import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 import { computeRecommendations } from '../lib/bestTimes.js'
 import { syncAnalytics } from '../workers/analyticsSync.worker.js'
+import { assertWorkspaceAccess, TenantAccessError } from '../lib/tenantGuard.js'
 
 const router = Router()
 
@@ -275,6 +276,13 @@ router.get('/platform-comparison', async (req: Request, res: Response): Promise<
   const { workspaceId, days = '30' } = req.query as { workspaceId?: string; days?: string }
   if (!workspaceId) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId required'); return }
 
+  try {
+    await assertWorkspaceAccess(workspaceId, req.user!.id)
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
+    throw err
+  }
+
   const since = new Date(Date.now() - parseInt(days, 10) * 24 * 60 * 60 * 1000)
 
   const metrics = await (prisma as any).postMetric.findMany({
@@ -315,6 +323,13 @@ router.get('/platform-comparison', async (req: Request, res: Response): Promise<
 router.get('/hashtag-performance', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId, days = '30' } = req.query as { workspaceId?: string; days?: string }
   if (!workspaceId) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId required'); return }
+
+  try {
+    await assertWorkspaceAccess(workspaceId, req.user!.id)
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
+    throw err
+  }
 
   const since = new Date(Date.now() - parseInt(days, 10) * 24 * 60 * 60 * 1000)
 

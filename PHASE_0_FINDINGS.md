@@ -1,4 +1,423 @@
-# OmniPulse Phase 0 Security & Architecture Audit
+# OmniPulse — Phase 0 Security Audit (Full Route + Prisma Isolation Audit)
+
+**Auditor:** Claude (claude-sonnet-4-6), static analysis — READ ONLY, no source files modified
+**Date:** 2026-07-13
+**Codebase root:** `/Users/rennerkargbo/Desktop/omnipulse`
+
+---
+
+## Section 1 — Auth Architecture Map
+
+### JWT Structure
+
+`requireAuth` is defined in `apps/api/src/middleware/auth.ts`.
+
+- Algorithm: HS256 (jsonwebtoken library default; `algorithm` field never explicitly set)
+- Token payload contains: `{ id, email, role }`
+- **workspaceId is NOT in the JWT.** Every request must supply workspaceId as a query param, request body field, or route param. The backend verifies membership independently.
+
+### How `req.user` is populated
+
+```
+JWT verified → password-change revocation check → req.user = { id, email, role }
+```
+
+`req.user` is only set when `requireAuth` is invoked. There is **no global middleware** — each router must opt in by calling `router.use(requireAuth)` or per-route `requireAuth` middleware.
+
+### Tenant-access helper functions
+
+Several route files define local helper functions (each slightly different):
+
+| File | Helper name | What it checks |
+|---|---|---|
+| `workspaces.ts` | `canAccessWorkspace` | ownerId OR workspaceMember row |
+| `posts.ts` | `getWorkspaceRole` | ownerId → OWNER; member row → role |
+| `analytics.ts` | `checkWorkspaceAccess` | ownerId OR workspaceMember row |
+| `evergreenQueue.ts` | `checkOwnerOrAdmin` | ownerId OR member role OWNER/ADMIN |
+| `approvals.ts` | `getWorkspaceRole` | ownerId OR workspaceMember row |
+| `outcomeAnalytics.ts` | `getWorkspaceRole` | ownerId OR workspaceMember row |
+| `seo.ts` | `checkSeoAccess` | ownerId OR workspaceMember row |
+| `tradeflow.ts` | `getWorkspaceRole` | ownerId OR workspaceMember row |
+| `queueSlots.ts` | `assertWorkspaceAccess` | ownerId OR workspaceMember row |
+| `photoToPost.ts` | `getWorkspaceMembership` | ownerId OR workspaceMember row |
+| `magicLinks.ts` | `requireOwnerOrAdmin` | ownerId OR member ADMIN role |
+
+These functions are **not shared** — each is independently defined. There is no centralised tenant-enforcement library.
+
+### Public routes (intentionally unauthenticated)
+
+| Route | File | Reason public |
+|---|---|---|
+| `GET /portal-api/portal/:token/*` | `portalPublic.ts` | Client portal preview |
+| `GET /api/v1/bio/public/:slug` | `bio.ts` | Bio link page |
+| `GET /api/v1/reports/public/:token` | `reports.ts` | Shared report |
+| `GET /api/v1/social-accounts/oauth/callback` | `socialAccounts.ts` | OAuth redirect handler |
+| `GET /l/:slug` | `index.ts` | Short-link redirect |
+| `GET /api/v1/agency-branding/:workspaceId` | `agencyBranding.ts` | Branded approval page |
+
+---
+
+## Section 2 — `/api/me` Root Cause Analysis
+
+`GET /api/v1/auth/me` is defined at `apps/api/src/routes/auth.ts` line 255.
+
+The route is protected by `requireAuth` (router-level middleware). It queries:
+
+```ts
+prisma.user.findUnique({ where: { id: req.user!.id } })
+```
+
+The lookup is **keyed on the authenticated user's own id** extracted from the JWT — not a client-supplied parameter. This route does not accept a userId parameter and cannot return another user's data. **No cross-tenant or cross-user leak exists in this endpoint.**
+
+The real cross-user risk lies in routes that accept a client-supplied `workspaceId` without verifying membership (see Sections 3 and 5).
+
+---
+
+## Section 3 — Full Route Audit
+
+### Enforcement classifications
+
+- **(a) Properly enforced** — requireAuth present AND workspace membership verified before querying tenant data
+- **(b) Partial enforcement** — requireAuth present, workspace checked for outer resource, but inner/nested resource IDs from request body not cross-verified
+- **(c) No enforcement** — requireAuth absent OR workspace membership not checked despite accessing tenant data
+
+---
+
+### `auth.ts` — All (a) properly enforced
+All endpoints are user-scoped (JWT-only) or token-scoped. No workspace data accessed.
+
+### `workspaces.ts` — All (a) properly enforced
+All endpoints use `canAccessWorkspace(workspaceId, req.user!.id)` before any Prisma query.
+
+### `posts.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `GET /api/v1/posts` | (a) | `getWorkspaceRole` called |
+| `POST /api/v1/posts` | (a) | `getWorkspaceRole` called |
+| `GET /api/v1/posts/:id` | (a) | Role check on post's workspaceId |
+| `PUT /api/v1/posts/:id` | (a) | Role check on post's workspaceId |
+| `DELETE /api/v1/posts/:id` | (a) | Role check on post's workspaceId |
+| `POST /api/v1/posts/:id/publish` | (a) | Role check on post's workspaceId |
+| `GET /api/v1/posts/content-health` | (c) **CRITICAL** | NO `getWorkspaceRole` call — workspaceId from query param passed directly to Prisma filter (`posts.ts:691–742`) |
+| `POST /api/v1/posts/:id/ab-test` | (b) | Checks `workspace.ownerId === req.user!.id` only — excludes ADMIN role |
+| `GET /api/v1/posts/:id/ab-variants` | (b) | Same owner-only check |
+| `POST /api/v1/posts/bulk-delete` | (a) | `getWorkspaceRole` before batch delete |
+
+### `analytics.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `GET /api/v1/analytics` | (a) | `checkWorkspaceAccess` called |
+| `GET /api/v1/analytics/summary` | (a) | `checkWorkspaceAccess` called |
+| `POST /api/v1/analytics/sync` | (c) | If `workspaceId` omitted, syncs ALL workspaces — no scoping (`analytics.ts:153`) |
+| `GET /api/v1/analytics/platform-comparison` | (c) | NO `checkWorkspaceAccess` call — workspaceId passed directly to Prisma (`analytics.ts:274`) |
+| `GET /api/v1/analytics/hashtag-performance` | (c) | NO `checkWorkspaceAccess` call (`analytics.ts:315`) |
+
+### `socialAccounts.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `GET /api/v1/social-accounts` | (a) | Workspace access checked |
+| `DELETE /api/v1/social-accounts/:id` | (a) | Ownership checked |
+| `GET /api/v1/social-accounts/oauth/start` | (a) | Workspace membership checked before storing state |
+| `GET /api/v1/social-accounts/oauth/callback` | (c) **CRITICAL** | `workspaceId` and `userId` read from attacker-controllable base64 `state` param — no re-verification that state.userId matches JWT user (`socialAccounts.ts:52`). Allows OAuth token association with any workspace. |
+
+### `media.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `GET /api/v1/media` | (c) | In-memory filter by workspaceId from flat JSON file, no workspace membership check (`media.ts:65`) |
+| `POST /api/v1/media/upload` | (c) | File upload — no workspaceId, no tenant check (`media.ts:101`) |
+| `PATCH /api/v1/media/library/:id` | (c) | Updates mediaAsset by ID with NO ownership check (`media.ts:154`) |
+| `DELETE /api/v1/media/library/:id` | (c) | Deletes mediaAsset by ID with NO ownership check (`media.ts:166`) |
+| `DELETE /api/v1/media/:id` | (c) | Deletes from flat file store, no workspace auth check (`media.ts:177`) |
+
+### `portalPublic.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `GET /portal-api/portal/:token` | Public | Token-gated read-only portal view |
+| `POST /portal-api/portal/:token/approve` | (c) **CRITICAL** | Fully public. Takes `postId` from request body; updates any ScheduledPost without verifying post belongs to token's workspace (`portalPublic.ts:71–106`) |
+| `POST /portal-api/portal/:token/reject` | (c) **CRITICAL** | Same issue (`portalPublic.ts:109–136`) |
+
+### `clientPortal.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `GET /api/v1/client-portal/view/:token` | Public | Token-gated; exposes social accounts, snapshots, posts. Tokens never expire. |
+| `POST /api/v1/client-portal` | (a) | Owner-checked |
+| `DELETE /api/v1/client-portal/:id` | (a) | Ownership verified |
+
+### `ai.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `POST /api/v1/ai/generate` | (a) | Workspace role checked |
+| `POST /api/v1/ai/repurpose` | (b) | Post loaded by postId without verifying caller has access to post's workspace — plan gate checks supplied workspaceId but NOT membership (`ai.ts:812`) |
+| `GET /api/v1/ai/repurpose/suggestions` | (c) | If `workspaceId` omitted, `scheduledPost.findMany` runs with NO workspace filter — returns all published posts (`ai.ts:880`) |
+| `GET /api/v1/ai/brand-voice` | (c) | Reads posts for workspaceId with NO membership check (`ai.ts:963`) |
+| `POST /api/v1/ai/brand-voice/generate` | (c) | Same pattern (`ai.ts:1048`) |
+
+### `queue.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `GET /api/v1/queue` | (a) | Workspace role checked |
+| `PATCH /api/v1/queue/reorder` | (b) | Workspace role checked for outer `workspaceId`, but each post ID from `orderedIds` body is updated without verifying it belongs to that workspace |
+
+### `bio.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `GET /api/v1/bio/public/:slug` | Public | Intentional |
+| `POST /api/v1/bio/public/:slug/click/:linkId` | (c) | Unauthenticated, increments click on any bioLink by ID with no tenant boundary (`bio.ts:50`) |
+| All other bio endpoints | (a) | Use `canAccessWorkspace` |
+
+### `links.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `GET /api/v1/links` | (a) | Workspace access checked |
+| `POST /api/v1/links` | (a) | Workspace access checked |
+| `POST /api/v1/links/:id/track` | (c) | Authenticated but NO workspace check — any user can increment click count on any shortLink (`links.ts:103`) |
+| `DELETE /api/v1/links/:id` | (a) | Ownership verified |
+
+### `digest.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `POST /api/v1/digest/send` | (c) | `requireAuth` present but no workspace membership check. Any authenticated user can trigger digest for any workspaceId, or omit it to trigger for ALL workspaces (`digest.ts:12–14`) |
+
+### `agencyBranding.ts`
+
+| Endpoint | Class | Notes |
+|---|---|---|
+| `GET /api/v1/agency-branding/:workspaceId` | Public | Intentionally unauthenticated — branding only (logo, color, name) |
+| `PUT /api/v1/agency-branding` | (a) | Owner-only check enforced |
+
+### `reports.ts`, `templates.ts`, `notifications.ts`, `apikeys.ts`, `activity.ts`
+All **(a) properly enforced** — workspace role or ownership checks before data access.
+
+### `team.ts`
+**(b) partial** — `requireAuth` present; uses `workspace.ownerId === req.user!.id` exclusively (ADMIN role cannot manage team members — functional gap, not a security leak).
+
+### `billing.ts`
+**(a) properly enforced** for all authenticated routes. `POST /billing/webhook` is correctly public (Stripe signature verified).
+
+### `webhooks.ts`, `rss.ts`, `campaigns.ts`, `competitors.ts`, `inbox.ts`, `listening.ts`, `dlq.ts`
+All **(a) properly enforced**.
+
+### `approvals.ts`, `magicLinks.ts`, `evergreenQueue.ts`, `outcomeAnalytics.ts`, `queueSlots.ts`, `seo.ts`, `seoData.ts`, `tradeflow.ts`, `photoToPost.ts`, `onboarding.ts`, `twoFactor.ts`
+All **(a) properly enforced** — each defines and calls a workspace access helper before any tenant-scoped Prisma query.
+
+### `admin.ts`
+**(a) properly enforced** — double-gated: `requireAuth` + `requireAdmin` (checks `req.user.email === ADMIN_EMAIL`).
+
+---
+
+## Section 4 — Prisma Isolation Audit
+
+### 4.1 Queries missing workspaceId filter entirely
+
+**`posts.ts:691–742`** — `GET /api/v1/posts/content-health`
+```ts
+// No getWorkspaceRole call; workspaceId from req.query passed directly:
+prisma.scheduledPost.findMany({ where: { workspaceId, status: 'PUBLISHED', createdAt: { gte: since } } })
+```
+
+**`ai.ts:880`** — `GET /api/v1/ai/repurpose/suggestions`
+```ts
+// When workspaceId is absent from query:
+prisma.scheduledPost.findMany({ where: { status: 'PUBLISHED' } })
+// No workspace filter applied
+```
+
+**`digest.ts:14`** — `POST /api/v1/digest/send`
+```ts
+sendWeeklyDigest(workspaceId)  // workspaceId may be undefined — triggers all-workspace send
+```
+
+**`analytics.worker.ts:20`** — background worker
+```ts
+prisma.socialAccount.findMany()  // NO where clause — all tenants' accounts processed
+```
+
+### 4.2 workspaceId present but membership not verified
+
+**`analytics.ts:274,315`** — platform-comparison, hashtag-performance
+```ts
+prisma.postAnalytics.findMany({ where: { workspaceId } })
+// No checkWorkspaceAccess call before this
+```
+
+**`ai.ts:963,1048`** — brand-voice endpoints
+```ts
+prisma.scheduledPost.findMany({ where: { workspaceId, status: 'PUBLISHED' } })
+// No membership check; workspaceId from request query/body
+```
+
+**`media.ts:65`** — GET /media
+```ts
+// Reads _index.json, filters by workspaceId in memory
+// No prisma.workspace membership check performed
+```
+
+### 4.3 Queries by ID with no workspace cross-verification
+
+**`media.ts:154,166`** — PATCH/DELETE /media/library/:id
+```ts
+prisma.mediaAsset.update({ where: { id } })
+prisma.mediaAsset.delete({ where: { id } })
+// No check that mediaAsset.workspaceId matches caller's workspace
+```
+
+**`queue.ts` reorder handler**
+```ts
+for (const id of orderedIds) {
+  prisma.scheduledPost.update({ where: { id }, data: { order } })
+  // id from request body; only outer workspaceId role was checked
+}
+```
+
+**`portalPublic.ts:90,120`** — approve/reject
+```ts
+prisma.scheduledPost.update({ where: { id: postId }, data: { status: 'APPROVED' } })
+// postId from request body; portal token's workspaceId never compared to post.workspaceId
+```
+
+**`links.ts:103`** — POST /links/:id/track
+```ts
+prisma.shortLink.update({ where: { id }, data: { clicks: { increment: 1 } } })
+// No check that shortLink.workspaceId matches any workspace the caller has access to
+```
+
+### 4.4 OAuth state parameter trust (`socialAccounts.ts:52`)
+
+```ts
+const { workspaceId, userId } = JSON.parse(
+  Buffer.from(state, 'base64').toString('utf-8')
+)
+// state is attacker-controllable; userId is never compared to req.user.id
+// OAuth token gets stored against attacker-chosen workspace + userId
+```
+
+### 4.5 No raw SQL found
+Zero occurrences of `$queryRaw` or `$executeRaw` across the entire `apps/api/src/` tree. No SQL injection surface.
+
+---
+
+## Section 5 — Severity-Ranked Findings
+
+### CRITICAL
+
+#### C-1: Cross-tenant data leak via `content-health` (posts.ts:691–742)
+`GET /api/v1/posts/content-health` performs NO workspace membership check. Any authenticated user can supply an arbitrary `workspaceId` and receive that workspace's published post content, platforms, and 90-day engagement metrics. `requireAuth` is present (router level) but `getWorkspaceRole` is never called.
+**Fix:** Add `const role = await getWorkspaceRole(workspaceId, req.user!.id); if (!role) { sendError(res, 403, ...); return }` before the Prisma query.
+
+#### C-2: Portal approve/reject with no tenant boundary (portalPublic.ts:71–136)
+`POST /portal-api/portal/:token/approve` and `/reject` are fully public. They accept `postId` from the request body and mutate any `ScheduledPost` without verifying the post belongs to the workspace bound to the portal token. A valid portal token (given to clients) + any guessed/known postId = cross-tenant post status mutation.
+**Fix:** After fetching the post, assert `post.workspaceId === portal.workspaceId` before allowing status transition.
+
+#### C-3: OAuth callback state fully attacker-controlled (socialAccounts.ts:52)
+The OAuth callback reads `workspaceId` and `userId` from a base64 `state` parameter that is entirely attacker-controlled at the callback phase. There is no check that `state.userId === req.user.id` (the endpoint processes state without JWT authentication of the returning user). An attacker can craft a `state` that associates any OAuth access token with any workspace and any userId.
+**Fix:** Store state as a server-side nonce (CSRF-style) at OAuth initiation. On callback, look up the nonce, extract stored values, verify `stored.userId === req.user.id`.
+
+---
+
+### HIGH
+
+#### H-1: Analytics endpoints with no membership check (analytics.ts:274,315)
+`GET /api/v1/analytics/platform-comparison` and `GET /api/v1/analytics/hashtag-performance` both accept `workspaceId` and pass it directly to Prisma with no `checkWorkspaceAccess` call. Any authenticated user can read analytics from any workspace.
+**Fix:** Add `await checkWorkspaceAccess(workspaceId, req.user!.id)` at the start of both handlers.
+
+#### H-2: AI repurpose/suggestions leaks all workspaces when workspaceId omitted (ai.ts:880)
+If caller omits `workspaceId`, the query is `{ where: { status: 'PUBLISHED' } }` — no workspace filter. Returns published posts from every workspace on the platform.
+**Fix:** Require `workspaceId` (return 400 if absent); add membership check before query.
+
+#### H-3: AI brand-voice endpoints with no membership check (ai.ts:963,1048)
+Both `GET /ai/brand-voice` and `POST /ai/brand-voice/generate` read scheduled posts for a caller-supplied `workspaceId` without verifying membership.
+**Fix:** Add `getWorkspaceRole` check before data access in both handlers.
+
+#### H-4: Media router has zero tenant enforcement (media.ts:65,101,154,166,177)
+Five separate media endpoints have no workspace membership check. PATCH and DELETE operate on mediaAsset IDs with no ownership verification. Any authenticated user can update or delete any tenant's media assets.
+**Fix:** After fetching mediaAsset by ID, assert `asset.workspaceId` is a workspace the caller is a member of.
+
+#### H-5: OAuth tokens for non-LinkedIn platforms stored without encryption (socialAccounts.ts:366–374)
+`encryptToken()` is called only in the LinkedIn branch (`socialAccounts.ts:293`). The fallthrough path for Facebook, Instagram, X, TikTok, and Google stores `accessToken` directly in the DB as plaintext. A DB compromise exposes all social account credentials.
+**Fix:** Apply `encryptToken()` to all platform tokens before persistence.
+
+---
+
+### MEDIUM
+
+#### M-1: Queue reorder updates posts from other workspaces (queue.ts reorder handler)
+The outer `workspaceId` is role-checked. But each post ID from `orderedIds` in the request body is updated with `prisma.scheduledPost.update({ where: { id } })` without confirming the post belongs to that workspace. An authenticated user with access to any workspace can manipulate post ordering of posts in other workspaces.
+**Fix:** Add `where: { id, workspaceId }` to each update in the reorder loop, or pre-fetch and validate all IDs.
+
+#### M-2: Digest trigger has no workspace access check (digest.ts:12–14)
+`requireAuth` is present but any authenticated user can trigger a digest send for any `workspaceId`, or omit it to trigger digest for ALL workspaces.
+**Fix:** Add workspace ownership/admin check. Restrict to ADMIN_EMAIL or workspace owner.
+
+#### M-3: Click-tracking has no workspace boundary (links.ts:103, bio.ts:50)
+`POST /links/:id/track` increments click count on any shortLink by ID with no workspace membership check. `POST /bio/public/:slug/click/:linkId` is public and increments any bioLink counter. Enables metric inflation against any tenant.
+**Fix:** For links: fetch the shortLink and verify `link.workspaceId` against caller memberships. For bio clicks: add per-IP rate limiting.
+
+#### M-4: AI repurpose loads post without workspace membership check (ai.ts:812)
+Post is loaded by `postId` without checking the caller is a member of `post.workspaceId`. Plan gate checks a separately supplied `workspaceId` but does not cross-validate against `post.workspaceId`.
+**Fix:** After fetching post, call `getWorkspaceRole(post.workspaceId, req.user!.id)` and reject if no role.
+
+#### M-5: No AbortSignal.timeout on direct platform API fetch calls (publishPost.worker.ts:85,97,111)
+Platform API `fetch()` calls for X, Facebook, Instagram have no timeout. A hung network call can stall BullMQ workers indefinitely. (Outgoing webhook emitter correctly uses `AbortSignal.timeout(5000)` at `webhookEmitter.ts:15`.)
+**Fix:** Add `signal: AbortSignal.timeout(15_000)` to all platform `fetch()` calls.
+
+---
+
+### LOW
+
+#### L-1: No shared tenant-enforcement library — drift risk
+Every route file implements its own workspace access helper with slightly different semantics (some check ADMIN role, some only OWNER, some include CLIENT_APPROVER). This inconsistency has already produced multiple missing-check bugs (H-1, H-2, H-3, C-1). A centralised `assertWorkspaceAccess(workspaceId, userId, minRole?)` in `apps/api/src/lib/` would eliminate this class of bug.
+
+#### L-2: Client portal tokens never expire (clientPortal.ts)
+Portal tokens have no `expiresAt`. A leaked token provides permanent read access to workspace social accounts, posts, and snapshots unless manually deactivated.
+**Fix:** Add `expiresAt` to portal tokens or implement periodic rotation.
+
+#### L-3: TikTok and Google posts silently succeed without publishing (publishPost.worker.ts:143–145)
+Both platforms return `${platform}_manual_required` as the external ID. This populates `responseLog`, causing the post status to be set to `PUBLISHED` even though no actual publication occurred.
+**Fix:** Track these as `MANUAL_REQUIRED` status rather than `PUBLISHED`.
+
+#### L-4: Flat file media store has no write locking (media.ts)
+Legacy media uses `_index.json` with no concurrent-write locking. Simultaneous uploads can corrupt the index.
+
+---
+
+## Summary Table
+
+| ID | Severity | File:Line | Endpoint / Location | Issue |
+|---|---|---|---|---|
+| C-1 | CRITICAL | `posts.ts:691–742` | `GET /posts/content-health` | No workspace membership check — direct cross-tenant post data leak |
+| C-2 | CRITICAL | `portalPublic.ts:71–136` | `POST /portal-api/portal/:token/approve\|reject` | No tenant boundary — any portal token + any postId = cross-tenant mutation |
+| C-3 | CRITICAL | `socialAccounts.ts:52` | `GET /oauth/callback` | OAuth state fully attacker-controlled — workspaceId/userId unverified |
+| H-1 | HIGH | `analytics.ts:274,315` | `GET /analytics/platform-comparison`, `hashtag-performance` | No membership check |
+| H-2 | HIGH | `ai.ts:880` | `GET /ai/repurpose/suggestions` | Cross-workspace post leak when workspaceId omitted |
+| H-3 | HIGH | `ai.ts:963,1048` | `GET /ai/brand-voice`, `POST /ai/brand-voice/generate` | No membership check |
+| H-4 | HIGH | `media.ts:65,101,154,166,177` | Multiple media endpoints | Zero tenant enforcement |
+| H-5 | HIGH | `socialAccounts.ts:366–374` | OAuth token write path | FB/IG/X/TikTok/Google tokens stored without encryption |
+| M-1 | MEDIUM | `queue.ts` reorder | `PATCH /queue/reorder` | Post IDs from body not validated against workspace |
+| M-2 | MEDIUM | `digest.ts:12–14` | `POST /digest/send` | No workspace membership check; can trigger for all workspaces |
+| M-3 | MEDIUM | `links.ts:103`, `bio.ts:50` | Click-tracking endpoints | No workspace boundary on metric updates |
+| M-4 | MEDIUM | `ai.ts:812` | `POST /ai/repurpose` | Post loaded without workspace membership verification |
+| M-5 | MEDIUM | `publishPost.worker.ts:85,97,111` | Platform publish fetch calls | No timeout — worker stall risk |
+| L-1 | LOW | All route files | — | No shared tenant-enforcement library — inconsistency risk |
+| L-2 | LOW | `clientPortal.ts` | Portal view | Portal tokens never expire |
+| L-3 | LOW | `publishPost.worker.ts:143–145` | TikTok/Google publish | Silent PUBLISHED status without actual publication |
+| L-4 | LOW | `media.ts` | Media flat file store | No locking on `_index.json` writes |
+
+---
+
+## Original Phase 0 Findings (Prior Session)
+
+
 
 **Auditor:** Claude (read-only, no files modified)  
 **Date:** 2026-07-12  

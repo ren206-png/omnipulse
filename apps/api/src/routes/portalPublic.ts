@@ -76,6 +76,12 @@ router.post('/portal/:token/approve', async (req: Request, res: Response): Promi
     const portal = await db.clientPortal.findUnique({ where: { token } })
     if (!portal || !portal.active) { sendError(res, 404, 'NOT_FOUND', 'Portal not found or inactive'); return }
 
+    const postCheck = await db.scheduledPost.findUnique({ where: { id: postId }, select: { workspaceId: true } })
+    if (!postCheck || postCheck.workspaceId !== portal.workspaceId) {
+      sendError(res, 403, 'FORBIDDEN', 'Post does not belong to this portal')
+      return
+    }
+
     try {
       await db.postApproval.upsert({
         where: { portalToken_postId: { portalToken: token, postId } },
@@ -109,6 +115,12 @@ router.post('/portal/:token/reject', async (req: Request, res: Response): Promis
   try {
     const portal = await db.clientPortal.findUnique({ where: { token } })
     if (!portal || !portal.active) { sendError(res, 404, 'NOT_FOUND', 'Portal not found or inactive'); return }
+
+    const postCheck = await db.scheduledPost.findUnique({ where: { id: postId }, select: { workspaceId: true } })
+    if (!postCheck || postCheck.workspaceId !== portal.workspaceId) {
+      sendError(res, 403, 'FORBIDDEN', 'Post does not belong to this portal')
+      return
+    }
 
     try {
       await db.postApproval.upsert({

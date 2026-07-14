@@ -6,6 +6,7 @@ import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 import { checkLimit } from '../lib/planLimits.js'
 import { encryptToken, decryptToken } from '../lib/tokenEncryption.js'
+import { createOAuthState, extractOAuthStatePayload, TenantAccessError } from '../lib/tenantGuard.js'
 import { notify } from '../lib/notify.js'
 
 const router = Router()
@@ -23,8 +24,7 @@ router.get('/oauth/connect', requireAuth, async (req: Request, res: Response): P
 
   // Generate a cryptographically secure PKCE verifier (43-128 chars, URL-safe)
   const pkceVerifier = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url')
-  const statePayload = { platform, workspaceId, userId: req.user!.id, pkceVerifier }
-  const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url')
+  const state = createOAuthState(workspaceId, req.user!.id, platform, pkceVerifier)
   const redirectUri = `${process.env.API_URL ?? 'http://localhost:4000'}/api/v1/social-accounts/oauth/callback`
 
   const urls: Record<string, string> = {
@@ -61,14 +61,14 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
   // Validate state parameter (CSRF protection)
   let parsedState: { platform: string; workspaceId: string; userId: string; pkceVerifier?: string }
   try {
-    parsedState = JSON.parse(Buffer.from(state ?? '', 'base64url').toString())
-    if (!parsedState || typeof parsedState.workspaceId !== 'string' || !parsedState.workspaceId) {
-      throw new Error('invalid_state')
+    parsedState = extractOAuthStatePayload(state ?? '')
+  } catch (err) {
+    if (err instanceof TenantAccessError) {
+      logger.warn({ state }, 'OAuth callback received invalid or tampered state parameter')
+      res.redirect(`${webUrl}/dashboard/accounts?error=invalid_state`)
+      return
     }
-  } catch {
-    logger.warn({ state }, 'OAuth callback received invalid or tampered state parameter')
-    res.redirect(`${webUrl}/dashboard/accounts?error=invalid_state`)
-    return
+    throw err
   }
 
   try {

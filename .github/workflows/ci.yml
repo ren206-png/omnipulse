@@ -83,9 +83,7 @@ jobs:
 
       - name: Run tests
         working-directory: apps/api
-        run: |
-          node --experimental-strip-types --test \
-            src/routes/__tests__/tenantIsolation.test.ts
+        run: npx tsx --test src/routes/__tests__/tenantIsolation.test.ts
 
   # ─────────────────────────────────────────────
   # Job 3: Web TypeCheck + Build

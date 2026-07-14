@@ -8,6 +8,7 @@ import { env } from '../config/env.js'
 import { prisma } from '../lib/prisma.js'
 import { sendError } from '../lib/apiError.js'
 import { generateAndPersistAltText } from '../services/seo/altTextGenerator.js'
+import { assertWorkspaceAccess, assertResourceBelongsToWorkspace, TenantAccessError } from '../lib/tenantGuard.js'
 
 const router = Router()
 
@@ -62,9 +63,15 @@ const upload = multer({
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 // GET /api/v1/media?workspaceId=...
-router.get('/', requireAuth, (req: Request, res: Response): void => {
+router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }
   if (!workspaceId) { res.status(400).json({ error: 'workspaceId required' }); return }
+  try {
+    await assertWorkspaceAccess(workspaceId, req.user!.id)
+  } catch (err) {
+    if (err instanceof TenantAccessError) { res.status(err.statusCode).json({ error: err.message }); return }
+    throw err
+  }
   const assets = readStore().filter((a) => a.workspaceId === workspaceId)
   res.json({ assets })
 })
@@ -74,10 +81,16 @@ router.post(
   '/',
   requireAuth,
   upload.single('file'),
-  (req: Request, res: Response): void => {
+  async (req: Request, res: Response): Promise<void> => {
     const { workspaceId } = req.body as { workspaceId?: string }
     if (!workspaceId) { res.status(400).json({ error: 'workspaceId required' }); return }
     if (!req.file) { res.status(400).json({ error: 'file required' }); return }
+    try {
+      await assertWorkspaceAccess(workspaceId, req.user!.id)
+    } catch (err) {
+      if (err instanceof TenantAccessError) { res.status(err.statusCode).json({ error: err.message }); return }
+      throw err
+    }
 
     const asset: MediaAsset = {
       id: uuidv4(),
@@ -103,8 +116,16 @@ router.post(
   '/upload',
   requireAuth,
   upload.single('file'),
-  (req: Request, res: Response): void => {
+  async (req: Request, res: Response): Promise<void> => {
     if (!req.file) { res.status(400).json({ error: 'file required' }); return }
+    const { workspaceId } = req.body as { workspaceId?: string }
+    if (!workspaceId) { res.status(400).json({ error: 'workspaceId required' }); return }
+    try {
+      await assertWorkspaceAccess(workspaceId, req.user!.id)
+    } catch (err) {
+      if (err instanceof TenantAccessError) { res.status(err.statusCode).json({ error: err.message }); return }
+      throw err
+    }
     const url = `${env.API_URL}/uploads/${req.file.filename}`
     res.status(201).json({ url, filename: req.file.filename, mimeType: req.file.mimetype, size: req.file.size })
   },
@@ -153,11 +174,17 @@ router.post('/library', requireAuth, async (req: Request, res: Response): Promis
 // PATCH /api/v1/media/library/:id — update tags
 router.patch('/library/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params
-  const { tags } = req.body as { tags?: string[] }
+  const { tags, workspaceId } = req.body as { tags?: string[]; workspaceId?: string }
+  if (!workspaceId) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId required'); return }
   try {
-    const asset = await (prisma as any).mediaAsset.update({ where: { id }, data: { tags: tags ?? [] } })
-    res.json({ asset })
-  } catch {
+    await assertWorkspaceAccess(workspaceId, req.user!.id)
+    const asset = await (prisma as any).mediaAsset.findUnique({ where: { id } })
+    if (!asset) { sendError(res, 404, 'NOT_FOUND', 'Asset not found'); return }
+    assertResourceBelongsToWorkspace(asset.workspaceId, workspaceId)
+    const updated = await (prisma as any).mediaAsset.update({ where: { id }, data: { tags: tags ?? [] } })
+    res.json({ asset: updated })
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to update asset')
   }
 })
@@ -165,26 +192,47 @@ router.patch('/library/:id', requireAuth, async (req: Request, res: Response): P
 // DELETE /api/v1/media/library/:id
 router.delete('/library/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params
+  const { workspaceId } = req.body as { workspaceId?: string }
+  if (!workspaceId) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId required'); return }
   try {
+    await assertWorkspaceAccess(workspaceId, req.user!.id)
+    const asset = await (prisma as any).mediaAsset.findUnique({ where: { id } })
+    if (!asset) { sendError(res, 404, 'NOT_FOUND', 'Asset not found'); return }
+    assertResourceBelongsToWorkspace(asset.workspaceId, workspaceId)
     await (prisma as any).mediaAsset.delete({ where: { id } })
     res.json({ success: true })
-  } catch {
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to delete asset')
   }
 })
 
 // DELETE /api/v1/media/:id
-router.delete('/:id', requireAuth, (req: Request, res: Response): void => {
+router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params
+  const { workspaceId: callerWorkspaceId } = req.query as { workspaceId?: string }
+  if (!callerWorkspaceId) { res.status(400).json({ error: 'workspaceId required' }); return }
+
   const assets = readStore()
   const idx = assets.findIndex((a) => a.id === id)
   if (idx === -1) { res.status(404).json({ error: 'Not found' }); return }
 
-  const [removed] = assets.splice(idx, 1)
+  const removed_candidate = assets[idx]
+  try {
+    await assertWorkspaceAccess(callerWorkspaceId, req.user!.id)
+  } catch (err) {
+    if (err instanceof TenantAccessError) { res.status(err.statusCode).json({ error: err.message }); return }
+    throw err
+  }
+  if (!removed_candidate.workspaceId || removed_candidate.workspaceId !== callerWorkspaceId) {
+    res.status(403).json({ error: 'Forbidden' }); return
+  }
+
+  assets.splice(idx, 1)
   writeStore(assets)
 
   // Delete file from disk
-  try { fs.unlinkSync(path.join(UPLOAD_DIR, removed.filename)) } catch { /* ignore */ }
+  try { fs.unlinkSync(path.join(UPLOAD_DIR, removed_candidate.filename)) } catch { /* ignore */ }
 
   res.status(204).end()
 })

@@ -88,6 +88,7 @@ async function publishToPlatform(
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: content.substring(0, 280) }),
+      signal: AbortSignal.timeout(15_000),
     })
     const data = await res.json() as { data?: { id?: string }; detail?: string }
     if (!res.ok) throw new Error(data.detail ?? 'X post failed')
@@ -100,6 +101,7 @@ async function publishToPlatform(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: content }),
+      signal: AbortSignal.timeout(15_000),
     })
     const data = await res.json() as { id?: string; error?: { message?: string } }
     if (!res.ok) throw new Error(data.error?.message ?? 'Facebook post failed')
@@ -121,6 +123,7 @@ async function publishToPlatform(
             caption: content,
             access_token: accessToken,
           }),
+          signal: AbortSignal.timeout(15_000),
         },
       )
       const container = await containerRes.json() as { id?: string; error?: { message?: string } }

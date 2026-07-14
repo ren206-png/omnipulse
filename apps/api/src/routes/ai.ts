@@ -14,6 +14,7 @@ import { generateVariants } from '../lib/contentMultiplier.js'
 import { scanContent } from '../lib/safeguard.js'
 import { generateCaption } from '../lib/visualCopywriter.js'
 import { logActivity } from '../lib/activity.js'
+import { assertWorkspaceAccess, TenantAccessError } from '../lib/tenantGuard.js'
 
 // Singleton Redis for AI rate-limit counters
 let _aiRedis: IORedis | null = null
@@ -832,6 +833,13 @@ router.post('/repurpose', aiLimiter, async (req: Request, res: Response): Promis
   const post = await prisma.scheduledPost.findUnique({ where: { id: postId }, include: { metrics: true } })
   if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
 
+  try {
+    await assertWorkspaceAccess(post.workspaceId, req.user!.id)
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
+    throw err
+  }
+
   const promptMap: Record<string, string> = {
     'x-thread': 'Convert this post into a 5-tweet X thread. Each tweet max 280 chars. Return JSON array of strings.',
     'linkedin-carousel': 'Convert this into 6 LinkedIn carousel slide texts. Slide 1 = hook, slides 2-5 = key points, slide 6 = CTA. Return JSON array of strings.',
@@ -879,6 +887,14 @@ router.post('/repurpose', aiLimiter, async (req: Request, res: Response): Promis
 // ─── GET /api/v1/ai/repurpose/suggestions ────────────────────────────────────
 router.get('/repurpose/suggestions', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId, limit = '10' } = req.query as { workspaceId?: string; limit?: string }
+  if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
+
+  try {
+    await assertWorkspaceAccess(workspaceId, req.user!.id)
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
+    throw err
+  }
 
   const take = Math.min(Math.max(1, parseInt(limit, 10) || 10), 50)
   const since = new Date()
@@ -886,7 +902,7 @@ router.get('/repurpose/suggestions', async (req: Request, res: Response): Promis
 
   const posts = await prisma.scheduledPost.findMany({
     where: {
-      ...(workspaceId ? { workspaceId } : {}),
+      workspaceId,
       status: 'PUBLISHED',
       scheduledFor: { gte: since },
     },
@@ -965,6 +981,13 @@ router.get('/brand-voice', async (req: Request, res: Response): Promise<void> =>
   if (!workspaceId) {
     sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required')
     return
+  }
+
+  try {
+    await assertWorkspaceAccess(workspaceId, req.user!.id)
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
+    throw err
   }
 
   try {
@@ -1061,6 +1084,13 @@ router.post('/brand-voice/generate', aiLimiter, async (req: Request, res: Respon
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
   if (!topic?.trim()) { sendError(res, 400, 'MISSING_FIELD', 'topic is required'); return }
   if (!platform?.trim()) { sendError(res, 400, 'MISSING_FIELD', 'platform is required'); return }
+
+  try {
+    await assertWorkspaceAccess(workspaceId, req.user!.id)
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
+    throw err
+  }
 
   const numCaptions = Math.min(Math.max(1, count), 5)
 

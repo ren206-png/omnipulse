@@ -9,6 +9,9 @@ const router = Router()
 
 const SLUG_RE = /^[a-z0-9-]{3,30}$/
 
+// In-memory rate limiter for public bio link clicks: 10 per IP per linkId per 24 hours
+const clickRateLimiter = new Map<string, { count: number; resetAt: number }>()
+
 async function canAccessWorkspace(workspaceId: string, userId: string): Promise<boolean> {
   const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
   if (!workspace) return false
@@ -49,6 +52,28 @@ router.get('/public/:slug', async (req: Request, res: Response): Promise<void> =
 // POST /api/v1/bio/public/:slug/click/:linkId
 router.post('/public/:slug/click/:linkId', async (req: Request, res: Response): Promise<void> => {
   const { linkId } = req.params
+  const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown'
+  const rateLimitKey = `${ip}:${linkId}`
+  const now = Date.now()
+  const WINDOW_MS = 24 * 60 * 60 * 1000 // 24 hours
+  const MAX_CLICKS = 10
+
+  const entry = clickRateLimiter.get(rateLimitKey)
+  if (entry) {
+    if (now < entry.resetAt) {
+      if (entry.count >= MAX_CLICKS) {
+        res.status(429).json({ ok: false, error: 'Rate limit exceeded' })
+        return
+      }
+      entry.count++
+    } else {
+      // Window expired, reset
+      clickRateLimiter.set(rateLimitKey, { count: 1, resetAt: now + WINDOW_MS })
+    }
+  } else {
+    clickRateLimiter.set(rateLimitKey, { count: 1, resetAt: now + WINDOW_MS })
+  }
+
   try {
     await prisma.bioLink.update({ where: { id: linkId }, data: { clicks: { increment: 1 } } })
     res.json({ ok: true })

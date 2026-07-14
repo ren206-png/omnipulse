@@ -108,7 +108,7 @@ router.patch('/reorder', async (req: Request, res: Response): Promise<void> => {
     await prisma.$transaction(
       orderedIds.map((id, index) =>
         (prisma.scheduledPost.update as Function)({
-          where: { id },
+          where: { id, workspaceId },
           data: { queuePosition: index + 1 },
         }),
       ),

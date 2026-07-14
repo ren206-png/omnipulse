@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { env } from '../config/env.js'
+import { assertWorkspaceAccess, TenantAccessError } from '../lib/tenantGuard.js'
 
 const router = Router()
 router.use(requireAuth)
@@ -103,12 +104,16 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
 router.post('/:id/track', async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params
   try {
-    const link = await (prisma as any).shortLink.update({
+    const link = await (prisma as any).shortLink.findUnique({ where: { id }, select: { workspaceId: true, clicks: true } })
+    if (!link) { sendError(res, 404, 'NOT_FOUND', 'Link not found'); return }
+    await assertWorkspaceAccess(link.workspaceId, req.user!.id)
+    const updated = await (prisma as any).shortLink.update({
       where: { id },
       data: { clicks: { increment: 1 } },
     })
-    res.json({ clicks: link.clicks })
-  } catch {
+    res.json({ clicks: updated.clicks })
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to track click')
   }
 })
