@@ -106,7 +106,13 @@ router.post('/:id/track', async (req: Request, res: Response): Promise<void> => 
   try {
     const link = await (prisma as any).shortLink.findUnique({ where: { id }, select: { workspaceId: true, clicks: true } })
     if (!link) { sendError(res, 404, 'NOT_FOUND', 'Link not found'); return }
-    await assertWorkspaceAccess(link.workspaceId, req.user!.id)
+    try {
+      await assertWorkspaceAccess(link.workspaceId, req.user!.id)
+    } catch (accessErr) {
+      // Return 404 (not 403) to avoid leaking existence of links in other workspaces
+      if (accessErr instanceof TenantAccessError) { sendError(res, 404, 'NOT_FOUND', 'Link not found'); return }
+      throw accessErr
+    }
     const updated = await (prisma as any).shortLink.update({
       where: { id },
       data: { clicks: { increment: 1 } },

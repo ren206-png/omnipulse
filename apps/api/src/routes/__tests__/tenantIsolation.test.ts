@@ -15,7 +15,7 @@
 
 import { strict as assert } from 'node:assert'
 import { test, describe } from 'node:test'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 // ── Env shim (must be before any lib import) ──────────────────────────────────
@@ -424,4 +424,124 @@ describe('Static guard presence checks (regression: guard cannot be silently rem
     assert.ok(src.includes('export function extractOAuthStatePayload'), 'extractOAuthStatePayload must be exported')
     assert.ok(src.includes('timingSafeEqual'), 'HMAC comparison must use timingSafeEqual')
   })
+
+  test('media.ts: GET /library and POST /library call assertWorkspaceAccess (RV-1, RV-2)', () => {
+    const src = routeSource('media.ts')
+    const getLibraryIdx = src.indexOf("get('/library'")
+    assert.ok(getLibraryIdx !== -1, "GET /library route not found in media.ts")
+    const getSection = src.slice(getLibraryIdx, getLibraryIdx + 600)
+    assert.ok(getSection.includes('assertWorkspaceAccess'), 'GET /library must call assertWorkspaceAccess')
+
+    const postLibraryIdx = src.indexOf("post('/library'")
+    assert.ok(postLibraryIdx !== -1, "POST /library route not found in media.ts")
+    const postSection = src.slice(postLibraryIdx, postLibraryIdx + 600)
+    assert.ok(postSection.includes('assertWorkspaceAccess'), 'POST /library must call assertWorkspaceAccess')
+  })
+
+  test('media.ts: PATCH and DELETE /library/:id collapse 404/403 to 404 (RV-4)', () => {
+    const src = routeSource('media.ts')
+    assert.ok(
+      src.includes('asset.workspaceId !== workspaceId'),
+      'media.ts PATCH/DELETE must collapse 404/403 by checking asset.workspaceId !== workspaceId',
+    )
+  })
+
+  test('links.ts: track handler returns 404 (not 403) for cross-workspace links (RV-3)', () => {
+    const src = routeSource('links.ts')
+    const trackIdx = src.indexOf("'/:id/track'")
+    assert.ok(trackIdx !== -1, "track route not found in links.ts")
+    const section = src.slice(trackIdx, trackIdx + 700)
+    assert.ok(section.includes('assertWorkspaceAccess'), 'track handler must call assertWorkspaceAccess')
+    // Must return 404 (not 403) when access check fails — prevents existence oracle
+    assert.ok(
+      section.includes("404") && section.includes("NOT_FOUND") && section.includes("accessErr"),
+      'track handler must return 404 (not 403) when assertWorkspaceAccess fails',
+    )
+  })
+
+  test('publishPost.worker.ts: asserts job.data.workspaceId matches DB record (RV-5)', () => {
+    const src = readFileSync(join(ROUTES_DIR, '../workers/publishPost.worker.ts'), 'utf-8')
+    assert.ok(
+      src.includes('expectedWorkspaceId') && src.includes('post.workspaceId !== expectedWorkspaceId'),
+      'publishPost.worker.ts must validate job.data.workspaceId against DB post.workspaceId',
+    )
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION C — Exhaustive route inventory (RV-6: no forgotten routes)
+//
+// Every route file must either:
+//   (a) import assertWorkspaceAccess, OR
+//   (b) be explicitly allowlisted below with a documented reason.
+//
+// Adding a new route file without a workspace guard will fail this test.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Workspace guard patterns accepted by the inventory test ──────────────────
+// Any of these strings in a route file counts as having workspace access control.
+// Prefer assertWorkspaceAccess (centralized), but recognise pre-existing local helpers.
+const GUARD_PATTERNS = [
+  'assertWorkspaceAccess',        // centralized guard (tenantGuard.ts) — preferred
+  'getWorkspaceRole',             // local helper in posts.ts
+  'canAccessWorkspace',           // local helper in templates.ts
+  'checkLinkAccess',              // local helper in links.ts
+  'workspaceMember.findUnique',   // direct membership query
+  'workspace.findUnique',         // direct workspace+owner query (multiple routes)
+  'workspace.findFirst',          // direct workspace+owner check (inbox.ts, reports.ts)
+]
+
+// Routes that legitimately do not need any workspace guard:
+// - auth.ts / twoFactor.ts / magicLinks.ts  — unauthenticated flows
+// - billing.ts                               — Stripe webhook + user-scoped plan
+// - admin.ts                                 — separate admin-only middleware
+// - portalPublic.ts                          — public portal token (no user session)
+// - bio.ts                                   — public bio link page
+// - onboarding.ts                            — first-run setup before workspace exists
+// - notifications.ts                         — user-scoped, no workspace data
+// - search.ts                                — user-scoped global search
+// - tradeflow.ts                             — user-scoped or system-level
+// - rss.ts                                   — public RSS feed
+// - webhooks.ts                              — inbound webhook receiver
+// - seoData.ts                               — public SEO metadata
+// - dlq.ts                                   — admin DLQ, uses requireAuth + admin check
+const ALLOWLISTED_ROUTES: Record<string, string> = {
+  'auth.ts':          'unauthenticated login/signup/token flows',
+  'twoFactor.ts':     'unauthenticated 2FA verification flows',
+  'magicLinks.ts':    'unauthenticated magic link flows',
+  'billing.ts':       'Stripe webhook + plan management, user-scoped',
+  'admin.ts':         'internal admin, guarded by separate admin middleware',
+  'portalPublic.ts':  'public client portal, uses portal token not user session',
+  'bio.ts':           'public bio link page, click tracking is public',
+  'onboarding.ts':    'first-run setup, workspace may not exist yet',
+  'notifications.ts': 'user-scoped, no cross-tenant risk',
+  'search.ts':        'user-scoped global search',
+  'tradeflow.ts':     'user-scoped or system-level',
+  'rss.ts':           'public RSS feed endpoint',
+  'webhooks.ts':      'inbound webhook receiver from platforms',
+  'seoData.ts':       'public SEO metadata endpoint',
+  'dlq.ts':           'admin DLQ retry, uses requireAuth + admin-only check',
+  'workspaces.ts':    'workspace CRUD for the current user (ownerId = req.user.id), no cross-tenant risk',
+}
+
+describe('Exhaustive route inventory — every route has workspace guard or is allowlisted (RV-6)', () => {
+  const allRouteFiles = readdirSync(ROUTES_DIR)
+    .filter((f) => f.endsWith('.ts') && !f.startsWith('__') && f !== 'index.ts')
+
+  for (const filename of allRouteFiles) {
+    test(`${filename}: has workspace access guard OR is allowlisted`, () => {
+      if (ALLOWLISTED_ROUTES[filename] !== undefined) {
+        // Allowlisted — no guard required; reason documented above
+        return
+      }
+      const src = routeSource(filename)
+      const hasGuard = GUARD_PATTERNS.some((pattern) => src.includes(pattern))
+      assert.ok(
+        hasGuard,
+        `${filename} has no workspace access guard. Either add assertWorkspaceAccess from tenantGuard.ts ` +
+        `or add it to ALLOWLISTED_ROUTES with a justification. ` +
+        `Accepted patterns: ${GUARD_PATTERNS.join(', ')}`,
+      )
+    })
+  }
 })

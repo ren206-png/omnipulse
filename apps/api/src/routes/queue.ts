@@ -171,7 +171,7 @@ router.patch('/:id/dispatch', async (req: Request, res: Response): Promise<void>
 
     const job = await publishPostQueue.add(
       'publish-post',
-      { postId: id },
+      { postId: id, workspaceId: post.workspaceId },
       { delay, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
     )
 

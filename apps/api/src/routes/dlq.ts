@@ -80,6 +80,9 @@ router.post('/:id/retry', async (req: Request, res: Response): Promise<void> => 
     const entry = await (prisma as any).postDlq.findUnique({ where: { id } })
     if (!entry) { sendError(res, 404, 'NOT_FOUND', 'DLQ entry not found'); return }
 
+    // Fetch post to get workspaceId for payload verification in worker
+    const post = await (prisma as any).scheduledPost.findUnique({ where: { id: entry.postId }, select: { workspaceId: true } })
+
     // Reset post to SCHEDULED and re-enqueue
     await (prisma as any).scheduledPost.update({
       where: { id: entry.postId },
@@ -88,7 +91,7 @@ router.post('/:id/retry', async (req: Request, res: Response): Promise<void> => 
 
     await publishPostQueue.add(
       'publish-post',
-      { postId: entry.postId },
+      { postId: entry.postId, workspaceId: post?.workspaceId },
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
     )
 

@@ -81,7 +81,7 @@ export async function startStuckJobSweeperWorker(): Promise<void> {
             })
             await publishPostQueue.add(
               'publish-post',
-              { postId: post.id },
+              { postId: post.id, workspaceId: post.workspaceId },
               { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
             )
             logger.info({ postId: post.id, attempts }, '[StuckJobSweeper] Requeued stuck post')

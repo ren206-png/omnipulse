@@ -136,6 +136,12 @@ router.get('/library', requireAuth, async (req: Request, res: Response): Promise
   const { workspaceId, tag, search } = req.query as { workspaceId?: string; tag?: string; search?: string }
   if (!workspaceId) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId required'); return }
   try {
+    await assertWorkspaceAccess(workspaceId, req.user!.id)
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
+    throw err
+  }
+  try {
     const assets = await (prisma as any).mediaAsset.findMany({
       where: {
         workspaceId,
@@ -158,6 +164,12 @@ router.post('/library', requireAuth, async (req: Request, res: Response): Promis
   }
   if (!workspaceId || !url || !filename) { sendError(res, 400, 'VALIDATION_ERROR', 'workspaceId, url, filename required'); return }
   try {
+    await assertWorkspaceAccess(workspaceId, req.user!.id)
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
+    throw err
+  }
+  try {
     const asset = await (prisma as any).mediaAsset.create({
       data: { workspaceId, url, filename, mimeType: mimeType ?? 'application/octet-stream', size: size ?? 0, tags: tags ?? [] },
     })
@@ -179,8 +191,8 @@ router.patch('/library/:id', requireAuth, async (req: Request, res: Response): P
   try {
     await assertWorkspaceAccess(workspaceId, req.user!.id)
     const asset = await (prisma as any).mediaAsset.findUnique({ where: { id } })
-    if (!asset) { sendError(res, 404, 'NOT_FOUND', 'Asset not found'); return }
-    assertResourceBelongsToWorkspace(asset.workspaceId, workspaceId)
+    // Collapse 404 and wrong-workspace 403 into a single 404 to prevent existence oracle
+    if (!asset || asset.workspaceId !== workspaceId) { sendError(res, 404, 'NOT_FOUND', 'Asset not found'); return }
     const updated = await (prisma as any).mediaAsset.update({ where: { id }, data: { tags: tags ?? [] } })
     res.json({ asset: updated })
   } catch (err) {
@@ -197,8 +209,8 @@ router.delete('/library/:id', requireAuth, async (req: Request, res: Response): 
   try {
     await assertWorkspaceAccess(workspaceId, req.user!.id)
     const asset = await (prisma as any).mediaAsset.findUnique({ where: { id } })
-    if (!asset) { sendError(res, 404, 'NOT_FOUND', 'Asset not found'); return }
-    assertResourceBelongsToWorkspace(asset.workspaceId, workspaceId)
+    // Collapse 404 and wrong-workspace 403 into a single 404 to prevent existence oracle
+    if (!asset || asset.workspaceId !== workspaceId) { sendError(res, 404, 'NOT_FOUND', 'Asset not found'); return }
     await (prisma as any).mediaAsset.delete({ where: { id } })
     res.json({ success: true })
   } catch (err) {

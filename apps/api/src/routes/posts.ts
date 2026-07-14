@@ -390,7 +390,7 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
       const delay = scheduledDate.getTime() - Date.now()
       const job = await publishPostQueue.add(
         'publish-post',
-        { postId: post.id },
+        { postId: post.id, workspaceId: post.workspaceId },
         { delay, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       )
       jobId = job.id
@@ -497,7 +497,7 @@ router.post('/queue-schedule', async (req: Request, res: Response): Promise<void
       const delay = nextSlot.getTime() - Date.now()
       const job = await publishPostQueue.add(
         'publish-post',
-        { postId: post.id },
+        { postId: post.id, workspaceId: post.workspaceId },
         { delay, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       )
       jobId = job.id
@@ -662,7 +662,7 @@ router.post('/bulk-schedule', async (req: Request, res: Response): Promise<void>
           const delay = post.scheduledFor.getTime() - Date.now()
           return publishPostQueue.add(
             'publish-post',
-            { postId: post.id },
+            { postId: post.id, workspaceId: post.workspaceId },
             { delay, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
           )
         }),
@@ -1040,7 +1040,7 @@ router.post('/:id/retry', async (req: Request, res: Response): Promise<void> => 
 
     const job = await publishPostQueue.add(
       'publish-post',
-      { postId: id },
+      { postId: id, workspaceId: post.workspaceId },
       { delay: 5 * 60 * 1000, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
     )
     logger.info({ postId: id, jobId: job.id }, 'Post retry enqueued')
@@ -1427,7 +1427,7 @@ router.post('/:id/smart-schedule', async (req: Request, res: Response): Promise<
     const delay = Math.max(scheduledFor.getTime() - Date.now(), 1000)
     await publishPostQueue.add(
       'publish-post',
-      { postId: id },
+      { postId: id, workspaceId: post.workspaceId },
       { delay, attempts: 3, backoff: { type: 'exponential', delay: 5000 }, jobId: `publish-${id}` },
     )
 

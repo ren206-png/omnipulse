@@ -32,7 +32,7 @@ export function startEvergreenWorker() {
               evergreenParentId: post.id,
             },
           })
-          await publishPostQueue.add('publish-post', { postId: (newPost as { id: string }).id }, {
+          await publishPostQueue.add('publish-post', { postId: (newPost as { id: string }).id, workspaceId: post.workspaceId }, {
             delay: post.evergreenInterval * 24 * 60 * 60 * 1000,
           })
           logger.info({ originalPostId: post.id, newPostId: (newPost as { id: string }).id }, 'Evergreen post recycled')

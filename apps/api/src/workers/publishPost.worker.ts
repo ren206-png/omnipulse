@@ -190,7 +190,7 @@ async function incrementLinkedInRateLimit(userId: string): Promise<void> {
 const worker = new Worker(
   'publish-post',
   async (job) => {
-    const { postId } = job.data as { postId: string }
+    const { postId, workspaceId: expectedWorkspaceId } = job.data as { postId: string; workspaceId?: string }
 
     const post = await (prisma.scheduledPost.findUnique as Function)({
       where: { id: postId },
@@ -198,6 +198,12 @@ const worker = new Worker(
     })
     if (!post) {
       throw new Error(`ScheduledPost ${postId} not found`)
+    }
+
+    // RV-5: Re-verify workspace ownership from DB — do not trust job payload alone.
+    // If the job was enqueued with a workspaceId, assert it matches the DB record.
+    if (expectedWorkspaceId && post.workspaceId !== expectedWorkspaceId) {
+      throw new Error(`Job payload workspace mismatch for post ${postId}`)
     }
 
     // Fetch social accounts for this workspace that match the post's platforms
@@ -517,7 +523,7 @@ const worker = new Worker(
             const delay = nextDate.getTime() - Date.now()
             await publishPostQueue.add(
               'publish-post',
-              { postId: nextPost.id },
+              { postId: nextPost.id, workspaceId: post.workspaceId },
               { delay: Math.max(delay, 1000), attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
             )
             logger.info({ postId: nextPost.id, scheduledFor: nextDate, freq: post.recurrenceFreq }, 'Recurring post spawned')

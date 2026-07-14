@@ -59,7 +59,7 @@ export async function detectAndFix(): Promise<GuardianReport> {
       // Re-enqueue immediately (short delay to avoid thundering herd)
       await publishPostQueue.add(
         'publish-post',
-        { postId: post.id },
+        { postId: post.id, workspaceId: post.workspaceId },
         { delay: 2000, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
       )
 
