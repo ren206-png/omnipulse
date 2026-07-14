@@ -30,13 +30,13 @@ const PLATFORM_CONFIG: Record<Platform, PlatformConfig> = {
       '1. Your Instagram account must be a Business or Creator account\n2. Link it to a Facebook Page (Instagram app → Settings → Account type → Professional)\n3. Click Connect — you\'ll be taken through Facebook Login\n4. Approve the requested permissions',
   },
   TIKTOK: {
-    color: '#000000',
+    color: '#69C9D0',
     handlePlaceholder: '@your_tiktok_handle',
     instructions:
       '1. Go to developers.tiktok.com → Manage Apps\n2. Create an app with \'Login Kit\'\n3. Generate an access token from your app dashboard\n4. Paste it above',
   },
   X: {
-    color: '#000000',
+    color: '#1D9BF0',
     handlePlaceholder: '@your_handle',
     instructions:
       '1. Go to developer.twitter.com → Projects & Apps\n2. Create an app and navigate to Keys and Tokens\n3. Generate a Bearer Token or Access Token\n4. Paste it above',
@@ -66,7 +66,7 @@ function PlatformIcon({ platform, size = 20 }: { platform: Platform; size?: numb
     return (
       <span
         style={{ width: size, height: size, fontSize: size * 0.45 }}
-        className="inline-flex items-center justify-center rounded-md bg-black text-white font-bold"
+        className="inline-flex items-center justify-center rounded-md bg-[#010101] text-[#69C9D0] font-bold"
       >
         TT
       </span>
