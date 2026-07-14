@@ -65,4 +65,10 @@ export const env = {
   // Email (Resend)
   RESEND_API_KEY: process.env.RESEND_API_KEY ?? '',
   EMAIL_FROM: process.env.EMAIL_FROM ?? 'OmniPulse <noreply@getomnipulse.com>',
+  // Monitoring alerts
+  SLACK_ALERT_WEBHOOK_URL: process.env.SLACK_ALERT_WEBHOOK_URL ?? '',
+  MONITOR_ALERT_WEBHOOK_URL: process.env.MONITOR_ALERT_WEBHOOK_URL ?? '',
+  // Facebook/Instagram OAuth (for token auto-refresh)
+  FACEBOOK_APP_ID: process.env.FACEBOOK_APP_ID ?? '',
+  FACEBOOK_APP_SECRET: process.env.FACEBOOK_APP_SECRET ?? '',
 }

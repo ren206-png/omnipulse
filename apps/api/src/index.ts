@@ -66,6 +66,8 @@ import { startGuardianWorker } from './workers/guardian.worker.js'
 import { engagementAlertWorker } from './workers/engagementAlert.worker.js'
 import { startRssFeedWorker } from './workers/rssFeed.worker.js'
 import { startWeeklyDigestWorker } from './workers/weeklyDigest.worker.js'
+import { startSystemMonitorWorker } from './workers/systemMonitor.worker.js'
+import { startAuthTokenRefreshWorker } from './workers/authTokenRefresh.worker.js'
 import { prisma } from './lib/prisma.js'
 import IORedis from 'ioredis'
 
@@ -194,6 +196,27 @@ setInterval(() => { syncAnalytics().catch(() => {}) }, 6 * 60 * 60 * 1000)
 startRssFeedWorker()
 // Weekly Digest worker — sends Monday 08:00 UTC performance emails
 startWeeklyDigestWorker()
+// System Monitor — checks all subsystems every 2 min, auto-heals, fires alerts
+startSystemMonitorWorker().catch((err) => logger.error({ err }, 'Failed to start system monitor worker'))
+// Auth Token Refresh — scans expiring OAuth tokens every 30 min and auto-refreshes
+startAuthTokenRefreshWorker().catch((err) => logger.error({ err }, 'Failed to start auth token refresh worker'))
+
+// ─── Graceful shutdown ──────────────────────────────────────────────────────
+// Drain in-flight BullMQ jobs and close DB connections before the process exits.
+// Railway sends SIGTERM ~10s before force-killing the container.
+async function gracefulShutdown(signal: string): Promise<void> {
+  logger.info({ signal }, '[Shutdown] Graceful shutdown initiated')
+  try {
+    await prisma.$disconnect()
+    logger.info('[Shutdown] Prisma disconnected')
+  } catch (err) {
+    logger.error({ err }, '[Shutdown] Error disconnecting Prisma')
+  }
+  process.exit(0)
+}
+
+process.on('SIGTERM', () => { gracefulShutdown('SIGTERM').catch(() => process.exit(1)) })
+process.on('SIGINT',  () => { gracefulShutdown('SIGINT').catch(() => process.exit(1)) })
 
 // ─── Global crash protection (single registration point) ───────────────────
 // Workers previously registered these individually — consolidated here to

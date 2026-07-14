@@ -8,6 +8,7 @@ import { logger } from '../lib/logger.js'
 import { FF_EVERGREEN_QUEUE } from '../lib/featureFlags.js'
 import { env } from '../config/env.js'
 import { isInSeasonalExclusion } from '../lib/seasonalExclusion.js'
+import { heartbeat } from '../lib/workerHeartbeat.js'
 
 const INTERVAL_MS = 60 * 60 * 1000 // 1 hour
 const BATCH_CAP = 50
@@ -228,6 +229,7 @@ async function run(): Promise<void> {
   }
 
   logger.info('[EvergreenRecycler] Hourly run complete')
+  await heartbeat('evergreen-recycler')
 }
 
 let _started = false

@@ -7,6 +7,7 @@ import { Queue, Worker } from 'bullmq'
 import { redisConnection } from '../lib/queue.js'
 import { logger } from '../lib/logger.js'
 import { detectAndFix, remindPendingReviews } from '../lib/guardian.js'
+import { heartbeat } from '../lib/workerHeartbeat.js'
 
 const INTERVAL_MS = 5 * 60 * 1000 // 5 minutes
 
@@ -47,6 +48,7 @@ export async function startGuardianWorker(): Promise<void> {
         logger.error({ errors: report.errors }, '[Guardian] Errors during scan')
       }
 
+      await heartbeat('guardian')
       return report
     },
     { connection: redisConnection },

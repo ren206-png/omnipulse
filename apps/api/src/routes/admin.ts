@@ -4,6 +4,9 @@ import { prisma } from '../lib/prisma.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { env } from '../config/env.js'
+import { getDeepHealth } from '../lib/healthProbes.js'
+import { clearAlertCache } from '../lib/alertManager.js'
+import { getAllBreakers } from '../lib/circuitBreaker.js'
 
 const router = Router()
 
@@ -203,6 +206,36 @@ router.get('/platform-status', async (_req: Request, res: Response): Promise<voi
       dashboardUrl: 'https://dashboard.stripe.com/products',
     },
   })
+})
+
+// ── Deep health endpoint ──────────────────────────────────────────────────────
+// GET /api/v1/admin/health/deep
+// Returns live subsystem health: DB latency, Redis, queue depths, worker heartbeats, circuit breakers.
+router.get('/health/deep', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const report = await getDeepHealth()
+    const httpStatus = report.status === 'down' ? 503 : report.status === 'degraded' ? 207 : 200
+    res.status(httpStatus).json(report)
+  } catch (err) {
+    sendError(res, 500, 'INTERNAL_ERROR', 'Health check failed')
+  }
+})
+
+// POST /api/v1/admin/health/reset-alerts
+// Clears the alert dedup cache so suppressed alerts fire again on next check.
+router.post('/health/reset-alerts', (_req: Request, res: Response): void => {
+  clearAlertCache()
+  res.json({ ok: true, message: 'Alert dedup cache cleared' })
+})
+
+// POST /api/v1/admin/health/reset-breaker/:name
+// Force-resets a named circuit breaker to CLOSED.
+router.post('/health/reset-breaker/:name', (req: Request, res: Response): void => {
+  const { name } = req.params
+  const breaker = getAllBreakers().find((b) => b.toJSON().name === name)
+  if (!breaker) { sendError(res, 404, 'NOT_FOUND', `Circuit breaker '${name}' not found`); return }
+  breaker.reset()
+  res.json({ ok: true, breaker: breaker.toJSON() })
 })
 
 export default router

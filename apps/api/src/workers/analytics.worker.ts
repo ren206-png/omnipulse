@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js'
 import { AyrshareService } from '../integrations/ayrshare.js'
 import { analyticsSyncQueue, redisConnection } from '../lib/queue.js'
 import { logger } from '../lib/logger.js'
+import { heartbeat } from '../lib/workerHeartbeat.js'
 
 try {
   await analyticsSyncQueue.upsertJobScheduler('analytics-daily-sync', {
@@ -49,6 +50,7 @@ const worker = new Worker(
       { successCount, failureCount, total: accounts.length },
       'Analytics daily sync complete',
     )
+    await heartbeat('analytics')
   },
   { connection: redisConnection },
 )

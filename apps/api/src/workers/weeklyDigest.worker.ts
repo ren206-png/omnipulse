@@ -13,6 +13,7 @@
 
 import { logger } from '../lib/logger.js'
 import { sendWeeklyDigest } from '../lib/digest.js'
+import { heartbeat } from '../lib/workerHeartbeat.js'
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000 // check every 30 minutes
 const DIGEST_HOUR_UTC = 8  // send at 08:xx UTC
@@ -41,6 +42,7 @@ async function maybeSendDigest(): Promise<void> {
   try {
     await sendWeeklyDigest()
     logger.info('[WeeklyDigest] All digests sent')
+    await heartbeat('weekly-digest')
   } catch (err) {
     logger.error({ err }, '[WeeklyDigest] Failed to send digests')
     // Reset so it retries within the same hour window if the error was transient

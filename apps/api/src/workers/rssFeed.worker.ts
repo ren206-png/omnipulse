@@ -15,6 +15,7 @@
 import { prisma } from '../lib/prisma.js'
 import { logger } from '../lib/logger.js'
 import { env } from '../config/env.js'
+import { heartbeat } from '../lib/workerHeartbeat.js'
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000 // check every 5 minutes
 const MAX_NEW_ITEMS_PER_FEED = 10 // safety cap per run
@@ -214,6 +215,7 @@ async function run(): Promise<void> {
       logger.error({ err, feedId: feed.id }, '[RssFeed] Uncaught error checking feed')
     }
   }
+  await heartbeat('rss-feed')
 }
 
 // ── Startup ───────────────────────────────────────────────────────────────────

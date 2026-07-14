@@ -9,6 +9,7 @@ import { redisConnection, publishPostQueue } from '../lib/queue.js'
 import { prisma } from '../lib/prisma.js'
 import { logger } from '../lib/logger.js'
 import { notify, getWorkspaceAdmins } from '../lib/notify.js'
+import { heartbeat } from '../lib/workerHeartbeat.js'
 
 const STUCK_THRESHOLD_MS = 15 * 60 * 1000 // 15 minutes
 const CHECK_INTERVAL_MS = 10 * 60 * 1000  // every 10 minutes
@@ -51,6 +52,7 @@ export async function startStuckJobSweeperWorker(): Promise<void> {
 
       if (stuckPosts.length === 0) {
         logger.info('[StuckJobSweeper] No stuck posts found')
+        await heartbeat('stuck-job-sweeper')
         return { swept: 0 }
       }
 
@@ -129,6 +131,7 @@ export async function startStuckJobSweeperWorker(): Promise<void> {
       }
 
       logger.info({ requeued, dlqd }, '[StuckJobSweeper] Sweep complete')
+      await heartbeat('stuck-job-sweeper')
       return { swept: stuckPosts.length, requeued, dlqd }
     },
     { connection: redisConnection },
