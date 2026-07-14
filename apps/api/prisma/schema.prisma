@@ -103,6 +103,7 @@ model WorkspaceInvitation {
   createdAt   DateTime      @default(now())
 
   @@unique([workspaceId, email])
+  @@index([workspaceId])
 }
 
 enum WorkspaceRole {
@@ -126,6 +127,9 @@ model SocialAccount {
   linkedinOrganizationUrns   Json?
   snapshots         AnalyticsSnapshot[]
   inboxMessages     InboxMessage[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, platform])
 }
 
 enum Platform {
@@ -176,6 +180,9 @@ model ScheduledPost {
   evergreenQueue      EvergreenQueue?
 
   @@index([status, scheduledFor])
+  @@index([workspaceId])
+  @@index([workspaceId, status])
+  @@index([workspaceId, scheduledFor])
 }
 
 model PostComment {
@@ -257,6 +264,8 @@ model SharedReport {
   expiresAt   DateTime?
   createdAt   DateTime  @default(now())
   createdBy   String
+
+  @@index([workspaceId])
 }
 
 model ContentTemplate {
@@ -270,6 +279,9 @@ model ContentTemplate {
   createdBy   String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([workspaceId, category])
 }
 
 model AnalyticsSnapshot {
@@ -280,6 +292,8 @@ model AnalyticsSnapshot {
   impressions     Int
   engagementRate  Float
   recordedAt      DateTime      @default(now())
+
+  @@index([socialAccountId, recordedAt])
 }
 
 model InboxMessage {
@@ -518,6 +532,7 @@ model PostDlq {
   workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId])
+  @@index([postId])
   @@index([resolvedAt])
 }
 
@@ -587,13 +602,14 @@ model PostAttribution {
 }
 
 model AttributionEvent {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   postId        String
   workspaceId   String
-  eventType     String   // 'call' | 'booking'
-  source        String   // 'phone' | 'utm_link'
-  metadata      Json?    // raw event data from TradeFlow/Twilio adapter
-  receivedAt    DateTime @default(now())
+  eventType     String    // 'call' | 'booking'
+  source        String    // 'phone' | 'utm_link'
+  metadata      Json?     // raw event data from TradeFlow/Twilio adapter
+  receivedAt    DateTime  @default(now())
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   @@index([postId])
   @@index([workspaceId])
 }

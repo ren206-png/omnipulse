@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import Link from 'next/link'
 
 export default function DashboardError({
   error,
@@ -10,22 +11,30 @@ export default function DashboardError({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error('Dashboard error:', error)
+    console.error('[DashboardError]', error)
   }, [error])
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 text-center px-4">
-      <p className="text-5xl">⚠️</p>
-      <h2 className="text-xl font-semibold">Something went wrong</h2>
-      <p className="text-sm text-muted-foreground max-w-sm">
-        {error.message ?? 'An unexpected error occurred. Our team has been notified.'}
-      </p>
-      <button
-        onClick={reset}
-        className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
-      >
-        Try again
-      </button>
+    <div className="p-4">
+      <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-destructive font-medium">
+          Dashboard failed to load: {error.message || 'An unexpected error occurred.'}
+        </p>
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={reset}
+            className="text-sm font-medium text-destructive underline-offset-4 hover:underline transition-colors"
+          >
+            Retry
+          </button>
+          <Link
+            href="/"
+            className="text-sm font-medium text-muted-foreground underline-offset-4 hover:underline transition-colors"
+          >
+            Go home
+          </Link>
+        </div>
+      </div>
     </div>
   )
 }

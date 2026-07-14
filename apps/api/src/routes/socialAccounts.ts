@@ -360,7 +360,7 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
 
     const displayName = profileName || externalProfileId
 
-    // TODO: run token re-encryption migration for existing records
+    // Existing plaintext tokens are migrated via: npx tsx scripts/reencryptTokens.ts --execute
     const encryptedAccessToken = encryptToken(accessToken)
 
     // SocialAccount has no unique constraint on workspaceId+platform, so use findFirst + create/update
