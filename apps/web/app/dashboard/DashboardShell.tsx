@@ -210,7 +210,7 @@ function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNav
   return (
     <>
       <div className="p-4 border-b flex items-center justify-between">
-        <OmniPulseLogo variant="wordmark" height={30} />
+        <OmniPulseLogo variant="wordmark" height={44} />
         <div className="flex items-center gap-1">
           <ThemeToggle />
           <NotificationBell token={token} />
@@ -307,7 +307,7 @@ function Sidebar({ token, onOpenCmd }: { token: string; onOpenCmd: () => void })
   return (
     <>
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 h-14 border-b bg-background">
-        <OmniPulseLogo variant="wordmark" height={28} />
+        <OmniPulseLogo variant="wordmark" height={40} />
         <button onClick={() => setMobileOpen(o => !o)} className="p-1.5 rounded-md hover:bg-accent transition-colors" aria-label="Toggle menu">
           <HamburgerIcon open={mobileOpen} />
         </button>
