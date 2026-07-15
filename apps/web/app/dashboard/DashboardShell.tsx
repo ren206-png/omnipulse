@@ -209,9 +209,9 @@ function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNav
 
   return (
     <>
-      <div className="p-4 border-b flex items-center justify-between">
-        <OmniPulseLogo variant="wordmark" height={44} />
-        <div className="flex items-center gap-1">
+      <div className="px-4 pt-4 pb-3 border-b">
+        <OmniPulseLogo variant="wordmark" height={52} className="w-full" />
+        <div className="flex items-center gap-1 mt-2">
           <ThemeToggle />
           <NotificationBell token={token} />
           <button
