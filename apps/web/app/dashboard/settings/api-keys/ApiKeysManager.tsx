@@ -34,8 +34,7 @@ export function ApiKeysManager({ token }: Props) {
     setLoading(true)
     try {
       const res = await fetch(`${API}/api/v1/api-keys?workspaceId=${activeWorkspace.id}`, {
-        headers: { Cookie: `token=${token}` },
-        credentials: 'include',
+        headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) return
       const data = await res.json()
@@ -53,8 +52,7 @@ export function ApiKeysManager({ token }: Props) {
     try {
       const res = await fetch(`${API}/api/v1/api-keys`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Cookie: `token=${token}` },
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ workspaceId: activeWorkspace.id, name: newName.trim() }),
       })
       if (!res.ok) return
@@ -69,8 +67,7 @@ export function ApiKeysManager({ token }: Props) {
   async function revokeKey(id: string) {
     await fetch(`${API}/api/v1/api-keys/${id}`, {
       method: 'DELETE',
-      headers: { Cookie: `token=${token}` },
-      credentials: 'include',
+      headers: { Authorization: `Bearer ${token}` },
     })
     setRevokeId(null)
     fetchKeys()

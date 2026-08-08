@@ -104,9 +104,6 @@ export function TeamClient({ workspaceId, token, currentUserId }: Props) {
 
       setInviteEmail('')
       setInviteSuccess(`Invitation sent to ${inviteEmail.trim()}`)
-      if (body.inviteUrl) {
-        console.info('[Dev] Invite URL:', body.inviteUrl)
-      }
       fetchAll()
     } catch {
       setInviteError('Network error — please try again')

@@ -32,7 +32,7 @@ export function ActivityLog({ token }: Props) {
     try {
       const res = await fetch(
         `${API}/api/v1/activity?workspaceId=${activeWorkspace.id}&page=${p}&limit=${limit}`,
-        { headers: { Cookie: `token=${token}` }, credentials: 'include' }
+        { headers: { Authorization: `Bearer ${token}` } }
       )
       if (!res.ok) return
       const data = await res.json()

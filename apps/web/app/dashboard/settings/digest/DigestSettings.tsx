@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 
+// WEEKLY-AUDIT: The digest enabled/disabled toggle is persisted to localStorage only.
+// The backend weeklyDigest worker sends digests regardless of this client-side preference.
+// This toggle needs a server-side preference endpoint to actually suppress digest emails.
 const DIGEST_ENABLED_KEY = 'omnipulse_digest_enabled'
 
 function decodeEmail(token: string): string {

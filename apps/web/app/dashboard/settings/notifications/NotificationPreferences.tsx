@@ -2,6 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react'
 
+// WEEKLY-AUDIT: All notification preferences are stored in localStorage only.
+// Email notification preferences stored client-side cannot be enforced server-side,
+// and preferences are lost on localStorage clear or across devices.
+// This needs a server-side preferences API (GET/PATCH /api/v1/notification-preferences).
 const INAPP_KEY = 'omnipulse_notif_prefs'
 const EMAIL_KEY = 'omnipulse_email_prefs'
 

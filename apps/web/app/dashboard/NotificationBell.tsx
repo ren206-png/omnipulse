@@ -60,7 +60,10 @@ export function NotificationBell({ token }: Props) {
     let es: EventSource | null = null
 
     function connect() {
-      // EventSource doesn't support custom headers — pass token as query param
+      // WEEKLY-AUDIT: JWT passed as query param appears in server access logs, browser history,
+      // and proxy logs. Consider a short-lived SSE-specific token issued via a POST endpoint,
+      // or a server-side proxy that injects the Authorization header.
+      // EventSource doesn't support custom headers — token in query param is a known limitation.
       es = new EventSource(`${url}?token=${token}`)
 
       es.addEventListener('notification', (e: MessageEvent) => {

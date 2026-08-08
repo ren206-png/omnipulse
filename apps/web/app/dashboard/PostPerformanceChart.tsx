@@ -15,6 +15,7 @@ import { eachDayOfInterval, format, isSameDay, subDays } from 'date-fns'
 interface Post {
   id: string
   scheduledFor: string
+  publishedAt?: string | null
   status: 'DRAFT' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED'
 }
 
@@ -34,7 +35,11 @@ function buildChartData(posts: Post[]): ChartRow[] {
   const days = eachDayOfInterval({ start: subDays(today, 29), end: today })
 
   return days.map((day) => {
-    const dayPosts = posts.filter((p) => isSameDay(new Date(p.scheduledFor), day))
+    // Use publishedAt for PUBLISHED posts so the chart reflects actual publish date,
+    // not scheduled date. Fall back to scheduledFor for SCHEDULED/FAILED/DRAFT.
+    const dateFor = (p: Post) =>
+      p.status === 'PUBLISHED' && p.publishedAt ? new Date(p.publishedAt) : new Date(p.scheduledFor)
+    const dayPosts = posts.filter((p) => isSameDay(dateFor(p), day))
     return {
       date: format(day, 'MMM d'),
       Scheduled: dayPosts.filter((p) => p.status === 'SCHEDULED').length,

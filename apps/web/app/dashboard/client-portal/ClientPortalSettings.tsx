@@ -37,6 +37,8 @@ const STATUS_BADGE: Record<string, string> = {
 export function ClientPortalSettings({ token }: Props) {
   const { activeWorkspace, workspacesLoading } = useWorkspace()
   const [portal, setPortal] = useState<Portal | null>(null)
+  // WEEKLY-AUDIT: `approvals` is declared and rendered but never fetched from the API.
+  // Add a fetch to GET /api/v1/approvals?workspaceId=... in the `load` callback and populate this state.
   const [approvals, setApprovals] = useState<PostApproval[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

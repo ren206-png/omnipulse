@@ -33,7 +33,7 @@ export function UpgradeModal({ open, onClose, featureName, message }: Props) {
           <div className="border-2 border-primary rounded-xl p-3 space-y-2 relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[9px] font-bold px-2 py-0.5 rounded-bl-lg">BEST VALUE</div>
             <p className="font-semibold text-sm">Agency</p>
-            <p className="text-2xl font-bold">$79<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
+            <p className="text-2xl font-bold">$99<span className="text-sm font-normal text-muted-foreground">/mo</span></p>
             <ul className="text-xs text-muted-foreground space-y-1">
               <li>✓ Everything in Pro</li>
               <li>✓ Unlimited accounts</li>

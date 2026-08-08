@@ -48,6 +48,11 @@ const THEMES: Record<string, { bg: string; card: string; text: string; subtext: 
   },
 }
 
+// WEEKLY-AUDIT: Two issues with this component:
+// 1. The onclick-as-string pattern uses @ts-ignore to set a raw HTML attribute — refactor to a
+//    'use client' child component so React handles the click event safely.
+// 2. The click-tracking fetch uses a relative URL (/api/v1/bio/...) which routes to the Next.js
+//    app, not the backend API. Either proxy the route in Next.js or use the full NEXT_PUBLIC_API_URL.
 function LinkButton({ link, slug, theme }: { link: BioLink; slug: string; theme: typeof THEMES[string] }) {
   const handleClick = `
     (async function() {

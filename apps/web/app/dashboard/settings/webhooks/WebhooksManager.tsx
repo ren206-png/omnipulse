@@ -243,7 +243,7 @@ export function WebhooksManager({ workspaceId, token }: Props) {
               <div className="flex items-center gap-2">
                 <Label className="text-xs text-muted-foreground shrink-0">Secret:</Label>
                 <code className="text-[11px] font-mono text-muted-foreground flex-1 truncate">
-                  {revealedSecrets.has(ep.id) ? ep.secret : ep.secret}
+                  {revealedSecrets.has(ep.id) ? ep.secret : '••••••••••••••••••••••••'}
                 </code>
                 <button
                   type="button"
