@@ -19,6 +19,8 @@ export enum PostStatus {
   SCHEDULED = 'SCHEDULED',
   PUBLISHED = 'PUBLISHED',
   FAILED = 'FAILED',
+  PENDING_REVIEW = 'PENDING_REVIEW',
+  APPROVED = 'APPROVED',
 }
 
 export interface ApiError {

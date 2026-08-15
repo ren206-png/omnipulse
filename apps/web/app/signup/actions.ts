@@ -2,22 +2,28 @@
 
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { isValidEmail } from '@/lib/utils'
 
 export async function signupAction(
   email: string,
   password: string,
   confirmPassword: string,
 ): Promise<{ error?: string }> {
-  if (!email || !email.includes('@')) return { error: 'A valid email address is required' }
+  if (!email || !isValidEmail(email)) return { error: 'A valid email address is required' }
   if (password.length < 8) return { error: 'Password must be at least 8 characters' }
   if (password !== confirmPassword) return { error: 'Passwords do not match' }
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
-  const res = await fetch(`${apiUrl}/api/v1/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
+  let res: Response
+  try {
+    res = await fetch(`${apiUrl}/api/v1/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+  } catch {
+    return { error: 'Network error — please try again' }
+  }
 
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string }

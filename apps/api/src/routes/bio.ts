@@ -255,6 +255,16 @@ router.patch('/:id/links/reorder', async (req: Request, res: Response): Promise<
       sendError(res, 403, 'FORBIDDEN', 'Access denied'); return
     }
 
+    // Verify all linkIds belong to this bio page to prevent IDOR
+    const existingLinks = await prisma.bioLink.findMany({
+      where: { id: { in: orderedIds }, bioPageId: id },
+      select: { id: true },
+    })
+    if (existingLinks.length !== orderedIds.length) {
+      sendError(res, 403, 'FORBIDDEN', 'One or more link IDs do not belong to this bio page')
+      return
+    }
+
     await prisma.$transaction(
       orderedIds.map((linkId, position) =>
         prisma.bioLink.update({ where: { id: linkId }, data: { position } })

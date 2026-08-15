@@ -100,7 +100,9 @@ export function WebhooksManager({ workspaceId, token }: Props) {
       if (!res.ok) { setFormError(data.error ?? 'Failed to create webhook'); return }
 
       // Show the secret once
-      setNewSecret({ id: data.endpoint!.id, secret: data.endpoint!.secret })
+      if (data.endpoint) {
+        setNewSecret({ id: data.endpoint.id, secret: data.endpoint.secret })
+      }
       setShowForm(false)
       setFormUrl('')
       setFormEvents([])

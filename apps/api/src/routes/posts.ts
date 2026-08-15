@@ -12,7 +12,7 @@ import { notify, notifyMany, getWorkspaceAdmins } from '../lib/notify.js'
 import { getNextAvailableSlot } from '../lib/queueScheduler.js'
 import { sendPostSubmittedEmail, sendPostApprovedEmail, sendPostRejectedEmail } from '../lib/email.js'
 import { computeRecommendations } from '../lib/bestTimes.js'
-import { Platform } from '../../generated/prisma/enums.js'
+import type { Platform } from '@prisma/client'
 
 const router = Router()
 const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'] as const
@@ -697,6 +697,7 @@ router.get('/content-health', async (req: Request, res: Response): Promise<void>
   const role = await getWorkspaceRole(workspaceId, req.user!.id)
   if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
 
+  try {
   const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   const posts = await prisma.scheduledPost.findMany({
     where: {
@@ -744,6 +745,10 @@ router.get('/content-health', async (req: Request, res: Response): Promise<void>
   })
 
   res.json({ posts: enriched })
+  } catch (err) {
+    logger.error({ err }, 'Content health fetch error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch content health')
+  }
 })
 
 // POST /api/v1/posts/:id/submit-review — member submits a DRAFT for review

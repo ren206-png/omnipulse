@@ -29,11 +29,9 @@ async function checkDailyLimit(userId: string, key: string, limit: number): Prom
   const redisKey = `${key}:${userId}:${today}`
   const current = parseInt((await redis.get(redisKey)) ?? '0', 10)
   const allowed = current < limit
-  // TTL: seconds until midnight UTC
   const now = new Date()
   const midnight = new Date(today)
   midnight.setUTCDate(midnight.getUTCDate() + 1)
-  const ttl = Math.ceil((midnight.getTime() - now.getTime()) / 1000)
   return { allowed, remaining: Math.max(0, limit - current), resetAt: midnight.toISOString() }
 }
 
@@ -478,8 +476,7 @@ router.post('/translate', aiLimiter, async (req: Request, res: Response): Promis
   const { text, targetLanguage } = req.body as { text?: string; targetLanguage?: string }
   if (!text || !targetLanguage) { sendError(res, 400, 'MISSING_PARAMS', 'text and targetLanguage required'); return }
   try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic()
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
@@ -546,8 +543,7 @@ router.post('/trends', async (req: Request, res: Response): Promise<void> => {
   const { niche, platforms } = req.body as { niche?: string; platforms?: string[] }
   if (!niche) { sendError(res, 400, 'MISSING_NICHE', 'niche required'); return }
   try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic()
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const platformStr = platforms?.join(', ') ?? 'Instagram, TikTok, X'
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -583,8 +579,7 @@ router.post('/draft-reply', aiLimiter, async (req: Request, res: Response): Prom
   const { message, platform, tone = 'friendly', brandName } = req.body as { message?: string; platform?: string; tone?: string; brandName?: string }
   if (!message) { sendError(res, 400, 'MISSING_MESSAGE', 'message required'); return }
   try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic()
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message_result = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,

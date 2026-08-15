@@ -83,6 +83,11 @@ jobs:
 
       - name: Run tests
         working-directory: apps/api
+        env:
+          DATABASE_URL: postgresql://x:x@localhost:5432/x
+          JWT_SECRET: test-secret-for-tenant-isolation-32bytes!!
+          JWT_EXPIRES_IN: 7d
+          REDIS_URL: redis://localhost:6379
         run: npx tsx --test src/routes/__tests__/tenantIsolation.test.ts
 
   # ─────────────────────────────────────────────

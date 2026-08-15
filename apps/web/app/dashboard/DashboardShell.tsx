@@ -404,16 +404,21 @@ export function DashboardShell({
 }) {
   const [cmdOpen, setCmdOpen] = useState(false)
   const [expiredMessage, setExpiredMessage] = useState<string | null>(null)
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     function handleExpired(e: Event) {
       const detail = (e as CustomEvent<{ message: string }>).detail
       setExpiredMessage(detail?.message ?? 'Session expired — please sign in again')
       // Auto-dismiss after 3 s (redirect from useAuthFetch fires at 2 s)
-      setTimeout(() => setExpiredMessage(null), 3000)
+      if (dismissTimerRef.current !== null) clearTimeout(dismissTimerRef.current)
+      dismissTimerRef.current = setTimeout(() => setExpiredMessage(null), 3000)
     }
     window.addEventListener(SESSION_EXPIRED_EVENT, handleExpired)
-    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleExpired)
+    return () => {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, handleExpired)
+      if (dismissTimerRef.current !== null) clearTimeout(dismissTimerRef.current)
+    }
   }, [])
 
   return (

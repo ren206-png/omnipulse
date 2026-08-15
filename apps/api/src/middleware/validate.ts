@@ -60,7 +60,11 @@ export function validateQuery<T>(schema: ZodSchema<T>): RequestHandler {
       })
       return
     }
-    // req.query is read-only in Express types; use Object.assign to patch it safely
+    // Remove unvalidated params first so downstream handlers can't see them,
+    // then set only the schema-validated values.
+    for (const key of Object.keys(req.query)) {
+      delete (req.query as Record<string, unknown>)[key]
+    }
     Object.assign(req.query, result.data)
     next()
   }

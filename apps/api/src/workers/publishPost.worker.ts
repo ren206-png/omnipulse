@@ -246,6 +246,8 @@ const worker = new Worker(
           : variant.content
         : post.content
       const mediaUrls = variant?.mediaUrls?.length > 0 ? variant.mediaUrls : post.mediaUrls
+      // Decrypt stored OAuth token — tokens are stored AES-256-GCM encrypted in production
+      const decryptedAccessToken = decryptToken(account.accessToken)
       // ── LinkedIn: special dispatch path ────────────────────────────────────
       if (platform === 'LINKEDIN') {
         try {
@@ -261,7 +263,7 @@ const worker = new Worker(
           }
 
           // Guard: check + refresh token if near expiry
-          let rawToken = decryptToken(account.accessToken)
+          let rawToken = decryptedAccessToken
           if (isLinkedInTokenExpired({
             id: account.id,
             accessToken: account.accessToken,
@@ -369,7 +371,7 @@ const worker = new Worker(
               try {
                 capturedExternalId = await publishToPlatform(
                   { content, mediaUrls },
-                  { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
+                  { platform, accessToken: decryptedAccessToken, externalProfileId: account.externalProfileId },
                 )
                 return { success: true, statusCode: 200 }
               } catch (err) {
@@ -388,7 +390,7 @@ const worker = new Worker(
         } else {
           externalId = await publishToPlatform(
             { content, mediaUrls },
-            { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
+            { platform, accessToken: decryptedAccessToken, externalProfileId: account.externalProfileId },
           )
         }
         responseLog[platform] = externalId
@@ -406,7 +408,7 @@ const worker = new Worker(
                 const replyRes = await fetch('https://api.twitter.com/2/tweets', {
                   method: 'POST',
                   headers: {
-                    Authorization: `Bearer ${account.accessToken}`,
+                    Authorization: `Bearer ${decryptedAccessToken}`,
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify({
@@ -452,10 +454,7 @@ const worker = new Worker(
         if (!externalId || externalId.includes('_manual_required')) continue
         const account = accounts.find((a) => a.platform === platform)
         if (!account) continue
-        // For LinkedIn, use the raw decrypted token
-        const accessToken = platform === 'LINKEDIN'
-          ? decryptToken(account.accessToken)
-          : account.accessToken
+        const accessToken = decryptToken(account.accessToken)
         await postFirstComment(platform, externalId, accessToken, post.firstComment)
       }
       logger.info({ postId, platforms: Object.keys(responseLog) }, 'First comment posted')

@@ -36,15 +36,7 @@ export async function loginAction(
   email: string,
   password: string,
 ): Promise<{ error?: string; requiresTwoFactor?: boolean; twoFactorToken?: string }> {
-  const isDevBypass =
-    process.env.NEXT_PUBLIC_DEV_MODE === 'true' &&
-    email === 'demo@getomnipulse.com' &&
-    password === 'Demo1234!'
-
-  const result = await callLogin(
-    isDevBypass ? 'demo@getomnipulse.com' : email,
-    isDevBypass ? 'Demo1234!' : password,
-  )
+  const result = await callLogin(email, password)
 
   if (result.error) return { error: result.error }
   if (result.requiresTwoFactor) {

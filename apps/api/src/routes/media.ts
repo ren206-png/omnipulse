@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { env } from '../config/env.js'
 import { prisma } from '../lib/prisma.js'
 import { sendError } from '../lib/apiError.js'
+import { logger } from '../lib/logger.js'
 import { generateAndPersistAltText } from '../services/seo/altTextGenerator.js'
 import { assertWorkspaceAccess, assertResourceBelongsToWorkspace, TenantAccessError } from '../lib/tenantGuard.js'
 

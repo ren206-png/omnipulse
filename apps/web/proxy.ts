@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server'
 // Routes that unauthenticated users can access (and authenticated users are redirected away from)
 const AUTH_ROUTES = ['/login', '/signup', '/reset-password']
 // Routes that are always public regardless of auth state
-const ALWAYS_PUBLIC_ROUTES = ['/invite', '/reports']
+const ALWAYS_PUBLIC_ROUTES = ['/invite', '/reports', '/portal', '/u/', '/logout']
 // The landing page — always public, authenticated users stay here too
 const LANDING_PAGE = '/'
 

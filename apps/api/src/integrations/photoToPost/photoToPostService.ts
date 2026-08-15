@@ -19,7 +19,7 @@ export async function checkPhotoGuardrails(
     const client = new Anthropic({ apiKey: anthropicApiKey })
     const response = await client.messages.create(
       {
-        model: 'claude-haiku-20250307',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 512,
         system: GUARDRAILS_SYSTEM_PROMPT,
         messages: [
@@ -98,7 +98,7 @@ export async function generatePostVariants(params: {
     try {
       const response = await client.messages.create(
         {
-          model: 'claude-haiku-20250307',
+          model: 'claude-haiku-4-5-20251001',
           max_tokens: 2048,
           messages: [
             {

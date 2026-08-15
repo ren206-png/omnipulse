@@ -211,7 +211,7 @@ export function PostAnalyticsClient({ token, postId }: { token: string; postId: 
                 <h2 className="text-base font-semibold mb-3">Per-Platform Breakdown</h2>
                 <div className="space-y-3">
                   {data.metrics.map((m) => {
-                    const total = m.likes + m.comments + m.shares + m.reach
+                    const total = m.likes + m.comments + m.shares
                     const pct = (n: number) => total > 0 ? Math.round((n / total) * 100) : 0
                     return (
                       <div key={m.platform} className="rounded-xl border bg-card p-4 space-y-3">

@@ -7,7 +7,7 @@ import { logger } from '../lib/logger.js'
 import { checkLimit } from '../lib/planLimits.js'
 import { encryptToken, decryptToken } from '../lib/tokenEncryption.js'
 import { createOAuthState, extractOAuthStatePayload, TenantAccessError } from '../lib/tenantGuard.js'
-import { Platform } from '../../generated/prisma/enums.js'
+import type { Platform } from '@prisma/client'
 import { notify } from '../lib/notify.js'
 
 const router = Router()
@@ -401,6 +401,7 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
 
     // Existing plaintext tokens are migrated via: npx tsx scripts/reencryptTokens.ts --execute
     const encryptedAccessToken = encryptToken(accessToken)
+    const encryptedRefreshToken = refreshToken ? encryptToken(refreshToken) : null
 
     // SocialAccount has no unique constraint on workspaceId+platform, so use findFirst + create/update
     const existing = await prisma.socialAccount.findFirst({ where: { workspaceId, platform: platform as Platform } })
@@ -410,7 +411,7 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
         data: {
           accessToken: encryptedAccessToken,
           externalProfileId: displayName,
-          ...(refreshToken ? { refreshToken } : {}),
+          ...(encryptedRefreshToken ? { refreshToken: encryptedRefreshToken } : {}),
         },
       })
     } else {
@@ -420,7 +421,7 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
           platform: platform as Platform,
           accessToken: encryptedAccessToken,
           externalProfileId: displayName,
-          ...(refreshToken ? { refreshToken } : {}),
+          ...(encryptedRefreshToken ? { refreshToken: encryptedRefreshToken } : {}),
         },
       })
     }
