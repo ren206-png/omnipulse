@@ -7,7 +7,7 @@ import { logger } from '../lib/logger.js'
 import { checkLimit } from '../lib/planLimits.js'
 import { encryptToken, decryptToken } from '../lib/tokenEncryption.js'
 import { createOAuthState, extractOAuthStatePayload, TenantAccessError } from '../lib/tenantGuard.js'
-import { Platform } from '../../generated/prisma/enums.js'
+import type { Platform } from '@prisma/client'
 import { notify } from '../lib/notify.js'
 
 const router = Router()

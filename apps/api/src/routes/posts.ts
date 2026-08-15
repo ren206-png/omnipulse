@@ -12,7 +12,7 @@ import { notify, notifyMany, getWorkspaceAdmins } from '../lib/notify.js'
 import { getNextAvailableSlot } from '../lib/queueScheduler.js'
 import { sendPostSubmittedEmail, sendPostApprovedEmail, sendPostRejectedEmail } from '../lib/email.js'
 import { computeRecommendations } from '../lib/bestTimes.js'
-import { Platform } from '../../generated/prisma/enums.js'
+import type { Platform } from '@prisma/client'
 
 const router = Router()
 const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'] as const

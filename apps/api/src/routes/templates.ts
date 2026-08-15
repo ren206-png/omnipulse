@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
-import { Platform } from '../../generated/prisma/enums.js'
+import type { Platform } from '@prisma/client'
 
 const router = Router()
 const VALID_PLATFORMS = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'GOOGLE', 'LINKEDIN', 'YOUTUBE'] as const

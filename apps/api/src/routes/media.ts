@@ -177,7 +177,6 @@ router.post('/library', requireAuth, async (req: Request, res: Response): Promis
     // Fire-and-forget alt-text generation for image assets (non-blocking)
     if (asset.mimeType.startsWith('image/') && asset.url) {
       generateAndPersistAltText(asset.id, asset.url, asset.filename, prisma as any)
-        .catch((err: unknown) => logger.error({ err, assetId: asset.id }, 'Alt-text generation failed'))
     }
     res.status(201).json({ asset })
   } catch {
