@@ -1277,4 +1277,164 @@ router.post('/score', aiLimiter, async (req: Request, res: Response): Promise<vo
   res.json({ ...result, platform: platform.toUpperCase() })
 })
 
+// ── AI Campaign Generator ─────────────────────────────────────────────────────
+// Generates a full multi-post campaign plan, persists posts to DB, and links
+// them to a new Campaign record. Non-destructive addition — no existing routes
+// are modified.
+router.post('/campaign/generate', requireAuth, aiLimiter, async (req: Request, res: Response): Promise<void> => {
+  const userId = (req as any).userId as string
+  const {
+    workspaceId,
+    topic,
+    goal,
+    platforms = ['INSTAGRAM', 'X'],
+    durationDays = 14,
+    postsPerWeek = 3,
+    tone = 'professional',
+    campaignName,
+    startDate,
+  } = req.body as {
+    workspaceId?: string
+    topic?: string
+    goal?: string
+    platforms?: string[]
+    durationDays?: number
+    postsPerWeek?: number
+    tone?: string
+    campaignName?: string
+    startDate?: string
+  }
+
+  if (!workspaceId?.trim()) { sendError(res, 400, 'MISSING_WORKSPACE', 'workspaceId is required'); return }
+  if (!topic?.trim()) { sendError(res, 400, 'MISSING_TOPIC', 'topic is required'); return }
+
+  try {
+    await assertWorkspaceAccess(userId, workspaceId)
+  } catch (err) {
+    if (err instanceof TenantAccessError) { sendError(res, 403, 'FORBIDDEN', err.message); return }
+    throw err
+  }
+
+  const totalPosts = Math.max(1, Math.round((durationDays / 7) * postsPerWeek))
+  const platformList = (platforms as string[]).join(', ')
+  const start = startDate ? new Date(startDate) : new Date()
+
+  const systemPrompt = `You are an expert social media campaign strategist. Generate detailed, realistic, immediately-publishable campaign content. Always respond with valid JSON only — no markdown fences, no explanation outside JSON.`
+
+  const userPrompt = `Generate a ${durationDays}-day social media campaign with exactly ${totalPosts} posts.
+
+Campaign details:
+- Topic/Niche: ${topic}
+- Goal: ${goal ?? 'Grow engagement and followers'}
+- Platforms: ${platformList}
+- Tone: ${tone}
+- Posts per week: ${postsPerWeek}
+- Start date: ${start.toISOString().slice(0, 10)}
+
+Return a JSON object with this exact structure:
+{
+  "campaignSummary": "2-sentence overview of the campaign strategy and expected outcome",
+  "posts": [
+    {
+      "day": 1,
+      "platform": "INSTAGRAM",
+      "type": "Educational",
+      "hook": "One-line attention-grabbing hook shown in preview",
+      "content": "Full ready-to-publish post content including hashtags appropriate for the platform",
+      "scheduledFor": "ISO 8601 datetime string"
+    }
+  ]
+}
+
+Rules:
+- Spread posts evenly across ${durationDays} days (one post every ~${Math.round(7 / postsPerWeek)} days)
+- Vary post types across: Educational, Behind-the-scenes, Promotional, Engagement, Story, Tips, Case Study
+- Rotate across provided platforms for variety
+- scheduledFor = start date + day offset, set to 9:00 AM local time (use UTC offset 0)
+- Make every piece of content specific, punchy, and immediately publishable — zero placeholders
+- Platform hashtag rules: X → 1-2 tags, Instagram → 5-10 tags, LinkedIn → 3-5 tags, Facebook/TikTok → 2-5 tags
+- Total posts in the array must be exactly ${totalPosts}`
+
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
+
+  let raw: string
+  try {
+    const msg = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+    })
+    raw = (msg.content[0] as { type: string; text: string }).text
+  } catch (err) {
+    logger.error({ err }, 'campaign/generate anthropic error')
+    sendError(res, 503, 'AI_ERROR', 'AI service unavailable'); return
+  }
+
+  let plan: {
+    campaignSummary: string
+    posts: Array<{ day: number; platform: string; type: string; hook: string; content: string; scheduledFor: string }>
+  }
+  try {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/)
+    plan = JSON.parse(jsonMatch ? jsonMatch[0] : raw)
+    if (!Array.isArray(plan.posts) || plan.posts.length === 0) throw new Error('no posts array')
+  } catch {
+    logger.error({ raw }, 'campaign/generate JSON parse error')
+    sendError(res, 500, 'PARSE_ERROR', 'Failed to parse AI campaign plan'); return
+  }
+
+  // Create Campaign record
+  const name = campaignName?.trim() || `${topic} Campaign`
+  const colorOptions = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
+  const color = colorOptions[Math.floor(Math.random() * colorOptions.length)]
+
+  const campaign = await prisma.campaign.create({
+    data: { workspaceId, name, color },
+  })
+
+  // Validate and bulk-create ScheduledPost records
+  const validPlatforms = new Set(['INSTAGRAM', 'X', 'FACEBOOK', 'TIKTOK', 'GOOGLE', 'YOUTUBE', 'LINKEDIN'])
+  const postsData = plan.posts.map((p) => {
+    const platform = validPlatforms.has(p.platform?.toUpperCase()) ? p.platform.toUpperCase() : 'INSTAGRAM'
+    return {
+      workspaceId,
+      campaignId: campaign.id,
+      content: p.content ?? '',
+      platforms: [platform] as any,
+      scheduledFor: new Date(p.scheduledFor ?? start),
+      status: 'SCHEDULED' as const,
+      mediaUrls: [] as string[],
+    }
+  })
+
+  await prisma.scheduledPost.createMany({ data: postsData })
+
+  // Fetch back with IDs so the client has full post records
+  const createdPosts = await prisma.scheduledPost.findMany({
+    where: { campaignId: campaign.id },
+    orderBy: { scheduledFor: 'asc' },
+  })
+
+  await logActivity({
+    workspaceId,
+    userId,
+    userEmail: '',
+    action: 'campaign_generated',
+    targetId: campaign.id,
+    targetType: 'campaign',
+    details: JSON.stringify({ postCount: createdPosts.length, topic, durationDays }),
+  })
+
+  res.json({
+    campaign,
+    summary: plan.campaignSummary,
+    posts: createdPosts.map((post, i) => ({
+      ...post,
+      type: plan.posts[i]?.type ?? 'Post',
+      hook: plan.posts[i]?.hook ?? '',
+    })),
+  })
+})
+
 export default router

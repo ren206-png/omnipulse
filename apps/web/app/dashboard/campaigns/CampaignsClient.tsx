@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useWorkspace } from '../context/WorkspaceContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useRouter } from 'next/navigation'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
 
@@ -36,6 +37,7 @@ function formatDate(iso: string) {
 export function CampaignsClient({ token }: { token: string }) {
   const { activeWorkspace } = useWorkspace()
   const workspaceId = activeWorkspace?.id ?? ''
+  const router = useRouter()
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
@@ -167,15 +169,23 @@ export function CampaignsClient({ token }: { token: string }) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Campaigns 🏷️</h1>
-        <Button
-          onClick={() => {
-            setShowCreate((v) => !v)
-            setCreateError(null)
-          }}
-          variant={showCreate ? 'outline' : 'default'}
-        >
-          {showCreate ? 'Cancel' : 'New Campaign'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => router.push('/dashboard/campaigns/generate')}
+          >
+            🤖 Generate with AI
+          </Button>
+          <Button
+            onClick={() => {
+              setShowCreate((v) => !v)
+              setCreateError(null)
+            }}
+            variant={showCreate ? 'outline' : 'default'}
+          >
+            {showCreate ? 'Cancel' : 'New Campaign'}
+          </Button>
+        </div>
       </div>
 
       {/* Inline create form */}

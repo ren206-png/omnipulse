@@ -13,9 +13,9 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   FREE: {
     workspaces:      1,
     teamMembers:     0,    // solo only
-    scheduledPosts:  10,
+    scheduledPosts:  3,
     aiGenerations:   0,    // no AI on free
-    socialAccounts:  2,
+    socialAccounts:  1,
     approvalWorkflow: false,
   },
   PRO: {

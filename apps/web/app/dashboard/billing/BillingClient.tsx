@@ -45,8 +45,8 @@ const PLANS: Array<{
     description: 'For solo creators getting started',
     features: [
       '1 workspace',
-      '2 social accounts',
-      'Up to 10 scheduled posts',
+      '1 social account',
+      'Up to 3 scheduled posts',
       'Calendar & analytics',
       'No team members',
       'No AI generation',

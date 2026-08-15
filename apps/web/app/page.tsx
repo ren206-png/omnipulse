@@ -56,7 +56,7 @@ const PRICING = [
     name: 'FREE',
     price: '$0',
     period: '/mo',
-    features: ['1 workspace', '3 accounts', '10 posts/month'],
+    features: ['1 workspace', '1 account', '3 posts/month'],
     highlighted: false,
     badge: null,
   },
