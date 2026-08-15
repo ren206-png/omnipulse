@@ -31,6 +31,5 @@ apps/mobile/ios/
 
 # Turbopack cache
 .turbo/
-pnpm-workspace.yaml
 apps/api/prisma/dev.db
 apps/mobile/.env
