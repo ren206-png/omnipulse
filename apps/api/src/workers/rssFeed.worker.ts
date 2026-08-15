@@ -122,6 +122,8 @@ async function checkFeed(feed: {
 
   let xml: string
   try {
+    // WEEKLY-AUDIT: SSRF risk — feed.url is user-supplied. Consider restricting to http/https
+    // and blocking RFC 1918 / loopback addresses before fetching.
     const res = await fetch(feed.url, {
       signal: controller.signal,
       headers: { 'User-Agent': 'OmniPulse RSS Bot/1.0' },

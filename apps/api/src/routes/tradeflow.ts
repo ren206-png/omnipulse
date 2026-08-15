@@ -10,6 +10,9 @@ import { TradeFlowAdapter } from '../integrations/tradeflow/TradeFlowAdapter.js'
 const router = Router()
 const db = prisma as any
 
+// WEEKLY-AUDIT: If TRADEFLOW_WEBHOOK_SECRET is unset, the HMAC key falls back to an empty
+// string, meaning any caller can forge a valid signature. Ensure this env var is set in
+// production, or keep FF_TRADEFLOW_BRIDGE=false to disable the webhook endpoint entirely.
 const tradeFlowAdapter = new TradeFlowAdapter(process.env.TRADEFLOW_WEBHOOK_SECRET ?? '')
 
 async function getWorkspaceRole(

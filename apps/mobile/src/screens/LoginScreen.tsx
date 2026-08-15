@@ -44,7 +44,8 @@ export default function LoginScreen() {
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
           </TouchableOpacity>
         </View>
-        <Text style={styles.hint}>Demo: demo@getomnipulse.com / Demo1234!</Text>
+        {/* WEEKLY-AUDIT: Remove or gate behind __DEV__ before app store release — exposes demo credentials in production builds */}
+        {__DEV__ && <Text style={styles.hint}>Demo: demo@getomnipulse.com / Demo1234!</Text>}
       </View>
     </KeyboardAvoidingView>
   )

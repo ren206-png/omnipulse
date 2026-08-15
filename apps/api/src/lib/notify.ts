@@ -10,6 +10,7 @@ export type NotificationType =
   | 'POST_REJECTED'
   | 'MEMBER_JOINED'
   | 'INVITATION_SENT'
+  | 'WORKSPACE_CREATED'
 
 interface NotifyInput {
   userId: string

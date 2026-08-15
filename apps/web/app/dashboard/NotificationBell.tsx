@@ -58,8 +58,11 @@ export function NotificationBell({ token }: Props) {
     // SSE for real-time updates
     const url = `${apiUrl}/api/v1/notifications/stream`
     let es: EventSource | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+    let unmounted = false
 
     function connect() {
+      if (unmounted) return
       // WEEKLY-AUDIT: JWT passed as query param appears in server access logs, browser history,
       // and proxy logs. Consider a short-lived SSE-specific token issued via a POST endpoint,
       // or a server-side proxy that injects the Authorization header.
@@ -79,14 +82,19 @@ export function NotificationBell({ token }: Props) {
 
       es.onerror = () => {
         es?.close()
-        // Reconnect after 5s
-        setTimeout(connect, 5000)
+        if (!unmounted) {
+          reconnectTimer = setTimeout(connect, 5000)
+        }
       }
     }
 
     connect()
 
-    return () => { es?.close() }
+    return () => {
+      unmounted = true
+      es?.close()
+      if (reconnectTimer !== null) clearTimeout(reconnectTimer)
+    }
   }, [token]) // fetchNotifications is stable via useCallback
 
   // Close on outside click
@@ -101,23 +109,23 @@ export function NotificationBell({ token }: Props) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open])
 
-  async function markRead(id: string) {
+  function markRead(id: string) {
     setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n))
     setUnreadCount((c) => Math.max(0, c - 1))
-    await fetch(`${apiUrl}/api/v1/notifications/${id}/read`, { method: 'PATCH', headers })
+    fetch(`${apiUrl}/api/v1/notifications/${id}/read`, { method: 'PATCH', headers }).catch(() => {})
   }
 
-  async function markAllRead() {
+  function markAllRead() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
     setUnreadCount(0)
-    await fetch(`${apiUrl}/api/v1/notifications/read-all`, { method: 'POST', headers })
+    fetch(`${apiUrl}/api/v1/notifications/read-all`, { method: 'POST', headers }).catch(() => {})
   }
 
-  async function deleteNotification(id: string) {
+  function deleteNotification(id: string) {
     setNotifications((prev) => prev.filter((n) => n.id !== id))
     const wasUnread = notifications.find((n) => n.id === id)?.read === false
     if (wasUnread) setUnreadCount((c) => Math.max(0, c - 1))
-    await fetch(`${apiUrl}/api/v1/notifications/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${apiUrl}/api/v1/notifications/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
   }
 
   function handleNotificationClick(n: Notification) {

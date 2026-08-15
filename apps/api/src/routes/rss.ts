@@ -123,6 +123,8 @@ router.post('/:id/check', async (req: Request, res: Response): Promise<void> => 
   if (!workspace) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
 
   try {
+    // WEEKLY-AUDIT: SSRF risk — existing.url is user-supplied and fetched server-side. Consider
+    // an allowlist of permitted domains or a URL scheme check (http/https only, no localhost/RFC 1918).
     const response = await fetch(existing.url)
     if (!response.ok) {
       sendError(res, 502, 'FETCH_ERROR', `Failed to fetch RSS feed: ${response.status}`)

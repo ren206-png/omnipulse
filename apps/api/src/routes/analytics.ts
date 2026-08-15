@@ -155,12 +155,21 @@ router.get('/top-posts', async (req: Request, res: Response): Promise<void> => {
 router.post('/sync', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }
 
-  if (workspaceId) {
+  if (!workspaceId) {
+    sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId query param is required')
+    return
+  }
+
+  try {
     const role = await getWorkspaceRole(workspaceId, req.user!.id)
     if (!role) {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
       return
     }
+  } catch (err) {
+    logger.error({ err }, 'Analytics sync auth check error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Internal error')
+    return
   }
 
   // Run async — don't await so the response is immediate

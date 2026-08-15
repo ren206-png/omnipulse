@@ -40,7 +40,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   // Check if the token was issued before a password reset
   prisma.user.findUnique({ where: { id: payload.id }, select: { passwordChangedAt: true } })
     .then((user) => {
-      if (user?.passwordChangedAt && payload.iat !== undefined) {
+      if (!user) {
+        sendError(res, 401, 'INVALID_TOKEN', 'User account not found')
+        return
+      }
+      if (user.passwordChangedAt && payload.iat !== undefined) {
         const changedAtSec = Math.floor(user.passwordChangedAt.getTime() / 1000)
         if (payload.iat < changedAtSec) {
           sendError(res, 401, 'TOKEN_REVOKED', 'Token invalidated by password reset')

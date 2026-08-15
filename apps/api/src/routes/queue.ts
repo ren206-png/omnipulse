@@ -141,17 +141,17 @@ router.patch('/:id/dispatch', async (req: Request, res: Response): Promise<void>
       where: { workspaceId: post.workspaceId, status: 'PUBLISHED' },
       select: { scheduledFor: true },
     })
-    const publishedHours: number[] = (publishedPosts as Array<{ scheduledFor: Date }>).map((p) => p.scheduledFor.getHours())
+    const publishedHours: number[] = (publishedPosts as Array<{ scheduledFor: Date }>).map((p) => p.scheduledFor.getUTCHours())
 
     // Use first platform to get recommendation
     const firstPlatform = (post.platforms as string[])[0] ?? 'INSTAGRAM'
     const recommendation = computeRecommendations(firstPlatform, publishedHours)
     const bestHour = recommendation.topHours[0] ?? 9
 
-    // Find next occurrence of that hour (today or tomorrow)
+    // Find next occurrence of that UTC hour (today or tomorrow)
     const now = new Date()
     const candidate = new Date(now)
-    candidate.setHours(bestHour, 0, 0, 0)
+    candidate.setUTCHours(bestHour, 0, 0, 0)
 
     if (candidate.getTime() <= now.getTime()) {
       // Hour already passed today — use tomorrow
@@ -193,6 +193,11 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
 
     const role = await getWorkspaceRole(post.workspaceId, req.user!.id)
     if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+
+    if (post.status !== 'QUEUED') {
+      sendError(res, 400, 'INVALID_STATUS', 'Only QUEUED posts can be removed from the queue')
+      return
+    }
 
     await prisma.scheduledPost.delete({ where: { id } })
     logger.info({ postId: id }, 'Queue post deleted')

@@ -69,7 +69,6 @@ import { startWeeklyDigestWorker } from './workers/weeklyDigest.worker.js'
 import { startSystemMonitorWorker } from './workers/systemMonitor.worker.js'
 import { startAuthTokenRefreshWorker } from './workers/authTokenRefresh.worker.js'
 import { prisma } from './lib/prisma.js'
-import IORedis from 'ioredis'
 
 // Run DB migrations on startup (safe to run repeatedly)
 async function runMigrations() {

@@ -60,7 +60,8 @@ export const env = {
   SEO_DATA_API_KEY: process.env.SEO_DATA_API_KEY ?? '',
   // TradeFlow Bridge
   TRADEFLOW_WEBHOOK_SECRET: process.env.TRADEFLOW_WEBHOOK_SECRET ?? '',
-  // Internal service-to-service secret (for /ingest endpoint)
+  // WEEKLY-AUDIT: INTERNAL_API_SECRET defaults to '' — any caller can hit internal endpoints
+  // unauthenticated in dev/staging. Set this in all non-local environments.
   INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET ?? '',
   // Email (Resend)
   RESEND_API_KEY: process.env.RESEND_API_KEY ?? '',

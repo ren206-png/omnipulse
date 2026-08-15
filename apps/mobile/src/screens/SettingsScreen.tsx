@@ -31,7 +31,8 @@ export default function SettingsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>App</Text>
         <View style={styles.row}><Text style={styles.label}>Version</Text><Text style={styles.value}>1.0.0</Text></View>
-        <View style={styles.row}><Text style={styles.label}>API Server</Text><Text style={styles.value}>{process.env.EXPO_PUBLIC_API_URL ?? 'localhost:4000'}</Text></View>
+        {/* WEEKLY-AUDIT: Rendering the API URL on-screen leaks infra details in production builds — consider hiding in non-dev builds */}
+        {__DEV__ && <View style={styles.row}><Text style={styles.label}>API Server</Text><Text style={styles.value}>{process.env.EXPO_PUBLIC_API_URL ?? 'localhost:4000'}</Text></View>}
       </View>
 
       <TouchableOpacity style={styles.signOutBtn} onPress={handleLogout}>

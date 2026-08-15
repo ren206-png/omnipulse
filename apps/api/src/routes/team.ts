@@ -167,7 +167,11 @@ router.post('/:workspaceId/invitations', async (req: Request, res: Response): Pr
     })
 
     const inviteUrl = `${process.env.WEB_URL ?? 'http://localhost:3000'}/invite/${invitation.token}`
-    logger.info({ inviteUrl, email, workspaceId }, 'Invitation created (dev: use this URL)')
+    if (process.env.NODE_ENV !== 'production') {
+      logger.info({ inviteUrl, email, workspaceId }, 'Invitation created (dev: use this URL)')
+    } else {
+      logger.info({ email, workspaceId }, 'Invitation created')
+    }
 
     // Send invitation email (non-fatal — errors are logged inside sendInvitationEmail)
     const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })

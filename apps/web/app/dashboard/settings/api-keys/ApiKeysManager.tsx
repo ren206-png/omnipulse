@@ -39,6 +39,8 @@ export function ApiKeysManager({ token }: Props) {
       if (!res.ok) return
       const data = await res.json()
       setKeys(data.keys)
+    } catch {
+      // Network error — leave existing keys in place
     } finally {
       setLoading(false)
     }
@@ -59,16 +61,22 @@ export function ApiKeysManager({ token }: Props) {
       const data = await res.json()
       setCreatedKey(data.key)
       fetchKeys()
+    } catch {
+      // Network error — modal stays open so user can retry
     } finally {
       setCreating(false)
     }
   }
 
   async function revokeKey(id: string) {
-    await fetch(`${API}/api/v1/api-keys/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    try {
+      await fetch(`${API}/api/v1/api-keys/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } catch {
+      // Network error — optimistically clear confirm state but don't remove from list
+    }
     setRevokeId(null)
     fetchKeys()
   }
@@ -82,9 +90,13 @@ export function ApiKeysManager({ token }: Props) {
 
   async function copyKey() {
     if (!createdKey) return
-    await navigator.clipboard.writeText(createdKey)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(createdKey)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard unavailable (e.g. non-HTTPS context)
+    }
   }
 
   return (

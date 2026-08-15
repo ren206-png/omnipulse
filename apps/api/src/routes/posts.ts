@@ -697,6 +697,7 @@ router.get('/content-health', async (req: Request, res: Response): Promise<void>
   const role = await getWorkspaceRole(workspaceId, req.user!.id)
   if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
 
+  try {
   const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
   const posts = await prisma.scheduledPost.findMany({
     where: {
@@ -744,6 +745,10 @@ router.get('/content-health', async (req: Request, res: Response): Promise<void>
   })
 
   res.json({ posts: enriched })
+  } catch (err) {
+    logger.error({ err }, 'Content health fetch error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch content health')
+  }
 })
 
 // POST /api/v1/posts/:id/submit-review — member submits a DRAFT for review

@@ -39,6 +39,8 @@ export function TwoFactorManager({ token }: { token: string }) {
       setSecret(body.secret!)
       setQrCode(body.qrCode!)
       setStep('setup')
+    } catch {
+      setError('Network error — please try again')
     } finally {
       setLoading(false)
     }
@@ -59,6 +61,8 @@ export function TwoFactorManager({ token }: { token: string }) {
       setBackupCodes(body.backupCodes!)
       setEnabled(true)
       setStep('done')
+    } catch {
+      setError('Network error — please try again')
     } finally {
       setLoading(false)
     }
@@ -79,6 +83,8 @@ export function TwoFactorManager({ token }: { token: string }) {
       setEnabled(false)
       setStep('idle')
       setCode('')
+    } catch {
+      setError('Network error — please try again')
     } finally {
       setLoading(false)
     }

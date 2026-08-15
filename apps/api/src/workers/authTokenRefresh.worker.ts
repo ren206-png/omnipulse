@@ -22,6 +22,7 @@ import { logger } from '../lib/logger.js'
 import { prisma } from '../lib/prisma.js'
 import { sendAlert } from '../lib/alertManager.js'
 import { heartbeat } from '../lib/workerHeartbeat.js'
+import { decryptToken, encryptToken } from '../lib/tokenEncryption.js'
 
 const REFRESH_INTERVAL_MS = 30 * 60 * 1000  // every 30 minutes
 const REFRESH_WINDOW_MS   = 2 * 60 * 60 * 1000 // refresh if expiring within 2h
@@ -121,11 +122,11 @@ async function runTokenRefreshCycle(): Promise<void> {
   for (const account of expiringAccounts) {
     try {
       if (account.platform === 'FACEBOOK' || account.platform === 'INSTAGRAM') {
-        const result = await refreshFacebookToken(account.accessToken)
+        const result = await refreshFacebookToken(decryptToken(account.accessToken))
         if (result) {
           await prisma.socialAccount.update({
             where: { id: account.id },
-            data: { accessToken: result.token, tokenExpiresAt: result.expiresAt },
+            data: { accessToken: encryptToken(result.token), tokenExpiresAt: result.expiresAt },
           })
           refreshed++
           logger.info(
@@ -137,13 +138,13 @@ async function runTokenRefreshCycle(): Promise<void> {
           failed++
         }
       } else if (account.platform === 'LINKEDIN' && account.refreshToken) {
-        const result = await refreshLinkedInToken(account.refreshToken)
+        const result = await refreshLinkedInToken(decryptToken(account.refreshToken))
         if (result) {
           await prisma.socialAccount.update({
             where: { id: account.id },
             data: {
-              accessToken:   result.accessToken,
-              refreshToken:  result.refreshToken,
+              accessToken:    encryptToken(result.accessToken),
+              refreshToken:   encryptToken(result.refreshToken),
               tokenExpiresAt: result.expiresAt,
             },
           })

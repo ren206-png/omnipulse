@@ -22,7 +22,7 @@
  *   and passes it down to child components. Pass that same token to useAuthFetch.
  */
 
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 /**
@@ -41,6 +41,13 @@ export function useAuthFetch(token: string) {
   const router = useRouter()
   // Track whether we already triggered a redirect to avoid duplicate firings.
   const redirecting = useRef(false)
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current !== null) clearTimeout(redirectTimerRef.current)
+    }
+  }, [])
 
   const authFetch = useCallback(
     async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
@@ -65,7 +72,7 @@ export function useAuthFetch(token: string) {
         }
 
         // Give the toast 2 seconds to be visible before navigating.
-        setTimeout(() => {
+        redirectTimerRef.current = setTimeout(() => {
           router.push('/login')
         }, 2000)
       }

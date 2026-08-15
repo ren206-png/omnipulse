@@ -23,6 +23,8 @@ export async function checkLimit(
     current = await prisma.scheduledPost.count({ where: { workspaceId, createdAt: { gte: startOfMonth } } })
   } else if (resource === 'teamMembers') {
     current = await prisma.workspaceMember.count({ where: { workspaceId } })
+  } else if (resource === 'workspaces') {
+    current = await prisma.workspace.count({ where: { ownerId: workspace.ownerId } })
   }
 
   return { allowed: current < limit, limit: limit === Infinity ? -1 : limit, current }

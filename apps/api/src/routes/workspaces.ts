@@ -65,6 +65,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     sendError(res, 400, 'INVALID_NAME', 'Workspace name is required')
     return
   }
+  if (name.trim().length > 100) {
+    sendError(res, 400, 'INVALID_NAME', 'Workspace name must be 100 characters or fewer')
+    return
+  }
 
   try {
     const workspace = await prisma.workspace.create({
@@ -73,7 +77,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     logger.info({ workspaceId: workspace.id }, 'Workspace created')
     await notify({
       userId: req.user!.id,
-      type: 'POST_PUBLISHED', // reuse closest type
+      type: 'WORKSPACE_CREATED',
       title: 'Workspace created 🎉',
       body: `Your workspace "${name.trim()}" is ready. Connect your social accounts to start scheduling.`,
       link: '/dashboard/accounts',
