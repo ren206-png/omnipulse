@@ -697,53 +697,58 @@ router.get('/content-health', async (req: Request, res: Response): Promise<void>
   const role = await getWorkspaceRole(workspaceId, req.user!.id)
   if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
 
-  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-  const posts = await prisma.scheduledPost.findMany({
-    where: {
-      workspaceId,
-      status: 'PUBLISHED',
-      createdAt: { gte: since },
-    },
-    include: {
-      metrics: true,
-    },
-    orderBy: { scheduledFor: 'desc' },
-    take: 50,
-  })
+  try {
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+    const posts = await prisma.scheduledPost.findMany({
+      where: {
+        workspaceId,
+        status: 'PUBLISHED',
+        createdAt: { gte: since },
+      },
+      include: {
+        metrics: true,
+      },
+      orderBy: { scheduledFor: 'desc' },
+      take: 50,
+    })
 
-  const enriched = posts.map((post) => {
-    const totalEngagement = post.metrics.reduce(
-      (sum, m) => sum + m.likes + m.comments + m.shares,
-      0,
-    )
-    const daysSincePublished = Math.floor(
-      (Date.now() - post.scheduledFor.getTime()) / (1000 * 60 * 60 * 24),
-    )
-    const healthScore = Math.min(100, Math.round((totalEngagement / Math.max(daysSincePublished, 1)) * 10))
-    const status =
-      healthScore >= 60 ? 'healthy' :
-      healthScore >= 25 ? 'aging' :
-      'repurpose'
+    const enriched = posts.map((post) => {
+      const totalEngagement = post.metrics.reduce(
+        (sum, m) => sum + m.likes + m.comments + m.shares,
+        0,
+      )
+      const daysSincePublished = Math.floor(
+        (Date.now() - post.scheduledFor.getTime()) / (1000 * 60 * 60 * 24),
+      )
+      const healthScore = Math.min(100, Math.round((totalEngagement / Math.max(daysSincePublished, 1)) * 10))
+      const status =
+        healthScore >= 60 ? 'healthy' :
+        healthScore >= 25 ? 'aging' :
+        'repurpose'
 
-    return {
-      id: post.id,
-      content: post.content,
-      platforms: post.platforms,
-      scheduledFor: post.scheduledFor,
-      daysSincePublished,
-      totalEngagement,
-      healthScore,
-      status,
-      metrics: post.metrics.map((m) => ({
-        platform: m.platform,
-        likes: m.likes,
-        comments: m.comments,
-        shares: m.shares,
-      })),
-    }
-  })
+      return {
+        id: post.id,
+        content: post.content,
+        platforms: post.platforms,
+        scheduledFor: post.scheduledFor,
+        daysSincePublished,
+        totalEngagement,
+        healthScore,
+        status,
+        metrics: post.metrics.map((m) => ({
+          platform: m.platform,
+          likes: m.likes,
+          comments: m.comments,
+          shares: m.shares,
+        })),
+      }
+    })
 
-  res.json({ posts: enriched })
+    res.json({ posts: enriched })
+  } catch (err) {
+    logger.error({ err }, 'Content health error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch content health data')
+  }
 })
 
 // POST /api/v1/posts/:id/submit-review — member submits a DRAFT for review

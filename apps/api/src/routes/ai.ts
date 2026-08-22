@@ -29,11 +29,8 @@ async function checkDailyLimit(userId: string, key: string, limit: number): Prom
   const redisKey = `${key}:${userId}:${today}`
   const current = parseInt((await redis.get(redisKey)) ?? '0', 10)
   const allowed = current < limit
-  // TTL: seconds until midnight UTC
-  const now = new Date()
   const midnight = new Date(today)
   midnight.setUTCDate(midnight.getUTCDate() + 1)
-  const ttl = Math.ceil((midnight.getTime() - now.getTime()) / 1000)
   return { allowed, remaining: Math.max(0, limit - current), resetAt: midnight.toISOString() }
 }
 
@@ -475,11 +472,12 @@ router.post('/generate-image', async (req: Request, res: Response): Promise<void
 
 // POST /api/v1/ai/translate
 router.post('/translate', aiLimiter, async (req: Request, res: Response): Promise<void> => {
+  if (!env.ANTHROPIC_API_KEY) { sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server'); return }
   const { text, targetLanguage } = req.body as { text?: string; targetLanguage?: string }
   if (!text || !targetLanguage) { sendError(res, 400, 'MISSING_PARAMS', 'text and targetLanguage required'); return }
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic()
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
@@ -543,11 +541,12 @@ Return this exact JSON structure:
 
 // POST /api/v1/ai/trends
 router.post('/trends', async (req: Request, res: Response): Promise<void> => {
+  if (!env.ANTHROPIC_API_KEY) { sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server'); return }
   const { niche, platforms } = req.body as { niche?: string; platforms?: string[] }
   if (!niche) { sendError(res, 400, 'MISSING_NICHE', 'niche required'); return }
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic()
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const platformStr = platforms?.join(', ') ?? 'Instagram, TikTok, X'
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -580,11 +579,12 @@ Return exactly 6 trends.`,
 
 // POST /api/v1/ai/draft-reply
 router.post('/draft-reply', aiLimiter, async (req: Request, res: Response): Promise<void> => {
+  if (!env.ANTHROPIC_API_KEY) { sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server'); return }
   const { message, platform, tone = 'friendly', brandName } = req.body as { message?: string; platform?: string; tone?: string; brandName?: string }
   if (!message) { sendError(res, 400, 'MISSING_MESSAGE', 'message required'); return }
   try {
     const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic()
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message_result = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,
@@ -1282,7 +1282,7 @@ router.post('/score', aiLimiter, async (req: Request, res: Response): Promise<vo
 // them to a new Campaign record. Non-destructive addition — no existing routes
 // are modified.
 router.post('/campaign/generate', requireAuth, aiLimiter, async (req: Request, res: Response): Promise<void> => {
-  const userId = (req as any).userId as string
+  const userId = req.user!.id
   const {
     workspaceId,
     topic,
@@ -1309,7 +1309,7 @@ router.post('/campaign/generate', requireAuth, aiLimiter, async (req: Request, r
   if (!topic?.trim()) { sendError(res, 400, 'MISSING_TOPIC', 'topic is required'); return }
 
   try {
-    await assertWorkspaceAccess(userId, workspaceId)
+    await assertWorkspaceAccess(workspaceId, userId)
   } catch (err) {
     if (err instanceof TenantAccessError) { sendError(res, 403, 'FORBIDDEN', err.message); return }
     throw err

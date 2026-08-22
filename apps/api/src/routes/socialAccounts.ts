@@ -510,7 +510,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         workspaceId,
         platform: platform as Platform,
         externalProfileId: externalProfileId.trim(),
-        accessToken: accessToken.trim(),
+        accessToken: encryptToken(accessToken.trim()),
       },
       select: { id: true, platform: true, externalProfileId: true },
     })
