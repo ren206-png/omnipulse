@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js'
 import { logger } from '../lib/logger.js'
+import { decryptToken } from '../lib/tokenEncryption.js'
 
 // Called on a schedule or manually — syncs follower/engagement data from social APIs
 export async function syncAnalytics(workspaceId?: string): Promise<void> {
@@ -18,7 +19,7 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
         // externalProfileId stores the IG Business Account ID (set during OAuth)
         const igUserId = account.externalProfileId
         const res = await fetch(
-          `https://graph.facebook.com/v20.0/${igUserId}?fields=followers_count,media_count&access_token=${account.accessToken}`,
+          `https://graph.facebook.com/v20.0/${igUserId}?fields=followers_count,media_count&access_token=${decryptToken(account.accessToken)}`,
         )
         if (res.ok) {
           const data = await res.json() as { followers_count?: number; media_count?: number }
@@ -36,7 +37,7 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
       } else if (account.platform === 'FACEBOOK') {
         // Get page fan count + talking_about_count for engagement proxy
         const res = await fetch(
-          `https://graph.facebook.com/v20.0/me?fields=fan_count,talking_about_count&access_token=${account.accessToken}`,
+          `https://graph.facebook.com/v20.0/me?fields=fan_count,talking_about_count&access_token=${decryptToken(account.accessToken)}`,
         )
         if (res.ok) {
           const data = await res.json() as { fan_count?: number; talking_about_count?: number }
@@ -50,7 +51,7 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
       } else if (account.platform === 'X') {
         // Twitter API v2 — public_metrics includes follower + tweet counts
         const res = await fetch('https://api.twitter.com/2/users/me?user.fields=public_metrics', {
-          headers: { Authorization: `Bearer ${account.accessToken}` },
+          headers: { Authorization: `Bearer ${decryptToken(account.accessToken)}` },
         })
         if (res.ok) {
           const data = await res.json() as {
@@ -68,7 +69,7 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
       } else if (account.platform === 'TIKTOK') {
         // TikTok user info endpoint
         const res = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=follower_count,following_count,likes_count,video_count', {
-          headers: { Authorization: `Bearer ${account.accessToken}` },
+          headers: { Authorization: `Bearer ${decryptToken(account.accessToken)}` },
         })
         if (res.ok) {
           const data = await res.json() as {
@@ -89,7 +90,7 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
         // YouTube channel stats via Data API v3
         const res = await fetch(
           `https://www.googleapis.com/youtube/v3/channels?part=statistics&mine=true`,
-          { headers: { Authorization: `Bearer ${account.accessToken}` } },
+          { headers: { Authorization: `Bearer ${decryptToken(account.accessToken)}` } },
         )
         if (res.ok) {
           const data = await res.json() as {
