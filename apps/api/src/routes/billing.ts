@@ -135,13 +135,9 @@ router.post('/portal', requireAuth, async (req: Request, res: Response): Promise
 })
 
 // POST /api/v1/billing/webhook — Stripe webhook handler (raw body required)
+// Raw body is buffered by express.raw() in index.ts before this route runs.
 router.post(
   '/webhook',
-  // Raw body middleware applied inline — must come BEFORE express.json() parses the body
-  (req, _res, next) => {
-    // Body already buffered as Buffer by express.raw() mounted below in index.ts
-    next()
-  },
   async (req: Request, res: Response): Promise<void> => {
     if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) {
       res.status(503).json({ error: 'Stripe not configured' })

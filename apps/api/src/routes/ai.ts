@@ -463,23 +463,19 @@ Distribute evenly across platforms and days. Write ready-to-publish content.`
 router.post('/generate-image', async (req: Request, res: Response): Promise<void> => {
   const { prompt, width = 1024, height = 1024 } = req.body as { prompt?: string; width?: number; height?: number }
   if (!prompt) { sendError(res, 400, 'MISSING_PROMPT', 'prompt required'); return }
-  try {
-    // Pollinations.ai — completely free, no API key
-    const encoded = encodeURIComponent(prompt)
-    const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&nologo=true&model=flux`
-    res.json({ imageUrl })
-  } catch (err) {
-    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to generate image')
-  }
+  // Pollinations.ai — completely free, no API key
+  const encoded = encodeURIComponent(prompt)
+  const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=${width}&height=${height}&nologo=true&model=flux`
+  res.json({ imageUrl })
 })
 
 // POST /api/v1/ai/translate
 router.post('/translate', aiLimiter, async (req: Request, res: Response): Promise<void> => {
   const { text, targetLanguage } = req.body as { text?: string; targetLanguage?: string }
   if (!text || !targetLanguage) { sendError(res, 400, 'MISSING_PARAMS', 'text and targetLanguage required'); return }
+  if (!env.ANTHROPIC_API_KEY) { sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server'); return }
   try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic()
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
@@ -491,6 +487,7 @@ router.post('/translate', aiLimiter, async (req: Request, res: Response): Promis
     const translated = message.content[0].type === 'text' ? message.content[0].text : ''
     res.json({ translated })
   } catch (err) {
+    logger.error({ err }, 'Translation error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Translation failed')
   }
 })
@@ -499,6 +496,7 @@ router.post('/translate', aiLimiter, async (req: Request, res: Response): Promis
 router.post('/score-post', async (req: Request, res: Response): Promise<void> => {
   const { content, platforms } = req.body as { content?: string; platforms?: string[] }
   if (!content) { sendError(res, 400, 'MISSING_CONTENT', 'content required'); return }
+  if (!env.ANTHROPIC_API_KEY) { sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server'); return }
   try {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const platformStr = platforms?.join(', ') ?? 'general social media'
@@ -545,9 +543,9 @@ Return this exact JSON structure:
 router.post('/trends', async (req: Request, res: Response): Promise<void> => {
   const { niche, platforms } = req.body as { niche?: string; platforms?: string[] }
   if (!niche) { sendError(res, 400, 'MISSING_NICHE', 'niche required'); return }
+  if (!env.ANTHROPIC_API_KEY) { sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server'); return }
   try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic()
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const platformStr = platforms?.join(', ') ?? 'Instagram, TikTok, X'
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -573,7 +571,8 @@ Return exactly 6 trends.`,
     const text = message.content[0].type === 'text' ? message.content[0].text : '{}'
     const result = JSON.parse(text)
     res.json(result)
-  } catch {
+  } catch (err) {
+    logger.error({ err }, 'Trend detection error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Trend detection failed')
   }
 })
@@ -582,9 +581,9 @@ Return exactly 6 trends.`,
 router.post('/draft-reply', aiLimiter, async (req: Request, res: Response): Promise<void> => {
   const { message, platform, tone = 'friendly', brandName } = req.body as { message?: string; platform?: string; tone?: string; brandName?: string }
   if (!message) { sendError(res, 400, 'MISSING_MESSAGE', 'message required'); return }
+  if (!env.ANTHROPIC_API_KEY) { sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server'); return }
   try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default
-    const client = new Anthropic()
+    const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message_result = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 300,
@@ -597,7 +596,8 @@ router.post('/draft-reply', aiLimiter, async (req: Request, res: Response): Prom
     })
     const reply = message_result.content[0].type === 'text' ? message_result.content[0].text : ''
     res.json({ reply })
-  } catch {
+  } catch (err) {
+    logger.error({ err }, 'Draft reply error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Draft failed')
   }
 })
@@ -1282,7 +1282,7 @@ router.post('/score', aiLimiter, async (req: Request, res: Response): Promise<vo
 // them to a new Campaign record. Non-destructive addition — no existing routes
 // are modified.
 router.post('/campaign/generate', requireAuth, aiLimiter, async (req: Request, res: Response): Promise<void> => {
-  const userId = (req as any).userId as string
+  const userId = req.user!.id
   const {
     workspaceId,
     topic,
@@ -1309,7 +1309,7 @@ router.post('/campaign/generate', requireAuth, aiLimiter, async (req: Request, r
   if (!topic?.trim()) { sendError(res, 400, 'MISSING_TOPIC', 'topic is required'); return }
 
   try {
-    await assertWorkspaceAccess(userId, workspaceId)
+    await assertWorkspaceAccess(workspaceId, userId)
   } catch (err) {
     if (err instanceof TenantAccessError) { sendError(res, 403, 'FORBIDDEN', err.message); return }
     throw err
@@ -1389,9 +1389,15 @@ Rules:
   const colorOptions = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
   const color = colorOptions[Math.floor(Math.random() * colorOptions.length)]
 
-  const campaign = await prisma.campaign.create({
-    data: { workspaceId, name, color },
-  })
+  let campaign: Awaited<ReturnType<typeof prisma.campaign.create>>
+  try {
+    campaign = await prisma.campaign.create({
+      data: { workspaceId, name, color },
+    })
+  } catch (err) {
+    logger.error({ err }, 'campaign/generate create campaign error')
+    sendError(res, 500, 'DB_ERROR', 'Failed to create campaign'); return
+  }
 
   // Validate and bulk-create ScheduledPost records
   const validPlatforms = new Set(['INSTAGRAM', 'X', 'FACEBOOK', 'TIKTOK', 'GOOGLE', 'YOUTUBE', 'LINKEDIN'])
@@ -1408,7 +1414,13 @@ Rules:
     }
   })
 
-  await prisma.scheduledPost.createMany({ data: postsData })
+  try {
+    await prisma.scheduledPost.createMany({ data: postsData })
+  } catch (err) {
+    logger.error({ err }, 'campaign/generate createMany posts error')
+    await prisma.campaign.delete({ where: { id: campaign.id } }).catch(() => {})
+    sendError(res, 500, 'DB_ERROR', 'Failed to create campaign posts'); return
+  }
 
   // Fetch back with IDs so the client has full post records
   const createdPosts = await prisma.scheduledPost.findMany({
@@ -1424,7 +1436,7 @@ Rules:
     targetId: campaign.id,
     targetType: 'campaign',
     details: JSON.stringify({ postCount: createdPosts.length, topic, durationDays }),
-  })
+  }).catch((err) => logger.error({ err }, 'campaign/generate logActivity error'))
 
   res.json({
     campaign,

@@ -24,7 +24,7 @@ async function requireAdmin(
   const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
 
   const isOwner = workspace?.ownerId === req.user!.id
-  const isAdmin = membership?.role === 'ADMIN' || membership?.role === 'OWNER'
+  const isAdmin = membership?.role === 'ADMIN'
 
   if (!isOwner && !isAdmin) {
     sendError(res, 403, 'FORBIDDEN', 'You must be an admin or owner of this workspace')

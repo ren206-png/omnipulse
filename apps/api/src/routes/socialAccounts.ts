@@ -410,7 +410,7 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
         data: {
           accessToken: encryptedAccessToken,
           externalProfileId: displayName,
-          ...(refreshToken ? { refreshToken } : {}),
+          ...(refreshToken ? { refreshToken: encryptToken(refreshToken) } : {}),
         },
       })
     } else {
@@ -420,7 +420,7 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
           platform: platform as Platform,
           accessToken: encryptedAccessToken,
           externalProfileId: displayName,
-          ...(refreshToken ? { refreshToken } : {}),
+          ...(refreshToken ? { refreshToken: encryptToken(refreshToken) } : {}),
         },
       })
     }
@@ -510,7 +510,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         workspaceId,
         platform: platform as Platform,
         externalProfileId: externalProfileId.trim(),
-        accessToken: accessToken.trim(),
+        accessToken: encryptToken(accessToken.trim()),
       },
       select: { id: true, platform: true, externalProfileId: true },
     })

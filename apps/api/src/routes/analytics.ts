@@ -155,12 +155,15 @@ router.get('/top-posts', async (req: Request, res: Response): Promise<void> => {
 router.post('/sync', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }
 
-  if (workspaceId) {
-    const role = await getWorkspaceRole(workspaceId, req.user!.id)
-    if (!role) {
-      sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
-      return
-    }
+  if (!workspaceId) {
+    sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId query param is required')
+    return
+  }
+
+  const role = await getWorkspaceRole(workspaceId, req.user!.id)
+  if (!role) {
+    sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
+    return
   }
 
   // Run async — don't await so the response is immediate

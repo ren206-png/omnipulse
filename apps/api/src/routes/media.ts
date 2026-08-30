@@ -16,8 +16,9 @@ const router = Router()
 const UPLOAD_DIR = path.resolve('public/uploads')
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true })
 
-// In-memory store for media assets (per workspace, persisted in memory)
-// In production you'd store this in the DB; for now a lightweight JSON file per workspace.
+// WEEKLY-AUDIT: readStore/writeStore use synchronous fs I/O, blocking the event loop on every upload request.
+// Concurrent writes to _index.json also risk corruption (no locking). The prisma.mediaAsset model already
+// exists — migrate this to DB-backed storage using async Prisma calls.
 const STORE_FILE = path.join(UPLOAD_DIR, '_index.json')
 
 interface MediaAsset {
@@ -83,11 +84,15 @@ router.post(
   upload.single('file'),
   async (req: Request, res: Response): Promise<void> => {
     const { workspaceId } = req.body as { workspaceId?: string }
-    if (!workspaceId) { res.status(400).json({ error: 'workspaceId required' }); return }
+    if (!workspaceId) {
+      if (req.file) fs.unlinkSync(req.file.path)
+      res.status(400).json({ error: 'workspaceId required' }); return
+    }
     if (!req.file) { res.status(400).json({ error: 'file required' }); return }
     try {
       await assertWorkspaceAccess(workspaceId, req.user!.id)
     } catch (err) {
+      fs.unlinkSync(req.file.path)
       if (err instanceof TenantAccessError) { res.status(err.statusCode).json({ error: err.message }); return }
       throw err
     }
@@ -119,10 +124,14 @@ router.post(
   async (req: Request, res: Response): Promise<void> => {
     if (!req.file) { res.status(400).json({ error: 'file required' }); return }
     const { workspaceId } = req.body as { workspaceId?: string }
-    if (!workspaceId) { res.status(400).json({ error: 'workspaceId required' }); return }
+    if (!workspaceId) {
+      fs.unlinkSync(req.file.path)
+      res.status(400).json({ error: 'workspaceId required' }); return
+    }
     try {
       await assertWorkspaceAccess(workspaceId, req.user!.id)
     } catch (err) {
+      fs.unlinkSync(req.file.path)
       if (err instanceof TenantAccessError) { res.status(err.statusCode).json({ error: err.message }); return }
       throw err
     }

@@ -39,10 +39,9 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId query param is required'); return }
 
+  try {
   const role = await getWorkspaceRole(workspaceId, req.user!.id)
   if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
-
-  try {
     const posts = await (prisma.scheduledPost.findMany as Function)({
       where: { workspaceId },
       orderBy: { scheduledFor: 'asc' },
@@ -60,12 +59,11 @@ router.get('/upcoming', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId, limit: limitStr } = req.query as { workspaceId?: string; limit?: string }
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId query param is required'); return }
 
-  const role = await getWorkspaceRole(workspaceId, req.user!.id)
-  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
-
   const limit = Math.min(Math.max(1, parseInt(limitStr ?? '5', 10) || 5), 50)
 
   try {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
     const posts = await (prisma.scheduledPost.findMany as Function)({
       where: {
         workspaceId,
@@ -118,9 +116,6 @@ router.get('/history', async (req: Request, res: Response): Promise<void> => {
 
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId query param is required'); return }
 
-  const role = await getWorkspaceRole(workspaceId, req.user!.id)
-  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
-
   const page = Math.max(1, parseInt(pageStr, 10) || 1)
   const limit = Math.min(100, Math.max(1, parseInt(limitStr, 10) || 20))
   const skip = (page - 1) * limit
@@ -133,6 +128,8 @@ router.get('/history', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
     const [rawPosts, total] = await Promise.all([
       (prisma.scheduledPost.findMany as Function)({
         where,
@@ -179,11 +176,10 @@ router.get('/pending-review', async (req: Request, res: Response): Promise<void>
   const { workspaceId } = req.query as { workspaceId?: string }
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId query param is required'); return }
 
-  const role = await getWorkspaceRole(workspaceId, req.user!.id)
-  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
-  if (role === 'MEMBER') { sendError(res, 403, 'FORBIDDEN', 'Only admins and owners can view the review queue'); return }
-
   try {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    if (role === 'MEMBER') { sendError(res, 403, 'FORBIDDEN', 'Only admins and owners can view the review queue'); return }
     const posts = await prisma.scheduledPost.findMany({
       where: { workspaceId, status: 'PENDING_REVIEW' },
       orderBy: { createdAt: 'asc' },
@@ -244,10 +240,9 @@ router.get('/calendar', async (req: Request, res: Response): Promise<void> => {
   const start = startDate ? new Date(startDate) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   const end   = endDate   ? new Date(endDate)   : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
 
-  const role = await getWorkspaceRole(workspaceId, req.user!.id)
-  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
-
   try {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
     const posts = await (prisma.scheduledPost.findMany as Function)({
       where: { workspaceId, scheduledFor: { gte: start, lte: end } },
       orderBy: { scheduledFor: 'asc' },
@@ -343,10 +338,10 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
   const { variants, error: variantError } = validateVariants(platformVariants)
   if (variantError) { sendError(res, 400, 'INVALID_VARIANT', variantError); return }
 
-  const role = await getWorkspaceRole(workspaceId, req.user!.id)
-  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
-
   try {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+
     const { allowed, limit, current } = await checkLimit(prisma, workspaceId, 'scheduledPosts')
     if (!allowed) {
       sendError(res, 403, 'PLAN_LIMIT', `Plan limit reached: ${current}/${limit} posts this month. Upgrade to schedule more.`)
@@ -367,6 +362,9 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
         status,
         submittedBy: req.user!.id,
         ...(firstComment?.trim() ? { firstComment: firstComment.trim() } : {}),
+        // WEEKLY-AUDIT: campaignId is not validated to belong to workspaceId — a user with access to workspace A
+        // could link posts to a campaign from workspace B if they know its ID. Add:
+        //   if (campaignId) { const c = await prisma.campaign.findFirst({ where: { id: campaignId, workspaceId } }); if (!c) return sendError(res, 400, 'INVALID_CAMPAIGN', '...') }
         ...(campaignId ? { campaignId } : {}),
         ...(recurrenceFreq && ['daily','weekdays','weekly','monthly'].includes(recurrenceFreq)
           ? { recurrenceFreq } : {}),
@@ -430,10 +428,10 @@ router.post('/queue-schedule', async (req: Request, res: Response): Promise<void
   const { variants, error: variantError } = validateVariants(platformVariants)
   if (variantError) { sendError(res, 400, 'INVALID_VARIANT', variantError); return }
 
-  const role = await getWorkspaceRole(workspaceId, req.user!.id)
-  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
-
   try {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+
     // Load active queue slots for this workspace
     const activeSlots = await (prisma.queueSlot.findMany as Function)({
       where: { workspaceId, isActive: true },
@@ -526,9 +524,6 @@ router.post('/draft', async (req: Request, res: Response): Promise<void> => {
 
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
 
-  const role = await getWorkspaceRole(workspaceId, req.user!.id)
-  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
-
   // scheduledFor is optional for drafts — default to 7 days from now
   let scheduledDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   if (scheduledFor) {
@@ -544,6 +539,8 @@ router.post('/draft', async (req: Request, res: Response): Promise<void> => {
   if (variantError) { sendError(res, 400, 'INVALID_VARIANT', variantError); return }
 
   try {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
     const post = await (prisma.scheduledPost.create as Function)({
       data: {
         workspaceId,
@@ -591,26 +588,6 @@ router.post('/bulk-schedule', async (req: Request, res: Response): Promise<void>
   if (!Array.isArray(posts) || posts.length === 0) { sendError(res, 400, 'MISSING_FIELD', 'posts array is required'); return }
   if (posts.length > 200) { sendError(res, 400, 'TOO_MANY', 'Maximum 200 posts per bulk import'); return }
 
-  const role = await getWorkspaceRole(workspaceId, req.user!.id)
-  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
-
-  // Plan limit check — count existing scheduled posts
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-  if (workspace) {
-    const limits = PLAN_LIMITS[workspace.plan as Plan]
-    if (limits.scheduledPosts !== Infinity) {
-      const existing = await prisma.scheduledPost.count({
-        where: { workspaceId, status: { in: ['SCHEDULED', 'PENDING_REVIEW', 'DRAFT'] } },
-      })
-      if (existing + posts.length > limits.scheduledPosts) {
-        sendError(res, 402, 'PLAN_LIMIT', `Your ${workspace.plan} plan allows up to ${limits.scheduledPosts} scheduled posts. Upgrade to schedule more.`)
-        return
-      }
-    }
-  }
-
-  const isPrivileged = role === 'OWNER' || role === 'ADMIN'
-
   // Validate all rows first — return errors before touching the DB
   const rowErrors: Array<{ row: number; errors: string[] }> = []
 
@@ -640,6 +617,25 @@ router.post('/bulk-schedule', async (req: Request, res: Response): Promise<void>
 
   // Insert all posts in a single transaction
   try {
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+
+    // Plan limit check — count existing scheduled posts
+    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    if (workspace) {
+      const limits = PLAN_LIMITS[workspace.plan as Plan]
+      if (limits.scheduledPosts !== Infinity) {
+        const existing = await prisma.scheduledPost.count({
+          where: { workspaceId, status: { in: ['SCHEDULED', 'PENDING_REVIEW', 'DRAFT'] } },
+        })
+        if (existing + posts.length > limits.scheduledPosts) {
+          sendError(res, 402, 'PLAN_LIMIT', `Your ${workspace.plan} plan allows up to ${limits.scheduledPosts} scheduled posts. Upgrade to schedule more.`)
+          return
+        }
+      }
+    }
+
+    const isPrivileged = role === 'OWNER' || role === 'ADMIN'
     const created = await prisma.$transaction(
       posts.map((p) =>
         prisma.scheduledPost.create({
@@ -694,6 +690,7 @@ router.get('/content-health', async (req: Request, res: Response): Promise<void>
   const { workspaceId } = req.query as { workspaceId?: string }
   if (!workspaceId) { sendError(res, 400, 'BAD_REQUEST', 'workspaceId required'); return }
 
+  try {
   const role = await getWorkspaceRole(workspaceId, req.user!.id)
   if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
 
@@ -744,6 +741,10 @@ router.get('/content-health', async (req: Request, res: Response): Promise<void>
   })
 
   res.json({ posts: enriched })
+  } catch (err) {
+    logger.error({ err }, 'Content health fetch error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch content health data')
+  }
 })
 
 // POST /api/v1/posts/:id/submit-review — member submits a DRAFT for review

@@ -52,6 +52,17 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       return
     }
 
+    const VALID_STATUSES = ['UNREAD', 'READ', 'REPLIED', 'DISMISSED']
+    const VALID_TYPES = ['COMMENT', 'DM', 'MENTION', 'REVIEW']
+    if (status && !VALID_STATUSES.includes(status)) {
+      sendError(res, 400, 'INVALID_PARAM', `status must be one of: ${VALID_STATUSES.join(', ')}`)
+      return
+    }
+    if (type && !VALID_TYPES.includes(type)) {
+      sendError(res, 400, 'INVALID_PARAM', `type must be one of: ${VALID_TYPES.join(', ')}`)
+      return
+    }
+
     const where: Record<string, unknown> = { workspaceId }
     if (status) where.status = status
     if (type) where.type = type

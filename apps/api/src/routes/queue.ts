@@ -100,6 +100,7 @@ router.patch('/reorder', async (req: Request, res: Response): Promise<void> => {
 
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) { sendError(res, 400, 'MISSING_FIELD', 'orderedIds array is required'); return }
+  if (orderedIds.length > 500) { sendError(res, 400, 'TOO_MANY', 'orderedIds must contain at most 500 entries'); return }
 
   const role = await getWorkspaceRole(workspaceId, req.user!.id)
   if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
