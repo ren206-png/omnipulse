@@ -58,6 +58,8 @@ import approvalsRouter from './routes/approvals.js'
 import magicLinksRouter from './routes/magicLinks.js'
 import agencyBrandingRouter from './routes/agencyBranding.js'
 import evergreenQueueRouter from './routes/evergreenQueue.js'
+import automationRouter from './routes/automation.js'
+import automationInboundRouter from './routes/automationInbound.js'
 import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { startEvergreenRecyclerWorker } from './workers/evergreenRecycler.worker.js'
 import { startStuckJobSweeperWorker } from './workers/stuckJobSweeper.worker.js'
@@ -164,6 +166,8 @@ app.use('/api/v1/approvals', approvalsRouter)
 app.use('/api/v1/magic-links', magicLinksRouter)
 app.use('/api/v1/agency-branding', agencyBrandingRouter)
 app.use('/api/v1/evergreen', evergreenQueueRouter)
+app.use('/api/v1/automations', automationRouter)
+app.use('/api/v1/automation/inbound', automationInboundRouter)
 app.use('/uploads', express.static('public/uploads'))
 
 // Sentry error handler — must be after all routes

@@ -71,6 +71,15 @@ model Workspace {
   approvalMagicLinks  ApprovalMagicLink[]
   branding            WorkspaceBranding?
   evergreenQueue      EvergreenQueue[]
+  // Automation engine — additive, default off
+  automationEnabled          Boolean                  @default(false)
+  automationOptOutKeywords   String[]                 @default([])
+  automationContacts         AutomationContact[]
+  automationConversations    AutomationConversation[]
+  automationFlows            AutomationFlow[]
+  contactFlowInstances       ContactFlowInstance[]
+  inboundAutomationEvents    InboundAutomationEvent[]
+  automationOutbox           AutomationOutbox[]
 }
 
 enum Plan {
@@ -657,4 +666,309 @@ model EvergreenQueue {
   post                ScheduledPost @relation(fields: [postId], references: [id], onDelete: Cascade)
   @@index([workspaceId])
   @@index([nextRecycleAfter, active])
+}
+
+// ─── AUTOMATION ENGINE ────────────────────────────────────────────────────────
+// Engine-owned models. "tenantId" in the spec = workspaceId here.
+// Feature-gated by Workspace.automationEnabled + AUTOMATION_ENGINE_ENABLED env.
+// All models are additive — no existing model, field, or enum is altered.
+
+enum AutomationChannel {
+  INSTAGRAM
+  FACEBOOK
+  WHATSAPP
+  STUB
+}
+
+enum AutomationFlowStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  ARCHIVED
+}
+
+enum AutomationFlowVersionStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+enum AutomationTriggerType {
+  KEYWORD
+  FIRST_CONTACT
+  ANY_MESSAGE
+  WEBHOOK_EVENT
+}
+
+enum AutomationNodeType {
+  MESSAGE
+  CONDITION
+  ACTION
+  WAIT
+  END
+}
+
+enum AutomationReentryPolicy {
+  IGNORE
+  RESTART
+  ALLOW_PARALLEL
+}
+
+enum ContactFlowInstanceStatus {
+  RUNNING
+  WAITING_FOR_INPUT
+  WAITING_UNTIL
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AutomationEventProcessingStatus {
+  PENDING
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+enum AutomationOutboxStatus {
+  PENDING
+  CLAIMED
+  SENT
+  FAILED
+  WINDOW_CLOSED
+  DEAD
+}
+
+// Engine-owned contact identity — not a general CRM contact.
+model AutomationContact {
+  id                   String             @id @default(cuid())
+  workspaceId          String
+  workspace            Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  channel              AutomationChannel
+  channelUserId        String
+  displayName          String?
+  automationOptedOut   Boolean            @default(false)
+  automationOptedOutAt DateTime?
+  automationFields     Json?
+  firstSeenAt          DateTime           @default(now())
+  lastSeenAt           DateTime           @default(now())
+
+  conversations AutomationConversation[]
+  instances     ContactFlowInstance[]
+  inboundEvents InboundAutomationEvent[]
+
+  @@unique([workspaceId, channel, channelUserId])
+  @@index([workspaceId, channel])
+  @@index([workspaceId, automationOptedOut])
+  @@map("automation_contacts")
+}
+
+// Engine-owned conversation thread.
+model AutomationConversation {
+  id                     String            @id @default(cuid())
+  workspaceId            String
+  workspace              Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  contactId              String
+  contact                AutomationContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  channel                AutomationChannel
+  providerConversationId String?
+  startedAt              DateTime          @default(now())
+  lastMessageAt          DateTime          @default(now())
+
+  instances     ContactFlowInstance[]
+  inboundEvents InboundAutomationEvent[]
+
+  @@index([workspaceId])
+  @@index([contactId])
+  @@index([workspaceId, channel, providerConversationId])
+  @@map("automation_conversations")
+}
+
+// Flow definition (metadata only; graph lives in versions).
+model AutomationFlow {
+  id                             String                  @id @default(cuid())
+  workspaceId                    String
+  workspace                      Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  name                           String
+  description                    String?
+  status                         AutomationFlowStatus    @default(DRAFT)
+  priority                       Int                     @default(0)
+  reentryPolicy                  AutomationReentryPolicy @default(IGNORE)
+  maxParallelInstancesPerContact Int                     @default(3)
+  createdAt                      DateTime                @default(now())
+  updatedAt                      DateTime                @updatedAt
+  createdBy                      String?
+
+  versions  AutomationFlowVersion[]
+  instances ContactFlowInstance[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, status])
+  @@map("automation_flows")
+}
+
+// Immutable once PUBLISHED. Exactly one DRAFT per flow.
+model AutomationFlowVersion {
+  id            String                      @id @default(cuid())
+  flowId        String
+  flow          AutomationFlow              @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  version       Int
+  status        AutomationFlowVersionStatus @default(DRAFT)
+  triggerType   AutomationTriggerType
+  triggerConfig Json
+  entryNodeKey  String
+  graphHash     String
+  publishedAt   DateTime?
+  publishedBy   String?
+  revision      Int                         @default(0)
+
+  nodes     FlowNode[]
+  edges     FlowEdge[]
+  instances ContactFlowInstance[]
+
+  @@unique([flowId, version])
+  @@index([flowId, status])
+  @@map("automation_flow_versions")
+}
+
+// Graph node — immutable once version is PUBLISHED.
+model FlowNode {
+  id            String                @id @default(cuid())
+  flowVersionId String
+  flowVersion   AutomationFlowVersion @relation(fields: [flowVersionId], references: [id], onDelete: Cascade)
+  nodeKey       String
+  nodeType      AutomationNodeType
+  config        Json
+  uiMeta        Json?
+
+  outgoingEdges FlowEdge[]      @relation("EdgeSource")
+  incomingEdges FlowEdge[]      @relation("EdgeTarget")
+  executions    NodeExecution[]
+
+  @@unique([flowVersionId, nodeKey])
+  @@index([flowVersionId])
+  @@map("flow_nodes")
+}
+
+// Graph edge — immutable once version is PUBLISHED.
+model FlowEdge {
+  id            String                @id @default(cuid())
+  flowVersionId String
+  flowVersion   AutomationFlowVersion @relation(fields: [flowVersionId], references: [id], onDelete: Cascade)
+  sourceNodeId  String
+  sourceNode    FlowNode              @relation("EdgeSource", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  targetNodeId  String
+  targetNode    FlowNode              @relation("EdgeTarget", fields: [targetNodeId], references: [id], onDelete: Cascade)
+  label         String
+  priority      Int?
+
+  @@unique([sourceNodeId, label])
+  @@index([flowVersionId])
+  @@map("flow_edges")
+}
+
+// Per-contact flow execution instance.
+model ContactFlowInstance {
+  id             String                    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  contactId      String
+  contact        AutomationContact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   AutomationConversation?   @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  flowId         String
+  flow           AutomationFlow            @relation(fields: [flowId], references: [id], onDelete: Restrict)
+  flowVersionId  String
+  flowVersion    AutomationFlowVersion     @relation(fields: [flowVersionId], references: [id], onDelete: Restrict)
+  currentNodeId  String?
+  status         ContactFlowInstanceStatus @default(RUNNING)
+  context        Json                      @default("{}")
+  wakeAt         DateTime?
+  expiresAt      DateTime?
+  startedAt      DateTime                  @default(now())
+  completedAt    DateTime?
+  lastEventAt    DateTime                  @default(now())
+  failureReason  String?
+  revision       Int                       @default(0)
+
+  nodeExecutions NodeExecution[]
+
+  @@index([workspaceId, contactId, status])
+  @@index([status, wakeAt])
+  @@index([status, expiresAt])
+  @@index([workspaceId, flowVersionId])
+  @@map("contact_flow_instances")
+}
+
+// Immutable inbound event record.
+model InboundAutomationEvent {
+  id                 String                          @id @default(cuid())
+  workspaceId        String
+  workspace          Workspace                       @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  channel            AutomationChannel
+  providerEventId    String?
+  idempotencyKey     String
+  derivedIdempotency Boolean                         @default(false)
+  senderId           String
+  contactId          String?
+  contact            AutomationContact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  conversationId     String?
+  conversation       AutomationConversation?         @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  text               String?
+  normalizedText     String?
+  quickReplyValue    String?
+  payload            Json
+  receivedAt         DateTime                        @default(now())
+  processingStatus   AutomationEventProcessingStatus @default(PENDING)
+  processingError    String?
+
+  nodeExecutions NodeExecution[]
+
+  @@unique([workspaceId, channel, idempotencyKey])
+  @@index([workspaceId, processingStatus])
+  @@map("inbound_automation_events")
+}
+
+// Per-node execution record (idempotent via unique idempotencyKey).
+model NodeExecution {
+  id             String                  @id @default(cuid())
+  instanceId     String
+  instance       ContactFlowInstance     @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  nodeId         String
+  node           FlowNode                @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+  inboundEventId String?
+  inboundEvent   InboundAutomationEvent? @relation(fields: [inboundEventId], references: [id], onDelete: SetNull)
+  attempt        Int                     @default(1)
+  status         String
+  startedAt      DateTime                @default(now())
+  finishedAt     DateTime?
+  idempotencyKey String                  @unique
+  result         Json?
+  error          Json?
+
+  @@index([instanceId])
+  @@map("node_executions")
+}
+
+// Outbox pattern for every externally-visible side effect.
+model AutomationOutbox {
+  id             String                 @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  instanceId     String?
+  type           String
+  payload        Json
+  idempotencyKey String                 @unique
+  status         AutomationOutboxStatus @default(PENDING)
+  attempts       Int                    @default(0)
+  nextAttemptAt  DateTime               @default(now())
+  claimedBy      String?
+  claimedAt      DateTime?
+  lastError      String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([workspaceId])
+  @@map("automation_outbox")
 }
