@@ -125,6 +125,7 @@ export function startAutomationResumeWorker(): void {
   )
 
   _worker.on('ready', () => logger.info(`[AutomationResume] Worker ready — queue: ${RESUME_QUEUE}`))
+  _worker.on('error', (err) => logger.error({ err }, '[AutomationResume] Worker error'))
 
   _worker.on('failed', (job, err) => {
     logger.error({ jobId: job?.id, err }, '[AutomationResume] Job failed')

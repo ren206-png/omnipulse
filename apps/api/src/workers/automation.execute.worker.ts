@@ -119,6 +119,7 @@ export function startAutomationExecuteWorker(): void {
   )
 
   _worker.on('ready', () => logger.info(`[AutomationExecute] Worker ready — queue: ${EXECUTE_QUEUE}`))
+  _worker.on('error', (err) => logger.error({ err }, '[AutomationExecute] Worker error'))
 
   _worker.on('failed', (job, err) => {
     logger.error({ jobId: job?.id, err }, '[AutomationExecute] Job failed')

@@ -122,6 +122,7 @@ export async function startAutomationWakeupWorker(): Promise<void> {
   )
 
   _worker.on('ready', () => logger.info('[AutomationWakeup] Worker ready — sweeping every 30s'))
+  _worker.on('error', (err) => logger.error({ err }, '[AutomationWakeup] Worker error'))
   _worker.on('failed', (job, err) => logger.error({ jobId: job?.id, err }, '[AutomationWakeup] Tick failed'))
 }
 

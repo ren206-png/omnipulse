@@ -124,6 +124,7 @@ export function startAutomationTriggerWorker(): void {
   )
 
   _worker.on('ready', () => logger.info(`[AutomationTrigger] Worker ready — queue: ${TRIGGER_QUEUE}`))
+  _worker.on('error', (err) => logger.error({ err }, '[AutomationTrigger] Worker error'))
 
   _worker.on('failed', (job, err) => {
     logger.error(

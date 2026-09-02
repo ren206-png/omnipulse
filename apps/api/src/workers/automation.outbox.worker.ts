@@ -64,6 +64,7 @@ export function startAutomationOutboxWorker(): void {
   )
 
   _worker.on('ready', () => logger.info(`[AutomationOutbox] Worker ready — queue: ${OUTBOX_QUEUE}`))
+  _worker.on('error', (err) => logger.error({ err }, '[AutomationOutbox] Worker error'))
 
   _worker.on('failed', (job, err) => {
     logger.error({ jobId: job?.id, err }, '[AutomationOutbox] Job failed')
