@@ -70,6 +70,11 @@ import { startRssFeedWorker } from './workers/rssFeed.worker.js'
 import { startWeeklyDigestWorker } from './workers/weeklyDigest.worker.js'
 import { startSystemMonitorWorker } from './workers/systemMonitor.worker.js'
 import { startAuthTokenRefreshWorker } from './workers/authTokenRefresh.worker.js'
+import { startAutomationTriggerWorker } from './workers/automation.trigger.worker.js'
+import { startAutomationExecuteWorker } from './workers/automation.execute.worker.js'
+import { startAutomationResumeWorker  } from './workers/automation.resume.worker.js'
+import { startAutomationOutboxWorker  } from './workers/automation.outbox.worker.js'
+import { startAutomationWakeupWorker  } from './workers/automation.wakeup.worker.js'
 import { prisma } from './lib/prisma.js'
 import IORedis from 'ioredis'
 
@@ -204,6 +209,18 @@ startWeeklyDigestWorker()
 startSystemMonitorWorker().catch((err) => logger.error({ err }, 'Failed to start system monitor worker'))
 // Auth Token Refresh — scans expiring OAuth tokens every 30 min and auto-refreshes
 startAuthTokenRefreshWorker().catch((err) => logger.error({ err }, 'Failed to start auth token refresh worker'))
+
+// ─── Automation Engine Workers ────────────────────────────────────────────────
+if (process.env.AUTOMATION_ENGINE_ENABLED === 'true') {
+  startAutomationTriggerWorker()
+  startAutomationExecuteWorker()
+  startAutomationResumeWorker()
+  startAutomationOutboxWorker()
+  startAutomationWakeupWorker().catch((err) => logger.error({ err }, 'Failed to start automation wakeup worker'))
+  logger.info('Automation engine workers started')
+} else {
+  logger.info('Automation engine disabled — workers not started (set AUTOMATION_ENGINE_ENABLED=true to enable)')
+}
 
 // ─── Graceful shutdown ──────────────────────────────────────────────────────
 // Drain in-flight BullMQ jobs and close DB connections before the process exits.

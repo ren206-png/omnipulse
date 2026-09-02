@@ -295,17 +295,26 @@ describe('coordinateTrigger — paths', () => {
     return { fn, calls }
   }
 
+  /** Stub resume fn — like makeEnqueue but for resume jobs. */
+  function makeResume() {
+    const calls: unknown[][] = []
+    const fn = async (jobs: unknown[]) => { calls.push(jobs); return [] }
+    return { fn, calls }
+  }
+
   function makeCoordPrisma(opts: {
     automationEnabled?: boolean
     optedOut?: boolean
     existingEvent?: unknown
     flowVersions?: unknown[]
+    waitingInstances?: unknown[]
   } = {}) {
     const {
-      automationEnabled = true,
-      optedOut          = false,
-      existingEvent     = null,
-      flowVersions      = [],
+      automationEnabled  = true,
+      optedOut           = false,
+      existingEvent      = null,
+      flowVersions       = [],
+      waitingInstances   = [],
     } = opts
 
     const updateCalls: Array<{ data: { processingStatus: string } }> = []
@@ -329,6 +338,9 @@ describe('coordinateTrigger — paths', () => {
           return {}
         },
       },
+      contactFlowInstance: {
+        findMany: async () => waitingInstances,
+      },
       automationFlowVersion: {
         findMany: async () => flowVersions,
       },
@@ -343,60 +355,69 @@ describe('coordinateTrigger — paths', () => {
   it('returns isDuplicate=true for duplicate events without enqueueing', async () => {
     const existing = { id: 'event-dupe', processingStatus: 'PROCESSED' }
     const prisma = makeCoordPrisma({ existingEvent: existing })
-    const { fn } = makeEnqueue()
-    const result = await coordinateTrigger(prisma, makeEvent(), fn)
+    const { fn } = makeEnqueue(); const { fn: res } = makeResume()
+    const result = await coordinateTrigger(prisma, makeEvent(), fn, res)
     assert.equal(result.isDuplicate, true)
     assert.equal(result.enqueuedCount, 0)
   })
 
   it('returns enqueuedCount=0 when contact is opted out', async () => {
     const prisma = makeCoordPrisma({ optedOut: true })
-    const { fn } = makeEnqueue()
-    const result = await coordinateTrigger(prisma, makeEvent(), fn)
+    const { fn } = makeEnqueue(); const { fn: res } = makeResume()
+    const result = await coordinateTrigger(prisma, makeEvent(), fn, res)
     assert.equal(result.isDuplicate, false)
     assert.equal(result.enqueuedCount, 0)
     assert.ok(prisma._updateCalls.some((u) => u.data?.processingStatus === 'IGNORED'))
   })
 
   it('returns enqueuedCount=0 when no flows match', async () => {
-    const prisma = makeCoordPrisma({ flowVersions: [] })
-    const { fn } = makeEnqueue()
-    const result = await coordinateTrigger(prisma, makeEvent({ normalizedText: 'hello' }), fn)
+    const prisma = makeCoordPrisma({ flowVersions: [], waitingInstances: [] })
+    const { fn } = makeEnqueue(); const { fn: res } = makeResume()
+    const result = await coordinateTrigger(prisma, makeEvent({ normalizedText: 'hello' }), fn, res)
     assert.equal(result.isDuplicate, false)
     assert.equal(result.enqueuedCount, 0)
+    assert.equal(result.resumedCount, 0)
     assert.ok(prisma._updateCalls.some((u) => u.data?.processingStatus === 'IGNORED'))
   })
 
   it('enqueues one job per matched flow and marks event PROCESSED', async () => {
-    // Two matching flows
     const flowVersions = [
-      {
-        id: 'fv-1', flowId: 'flow-1', entryNodeKey: 'start',
-        triggerConfig: { type: 'ANY_MESSAGE' },
-        flow: { priority: 0 },
-      },
-      {
-        id: 'fv-2', flowId: 'flow-2', entryNodeKey: 'start',
-        triggerConfig: { type: 'ANY_MESSAGE' },
-        flow: { priority: 1 },
-      },
+      { id: 'fv-1', flowId: 'flow-1', entryNodeKey: 'start', triggerConfig: { type: 'ANY_MESSAGE' }, flow: { priority: 0 } },
+      { id: 'fv-2', flowId: 'flow-2', entryNodeKey: 'start', triggerConfig: { type: 'ANY_MESSAGE' }, flow: { priority: 1 } },
     ]
-    const prisma = makeCoordPrisma({ flowVersions })
-    const { fn, calls } = makeEnqueue()
-    const result = await coordinateTrigger(prisma, makeEvent(), fn)
+    const prisma = makeCoordPrisma({ flowVersions, waitingInstances: [] })
+    const { fn, calls } = makeEnqueue(); const { fn: res } = makeResume()
+    const result = await coordinateTrigger(prisma, makeEvent(), fn, res)
     assert.equal(result.isDuplicate, false)
     assert.equal(result.enqueuedCount, 2)
+    assert.equal(result.resumedCount, 0)
     assert.equal(calls.length, 1)
     assert.equal((calls[0] as unknown[]).length, 2)
     assert.ok(prisma._updateCalls.some((u) => u.data?.processingStatus === 'PROCESSED'))
   })
 
+  it('resumes WAITING_FOR_INPUT instances and enqueues trigger jobs', async () => {
+    const flowVersions = [
+      { id: 'fv-1', flowId: 'flow-1', entryNodeKey: 'start', triggerConfig: { type: 'ANY_MESSAGE' }, flow: { priority: 0 } },
+    ]
+    const waitingInstances = [
+      { id: 'inst-waiting', workspaceId: 'ws-1' },
+    ]
+    const prisma = makeCoordPrisma({ flowVersions, waitingInstances })
+    const { fn, calls } = makeEnqueue(); const { fn: res, calls: resCalls } = makeResume()
+    const result = await coordinateTrigger(prisma, makeEvent(), fn, res)
+    assert.equal(result.resumedCount, 1)
+    assert.equal(result.enqueuedCount, 1)
+    assert.equal(resCalls.length, 1)
+    assert.equal((resCalls[0] as unknown[]).length, 1)
+  })
+
   it('throws AutomationDisabledError when workspace flag is off', async () => {
     const { AutomationDisabledError } = await import('../../automation/services/globalGuards.js')
     const prisma = makeCoordPrisma({ automationEnabled: false })
-    const { fn } = makeEnqueue()
+    const { fn } = makeEnqueue(); const { fn: res } = makeResume()
     await assert.rejects(
-      () => coordinateTrigger(prisma, makeEvent(), fn),
+      () => coordinateTrigger(prisma, makeEvent(), fn, res),
       AutomationDisabledError,
     )
   })
