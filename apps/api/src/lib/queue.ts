@@ -12,6 +12,7 @@ function parseRedisUrl(url: string): { host: string; port: number; password?: st
 }
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379'
+console.log('[Queue] REDIS_URL host:', new URL(redisUrl).hostname)
 export const redisConnection = {
   ...parseRedisUrl(redisUrl),
   maxRetriesPerRequest: null as null,
