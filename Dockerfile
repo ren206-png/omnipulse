@@ -1,28 +1,15 @@
 FROM node:22-slim
 
 # Install OpenSSL for Prisma
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy root workspace files first for install
-COPY package.json package-lock.json ./
-
-# Copy api package files
-COPY apps/api/package.json ./apps/api/package.json
-
-# Copy prisma schema (needed for generate)
-COPY apps/api/prisma ./apps/api/prisma
-COPY apps/api/prisma.config.ts ./apps/api/
-
-# Install deps
-RUN npm install --legacy-peer-deps --ignore-scripts --prefix apps/api
-
-# Copy ALL source
+# Copy everything first (needed for monorepo context)
 COPY . .
 
-# Generate Prisma client and compile TypeScript
-RUN cd apps/api && ./node_modules/.bin/prisma generate && npm run build
+# Install deps and build (same as original Nixpacks command)
+RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts && ./node_modules/.bin/prisma generate && npm run build
 
 EXPOSE 3001
 
