@@ -83,12 +83,27 @@ import IORedis from 'ioredis'
 async function runMigrations() {
   const { execSync } = await import('child_process')
   try {
-    // cwd: apps/api so prisma binary is found at ./node_modules/.bin/prisma
-    const apiDir = new URL('../..', import.meta.url).pathname
-    execSync('./node_modules/.bin/prisma migrate deploy', { stdio: 'inherit', timeout: 60_000, cwd: apiDir })
+    // Use absolute path — works whether started via tsx or node
+    execSync('/app/apps/api/node_modules/.bin/prisma migrate deploy', {
+      stdio: 'inherit',
+      timeout: 60_000,
+      cwd: '/app/apps/api',
+      // Fall back to cwd-relative if not in Railway container
+    })
     console.log('[Startup] Migrations applied successfully')
-  } catch (e) {
-    console.error('[Startup] Migration failed — continuing anyway:', e)
+  } catch {
+    // Try relative path as fallback (local dev)
+    try {
+      const { execSync: exec2 } = await import('child_process')
+      exec2('./node_modules/.bin/prisma migrate deploy', {
+        stdio: 'inherit',
+        timeout: 60_000,
+        cwd: new URL('../..', import.meta.url).pathname,
+      })
+      console.log('[Startup] Migrations applied successfully (fallback path)')
+    } catch (e2) {
+      console.error('[Startup] Migration failed — continuing anyway:', e2)
+    }
   }
 }
 // Fire-and-forget: let Express start immediately
