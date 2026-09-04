@@ -2,7 +2,7 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  output: 'standalone',
+  // Note: 'standalone' output is incompatible with Vercel — Vercel manages its own serverless output
   async headers() {
     return [
       {
