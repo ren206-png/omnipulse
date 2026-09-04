@@ -28,6 +28,7 @@ export const triggerQueue = new Queue<TriggerJobPayload>(TRIGGER_QUEUE, {
     removeOnFail:    { count: 5_000 },
   },
 })
+triggerQueue.on('error', (err) => console.error('[Queue:automation-trigger] Error:', err.message))
 
 export const executeQueue = new Queue<ExecuteJobPayload>(EXECUTE_QUEUE, {
   connection: redisConnection,
@@ -38,6 +39,7 @@ export const executeQueue = new Queue<ExecuteJobPayload>(EXECUTE_QUEUE, {
     removeOnFail:    { count: 10_000 },
   },
 })
+executeQueue.on('error', (err) => console.error('[Queue:automation-execute] Error:', err.message))
 
 export const outboxQueue = new Queue<OutboxJobPayload>(OUTBOX_QUEUE, {
   connection: redisConnection,
@@ -48,6 +50,7 @@ export const outboxQueue = new Queue<OutboxJobPayload>(OUTBOX_QUEUE, {
     removeOnFail:    { count: 10_000 },
   },
 })
+outboxQueue.on('error', (err) => console.error('[Queue:automation-outbox] Error:', err.message))
 
 export const resumeQueue = new Queue<ResumeJobPayload>(RESUME_QUEUE, {
   connection: redisConnection,
@@ -58,3 +61,4 @@ export const resumeQueue = new Queue<ResumeJobPayload>(RESUME_QUEUE, {
     removeOnFail:    { count: 10_000 },
   },
 })
+resumeQueue.on('error', (err) => console.error('[Queue:automation-resume] Error:', err.message))

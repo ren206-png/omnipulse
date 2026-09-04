@@ -82,28 +82,17 @@ import IORedis from 'ioredis'
 // The /health endpoint must respond within 30s for Railway healthcheck to pass.
 async function runMigrations() {
   const { execSync } = await import('child_process')
+  const { resolve, dirname } = await import('path')
+  const { fileURLToPath } = await import('url')
   try {
-    // Use absolute path — works whether started via tsx or node
-    execSync('/app/apps/api/node_modules/.bin/prisma migrate deploy', {
-      stdio: 'inherit',
-      timeout: 60_000,
-      cwd: '/app/apps/api',
-      // Fall back to cwd-relative if not in Railway container
-    })
+    // Resolve the apps/api directory from the source file location
+    const srcDir = dirname(fileURLToPath(import.meta.url))
+    const apiDir = resolve(srcDir, '../..')
+    const prismaBin = resolve(apiDir, 'node_modules/.bin/prisma')
+    execSync(`"${prismaBin}" migrate deploy`, { stdio: 'inherit', timeout: 60_000, cwd: apiDir })
     console.log('[Startup] Migrations applied successfully')
-  } catch {
-    // Try relative path as fallback (local dev)
-    try {
-      const { execSync: exec2 } = await import('child_process')
-      exec2('./node_modules/.bin/prisma migrate deploy', {
-        stdio: 'inherit',
-        timeout: 60_000,
-        cwd: new URL('../..', import.meta.url).pathname,
-      })
-      console.log('[Startup] Migrations applied successfully (fallback path)')
-    } catch (e2) {
-      console.error('[Startup] Migration failed — continuing anyway:', e2)
-    }
+  } catch (e) {
+    console.error('[Startup] Migration failed — continuing anyway:', e)
   }
 }
 // Fire-and-forget: let Express start immediately
@@ -216,7 +205,8 @@ startEvergreenRecyclerWorker()
 startGuardianWorker().catch((err) => logger.error({ err }, 'Failed to start guardian worker'))
 // Stuck-Job Sweeper — requeues or DLQs posts stuck in PROCESSING for >15 min
 startStuckJobSweeperWorker().catch((err) => logger.error({ err }, 'Failed to start stuck job sweeper worker'))
-// Engagement Alert worker — notifies on standout/underperforming posts 2h after publish
+// Engagement Alert worker — auto-starts on import (Worker instantiated at module level).
+// `void` suppresses the unused-import lint warning; the side effect is the worker registration.
 void engagementAlertWorker
 // Sync analytics every 6 hours
 setInterval(() => { syncAnalytics().catch(() => {}) }, 6 * 60 * 60 * 1000)

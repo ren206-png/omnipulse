@@ -12,7 +12,6 @@ function parseRedisUrl(url: string): { host: string; port: number; password?: st
 }
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379'
-console.log('[Queue] REDIS_URL host:', new URL(redisUrl).hostname)
 export const redisConnection = {
   ...parseRedisUrl(redisUrl),
   maxRetriesPerRequest: null as null,
@@ -20,4 +19,7 @@ export const redisConnection = {
 }
 
 export const publishPostQueue = new Queue('publish-post', { connection: redisConnection })
+publishPostQueue.on('error', (err) => console.error('[Queue:publish-post] Error:', err.message))
+
 export const analyticsSyncQueue = new Queue('analytics-sync', { connection: redisConnection })
+analyticsSyncQueue.on('error', (err) => console.error('[Queue:analytics-sync] Error:', err.message))
