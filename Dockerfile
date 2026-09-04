@@ -8,9 +8,9 @@ WORKDIR /app
 # Copy everything first (needed for monorepo context)
 COPY . .
 
-# Install deps and build (same as original Nixpacks command)
-RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts && ./node_modules/.bin/prisma generate && npm run build
+# Install deps and generate Prisma client (skip tsc — tsx runs TS directly)
+RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts && ./node_modules/.bin/prisma generate
 
 EXPOSE 3001
 
-CMD ["node", "apps/api/dist/src/index.js"]
+CMD ["apps/api/node_modules/.bin/tsx", "apps/api/src/index.ts"]

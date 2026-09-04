@@ -83,7 +83,9 @@ import IORedis from 'ioredis'
 async function runMigrations() {
   const { execSync } = await import('child_process')
   try {
-    execSync('./node_modules/.bin/prisma migrate deploy', { stdio: 'inherit', timeout: 60_000 })
+    // cwd: apps/api so prisma binary is found at ./node_modules/.bin/prisma
+    const apiDir = new URL('../..', import.meta.url).pathname
+    execSync('./node_modules/.bin/prisma migrate deploy', { stdio: 'inherit', timeout: 60_000, cwd: apiDir })
     console.log('[Startup] Migrations applied successfully')
   } catch (e) {
     console.error('[Startup] Migration failed — continuing anyway:', e)
