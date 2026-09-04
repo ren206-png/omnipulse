@@ -447,7 +447,7 @@ router.post('/queue-schedule', async (req: Request, res: Response): Promise<void
       where: { workspaceId, status: { in: ['SCHEDULED', 'QUEUED'] } },
       select: { scheduledFor: true },
     })
-    const occupied = new Set(existingPosts.map((p) => p.scheduledFor.toISOString()))
+    const occupied = new Set<string>(existingPosts.map((p) => p.scheduledFor.toISOString()))
 
     const nextSlot = getNextAvailableSlot(activeSlots, occupied)
 
