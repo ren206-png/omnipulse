@@ -17,7 +17,7 @@
  * at the outbox level so we can persist attempt counts across worker restarts.
  */
 
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient } from '../../../generated/prisma/client.js'
 import type { IChannelAdapter, SendMessagePayload } from '../adapters/IChannelAdapter.js'
 import { RetryableError, TerminalError } from '../types/index.js'
 import { checkSendWindow, type SendWindowConfig } from './sendWindowPolicy.js'

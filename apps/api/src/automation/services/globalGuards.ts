@@ -8,7 +8,7 @@
  * No side-effects beyond DB reads.
  */
 
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient } from '../../../generated/prisma/client.js'
 
 // ── Typed errors ──────────────────────────────────────────────────────────────
 

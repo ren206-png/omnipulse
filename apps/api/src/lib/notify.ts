@@ -56,5 +56,5 @@ export async function getWorkspaceAdmins(workspaceId: string): Promise<string[]>
   ])
   const ids = members.map((m) => m.userId)
   if (workspace?.ownerId) ids.unshift(workspace.ownerId)
-  return [...new Set(ids)]
+  return [...new Set(ids)] as string[]
 }

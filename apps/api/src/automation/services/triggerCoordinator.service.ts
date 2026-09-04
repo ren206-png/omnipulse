@@ -18,7 +18,7 @@
  *   Any other error propagates (will be caught by BullMQ worker retry logic).
  */
 
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient } from '../../../generated/prisma/client.js'
 import { randomUUID } from 'node:crypto'
 import type { NormalizedInboundEvent, TriggerJobPayload, ResumeJobPayload } from '../types/index.js'
 import { assertWorkspaceAutomationEnabled, assertContactNotOptedOut } from './globalGuards.js'

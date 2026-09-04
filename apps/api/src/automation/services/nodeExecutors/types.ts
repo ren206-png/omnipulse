@@ -2,7 +2,8 @@
  * Shared types for node executors.
  */
 
-import type { PrismaClient, ContactFlowInstance, FlowNode, FlowEdge } from '@prisma/client'
+import type { PrismaClient } from '../../../../generated/prisma/client.js'
+import type { ContactFlowInstance, FlowNode, FlowEdge } from '../../../../generated/prisma/client.js'
 import type { NodeConfig, EvalContext } from '../../types/index.js'
 
 export interface NodeExecutionContext {

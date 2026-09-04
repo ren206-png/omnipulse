@@ -15,7 +15,8 @@
  * are durable before the instance state advances.
  */
 
-import type { PrismaClient, FlowNode, FlowEdge } from '@prisma/client'
+import type { PrismaClient } from '../../../generated/prisma/client.js'
+import type { FlowNode, FlowEdge } from '../../../generated/prisma/client.js'
 import { NodeConfigSchema, type ExecutionResult, type EvalContext, TerminalError, RetryableError } from '../types/index.js'
 import { patchInstance } from './instanceManager.service.js'
 import { executeMessageNode   } from './nodeExecutors/messageExecutor.js'

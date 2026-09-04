@@ -15,7 +15,7 @@
  * Results are sorted by flow.priority descending (highest first).
  */
 
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaClient } from '../../../generated/prisma/client.js'
 import type { NormalizedInboundEvent, TriggerConfig } from '../types/index.js'
 import { TriggerConfigSchema } from '../types/index.js'
 import { normalizeText } from './conditionEvaluator.js'

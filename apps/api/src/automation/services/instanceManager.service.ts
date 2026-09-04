@@ -10,7 +10,8 @@
  * should treat as a RetryableError.
  */
 
-import type { PrismaClient, ContactFlowInstance } from '@prisma/client'
+import type { PrismaClient } from '../../../generated/prisma/client.js'
+import type { ContactFlowInstance } from '../../../generated/prisma/client.js'
 import type { MatchedFlow } from './triggerMatcher.service.js'
 import { RetryableError } from '../types/index.js'
 

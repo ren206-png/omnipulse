@@ -10,7 +10,8 @@
  * Pure DB operations — no queue interaction, no business logic.
  */
 
-import type { PrismaClient, InboundAutomationEvent, AutomationContact } from '@prisma/client'
+import type { PrismaClient } from '../../../generated/prisma/client.js'
+import type { InboundAutomationEvent, AutomationContact } from '../../../generated/prisma/client.js'
 import type { NormalizedInboundEvent } from '../types/index.js'
 
 export interface IngestionResult {
@@ -72,7 +73,7 @@ export async function ingestEvent(
       text:              input.text,
       normalizedText:    input.normalizedText,
       quickReplyValue:   input.quickReplyValue,
-      payload:           input.rawPayload as import('@prisma/client').Prisma.InputJsonValue,
+      payload:           input.rawPayload as import('../../../generated/prisma/client.js').Prisma.InputJsonValue,
       receivedAt:        input.receivedAt,
       processingStatus:  'PENDING',
     },
