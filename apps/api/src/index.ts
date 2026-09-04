@@ -78,18 +78,19 @@ import { startAutomationWakeupWorker  } from './workers/automation.wakeup.worker
 import { prisma } from './lib/prisma.js'
 import IORedis from 'ioredis'
 
-// Run DB migrations on startup (safe to run repeatedly)
+// Run DB migrations in the background — do NOT block Express startup.
+// The /health endpoint must respond within 30s for Railway healthcheck to pass.
 async function runMigrations() {
   const { execSync } = await import('child_process')
   try {
-    execSync('./node_modules/.bin/prisma migrate deploy', { stdio: 'inherit' })
+    execSync('./node_modules/.bin/prisma migrate deploy', { stdio: 'inherit', timeout: 60_000 })
+    console.log('[Startup] Migrations applied successfully')
   } catch (e) {
     console.error('[Startup] Migration failed — continuing anyway:', e)
-    // Non-fatal: allow the app to start so the healthcheck passes.
-    // Investigate migration state via Railway console or DB client.
   }
 }
-await runMigrations()
+// Fire-and-forget: let Express start immediately
+runMigrations().catch((e) => console.error('[Startup] runMigrations threw:', e))
 
 const app = express()
 
