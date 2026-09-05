@@ -96,19 +96,25 @@ export async function detectAndFix(): Promise<GuardianReport> {
 export async function remindPendingReviews(): Promise<void> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000) // 24 hours ago
 
-  const stalePosts = await prisma.scheduledPost.findMany({
-    where: {
-      status: 'PENDING_REVIEW',
-      createdAt: { lte: cutoff },
-    },
-    select: {
-      id: true,
-      workspaceId: true,
-      content: true,
-      platforms: true,
-      submittedBy: true,
-    },
-  })
+  let stalePosts: { id: string; workspaceId: string; content: string; platforms: string[]; submittedBy: string | null }[] = []
+  try {
+    stalePosts = await prisma.scheduledPost.findMany({
+      where: {
+        status: 'PENDING_REVIEW',
+        createdAt: { lte: cutoff },
+      },
+      select: {
+        id: true,
+        workspaceId: true,
+        content: true,
+        platforms: true,
+        submittedBy: true,
+      },
+    })
+  } catch (err) {
+    logger.error({ err }, '[Guardian] Failed to scan for pending reviews')
+    return
+  }
 
   if (stalePosts.length === 0) return
 

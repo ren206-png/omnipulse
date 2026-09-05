@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native'
+import { View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator, TouchableOpacity } from 'react-native'
 import { apiFetch } from '../api/client'
 
 export default function DashboardScreen() {
@@ -8,8 +8,10 @@ export default function DashboardScreen() {
   const [posts, setPosts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const load = async () => {
+    setError(null)
     try {
       const data = await apiFetch('/api/v1/workspaces')
       const ws = data.workspaces ?? []
@@ -20,8 +22,13 @@ export default function DashboardScreen() {
         const postsData = await apiFetch(`/api/v1/posts/history?workspaceId=${active.id}&limit=5`)
         setPosts(postsData.posts ?? [])
       }
-    } catch (err) { console.error(err) }
-    finally { setLoading(false); setRefreshing(false) }
+    } catch (err: any) {
+      console.error(err)
+      setError(err.message ?? 'Failed to load dashboard')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
   }
 
   useEffect(() => { load() }, [])
@@ -31,6 +38,14 @@ export default function DashboardScreen() {
   }
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#6366f1" /></View>
+  if (error) return (
+    <View style={styles.center}>
+      <Text style={{ color: '#ef4444', textAlign: 'center', padding: 24 }}>{error}</Text>
+      <TouchableOpacity onPress={load} style={{ marginTop: 12 }}>
+        <Text style={{ color: '#6366f1', fontWeight: '600' }}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  )
 
   return (
     <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load() }} tintColor="#6366f1" />}>

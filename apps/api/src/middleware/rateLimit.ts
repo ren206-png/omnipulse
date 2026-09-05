@@ -12,6 +12,9 @@ interface HitRecord {
   resetAt: number
 }
 
+// WEEKLY-AUDIT: This is a per-process in-memory rate limiter. It does not share state across
+// multiple API replicas, so limits are not enforced globally in a horizontally-scaled deployment.
+// Consider replacing with a Redis-backed rate limiter (e.g. rate-limiter-flexible) for production.
 export function rateLimit({ windowMs, max, message }: RateLimitOptions) {
   const hits = new Map<string, HitRecord>()
 

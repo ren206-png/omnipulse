@@ -40,8 +40,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId query param is required'); return }
 
   try {
-  const role = await getWorkspaceRole(workspaceId, req.user!.id)
-  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
     const posts = await (prisma.scheduledPost.findMany as Function)({
       where: { workspaceId },
       orderBy: { scheduledFor: 'asc' },
@@ -278,6 +278,9 @@ interface PlatformVariantInput {
 function validateVariants(raw: unknown): { variants: PlatformVariantInput[]; error?: never } | { error: string; variants?: never } {
   if (!raw) return { variants: [] }
   if (!Array.isArray(raw)) return { error: 'platformVariants must be an array' }
+  // WEEKLY-AUDIT: LINKEDIN, GOOGLE, and YOUTUBE are valid post platforms but not allowed here,
+  // so platform-specific content variants are silently unsupported for them. If variant support
+  // is added for those platforms, update ALLOWED accordingly.
   const ALLOWED = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X']
   const seen = new Set<string>()
   const out: PlatformVariantInput[] = []
@@ -691,56 +694,56 @@ router.get('/content-health', async (req: Request, res: Response): Promise<void>
   if (!workspaceId) { sendError(res, 400, 'BAD_REQUEST', 'workspaceId required'); return }
 
   try {
-  const role = await getWorkspaceRole(workspaceId, req.user!.id)
-  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
 
-  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-  const posts = await prisma.scheduledPost.findMany({
-    where: {
-      workspaceId,
-      status: 'PUBLISHED',
-      createdAt: { gte: since },
-    },
-    include: {
-      metrics: true,
-    },
-    orderBy: { scheduledFor: 'desc' },
-    take: 50,
-  })
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+    const posts = await prisma.scheduledPost.findMany({
+      where: {
+        workspaceId,
+        status: 'PUBLISHED',
+        createdAt: { gte: since },
+      },
+      include: {
+        metrics: true,
+      },
+      orderBy: { scheduledFor: 'desc' },
+      take: 50,
+    })
 
-  const enriched = posts.map((post) => {
-    const totalEngagement = post.metrics.reduce(
-      (sum, m) => sum + m.likes + m.comments + m.shares,
-      0,
-    )
-    const daysSincePublished = Math.floor(
-      (Date.now() - post.scheduledFor.getTime()) / (1000 * 60 * 60 * 24),
-    )
-    const healthScore = Math.min(100, Math.round((totalEngagement / Math.max(daysSincePublished, 1)) * 10))
-    const status =
-      healthScore >= 60 ? 'healthy' :
-      healthScore >= 25 ? 'aging' :
-      'repurpose'
+    const enriched = posts.map((post) => {
+      const totalEngagement = post.metrics.reduce(
+        (sum, m) => sum + m.likes + m.comments + m.shares,
+        0,
+      )
+      const daysSincePublished = Math.floor(
+        (Date.now() - post.scheduledFor.getTime()) / (1000 * 60 * 60 * 24),
+      )
+      const healthScore = Math.min(100, Math.round((totalEngagement / Math.max(daysSincePublished, 1)) * 10))
+      const status =
+        healthScore >= 60 ? 'healthy' :
+        healthScore >= 25 ? 'aging' :
+        'repurpose'
 
-    return {
-      id: post.id,
-      content: post.content,
-      platforms: post.platforms,
-      scheduledFor: post.scheduledFor,
-      daysSincePublished,
-      totalEngagement,
-      healthScore,
-      status,
-      metrics: post.metrics.map((m) => ({
-        platform: m.platform,
-        likes: m.likes,
-        comments: m.comments,
-        shares: m.shares,
-      })),
-    }
-  })
+      return {
+        id: post.id,
+        content: post.content,
+        platforms: post.platforms,
+        scheduledFor: post.scheduledFor,
+        daysSincePublished,
+        totalEngagement,
+        healthScore,
+        status,
+        metrics: post.metrics.map((m) => ({
+          platform: m.platform,
+          likes: m.likes,
+          comments: m.comments,
+          shares: m.shares,
+        })),
+      }
+    })
 
-  res.json({ posts: enriched })
+    res.json({ posts: enriched })
   } catch (err) {
     logger.error({ err }, 'Content health fetch error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch content health data')
@@ -1203,6 +1206,7 @@ router.post('/:id/ab-test', async (req: Request, res: Response): Promise<void> =
     })
     res.status(201).json({ variant })
   } catch (err) {
+    logger.error({ err }, 'A/B test create error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create A/B variant')
   }
 })
@@ -1278,6 +1282,7 @@ router.get('/:id/ab-variants', async (req: Request, res: Response): Promise<void
     const variants = await (prisma.scheduledPost.findMany as Function)({ where: { abVariantOf: id }, include: { metrics: true } })
     res.json({ original, variants })
   } catch (err) {
+    logger.error({ err }, 'A/B variants fetch error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch variants')
   }
 })
@@ -1296,6 +1301,7 @@ router.get('/:id/comments', async (req: Request, res: Response): Promise<void> =
     const comments = await (prisma as any).postComment.findMany({ where: { postId: id }, orderBy: { createdAt: 'asc' } })
     res.json({ comments })
   } catch (err) {
+    logger.error({ err }, 'Fetch post comments error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch comments')
   }
 })
@@ -1316,6 +1322,7 @@ router.post('/:id/comments', async (req: Request, res: Response): Promise<void> 
     })
     res.status(201).json({ comment })
   } catch (err) {
+    logger.error({ err }, 'Create post comment error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create comment')
   }
 })
@@ -1330,6 +1337,7 @@ router.delete('/:id/comments/:commentId', async (req: Request, res: Response): P
     await (prisma as any).postComment.delete({ where: { id: commentId } })
     res.json({ success: true })
   } catch (err) {
+    logger.error({ err }, 'Delete post comment error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to delete comment')
   }
 })

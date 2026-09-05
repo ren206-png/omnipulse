@@ -50,7 +50,7 @@ export function decryptToken(stored: string): string {
     const encrypted = Buffer.from(parts[2], 'base64')
     const decipher = createDecipheriv(ALGO, key, iv)
     decipher.setAuthTag(tag)
-    return decipher.update(encrypted) + decipher.final('utf8')
+    return decipher.update(encrypted).toString('utf8') + decipher.final('utf8')
   } catch (err) {
     logger.error({ err }, 'Token decryption failed — returning stored value as-is')
     return stored
