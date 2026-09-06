@@ -39,13 +39,13 @@ export async function startStuckJobSweeperWorker(): Promise<void> {
       const stuckPosts = await (prisma as any).scheduledPost.findMany({
         where: {
           status: 'PROCESSING',
-          updatedAt: { lt: cutoff },
+          createdAt: { lt: cutoff },
         },
         select: {
           id: true,
           workspaceId: true,
           platforms: true,
-          updatedAt: true,
+          createdAt: true,
           errorLog: true,
         },
       })
