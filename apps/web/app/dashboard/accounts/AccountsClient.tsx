@@ -542,7 +542,7 @@ export function AccountsClient({ token }: Props) {
 
   function handleOAuthConnect(platform: Platform) {
     if (!activeWorkspace) return
-    window.location.href = `${apiUrl}/api/v1/social-accounts/oauth/connect?platform=${platform}&workspaceId=${activeWorkspace.id}`
+    window.location.href = `${apiUrl}/api/v1/social-accounts/oauth/connect?platform=${platform}&workspaceId=${activeWorkspace.id}&token=${encodeURIComponent(token)}`
   }
 
   function showToast(message: string, type: 'success' | 'info' = 'success') {

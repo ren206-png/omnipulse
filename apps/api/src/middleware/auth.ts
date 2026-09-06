@@ -24,6 +24,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const token = req.headers.authorization?.startsWith('Bearer ')
     ? req.headers.authorization.slice(7)
     : (req.cookies as Record<string, string> | undefined)?.token
+    ?? (typeof req.query.token === 'string' ? req.query.token : undefined)
 
   if (!token) {
     sendError(res, 401, 'UNAUTHORIZED', 'Missing or invalid Authorization header')
