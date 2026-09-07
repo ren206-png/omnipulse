@@ -9,8 +9,6 @@ RUN npm install --legacy-peer-deps --ignore-scripts
 COPY . .
 RUN ./node_modules/.bin/prisma generate
 RUN npm run build
-# Copy Prisma runtime files (non-TS) into dist so Node can find them at runtime
-RUN cp -r generated dist/
 
 EXPOSE 4000
 ENV NODE_ENV=production
