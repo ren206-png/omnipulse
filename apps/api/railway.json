@@ -5,7 +5,7 @@
     "buildCommand": "npm install --legacy-peer-deps --ignore-scripts && ./node_modules/.bin/prisma generate && npm run build"
   },
   "deploy": {
-    "startCommand": "node --experimental-specifier-resolution=node dist/src/index.js",
+    "startCommand": "node --import tsx/esm dist/src/index.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 30,
     "restartPolicyType": "ON_FAILURE"
