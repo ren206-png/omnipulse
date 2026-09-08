@@ -101,6 +101,26 @@ async function runMigrations() {
 // Fire-and-forget: let Express start immediately
 runMigrations().catch((e) => console.error('[Startup] runMigrations threw:', e))
 
+// On startup, clean stale failed BullMQ jobs left over from prior deploys.
+// Each service restart marks in-flight jobs as failed — this keeps the queue clean.
+async function cleanStaleBullMqJobs() {
+  const { redisConnection } = await import('./lib/queue.js')
+  const queues = [
+    'stuck-job-sweeper', 'publish-post', 'analytics-sync',
+    'evergreen', 'evergreen-recycler', 'guardian',
+    'automation-execute', 'automation-outbox', 'automation-resume',
+    'automation-trigger', 'automation-wakeup',
+  ]
+  for (const name of queues) {
+    try {
+      const q = new Queue(name, { connection: redisConnection })
+      const cleaned = await q.clean(0, 500, 'failed')
+      if (cleaned.length > 0) logger.info({ queue: name, cleaned: cleaned.length }, '[Startup] Cleaned stale failed jobs')
+    } catch { /* ignore — queue may not exist yet */ }
+  }
+}
+cleanStaleBullMqJobs().catch((e) => logger.warn({ err: e }, '[Startup] Failed to clean stale BullMQ jobs'))
+
 const app = express()
 
 // Trust Railway's reverse proxy so express-rate-limit and IP detection work correctly
