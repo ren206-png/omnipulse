@@ -65,6 +65,7 @@ import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { startEvergreenRecyclerWorker } from './workers/evergreenRecycler.worker.js'
 import { startStuckJobSweeperWorker } from './workers/stuckJobSweeper.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
+import { analyticsWorker } from './workers/analytics.worker.js'
 import { startGuardianWorker } from './workers/guardian.worker.js'
 import { engagementAlertWorker } from './workers/engagementAlert.worker.js'
 import { startRssFeedWorker } from './workers/rssFeed.worker.js'
@@ -219,8 +220,10 @@ startStuckJobSweeperWorker().catch((err) => logger.error({ err }, 'Failed to sta
 // Engagement Alert worker — auto-starts on import (Worker instantiated at module level).
 // `void` suppresses the unused-import lint warning; the side effect is the worker registration.
 void engagementAlertWorker
-// Sync analytics every 6 hours
+// Sync analytics every 6 hours (direct platform API calls)
 setInterval(() => { syncAnalytics().catch(() => {}) }, 6 * 60 * 60 * 1000)
+// BullMQ analytics worker (Ayrshare-based daily sync — registers heartbeat)
+void analyticsWorker
 // RSS Feed worker — polls active feeds on their configured interval (every 5 min check)
 startRssFeedWorker()
 // Weekly Digest worker — sends Monday 08:00 UTC performance emails
