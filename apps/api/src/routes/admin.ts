@@ -240,19 +240,8 @@ router.post('/health/reset-breaker/:name', (req: Request, res: Response): void =
   res.json({ ok: true, breaker: breaker.toJSON() })
 })
 
-// POST /api/v1/admin/queues/:name/clean-failed
-// Drains all failed jobs from a named BullMQ queue.
-// Accepts either admin session token OR INTERNAL_API_SECRET header for CLI access.
+// POST /api/v1/admin/queues/:name/clean-failed (admin-auth protected)
 router.post('/queues/:name/clean-failed', async (req: Request, res: Response): Promise<void> => {
-  const internalSecret = req.headers['x-internal-secret']
-  const isInternal = env.INTERNAL_API_SECRET && internalSecret === env.INTERNAL_API_SECRET
-  if (!isInternal) {
-    // Fall back to standard admin auth
-    await new Promise<void>((resolve, reject) => requireAuth(req, res, (err?: unknown) => err ? reject(err) : resolve()))
-    if (res.headersSent) return
-    await new Promise<void>((resolve, reject) => requireAdmin(req, res, (err?: unknown) => err ? reject(err) : resolve()))
-    if (res.headersSent) return
-  }
   const { name } = req.params
   try {
     const q = new Queue(name, { connection: redisConnection })
@@ -263,4 +252,5 @@ router.post('/queues/:name/clean-failed', async (req: Request, res: Response): P
   }
 })
 
+export { Queue, redisConnection }
 export default router

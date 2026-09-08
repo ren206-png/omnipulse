@@ -17,6 +17,7 @@ if (env.SENTRY_DSN) {
   logger.info('Sentry initialized')
 }
 import rateLimit from 'express-rate-limit'
+import { Queue } from 'bullmq'
 import authRouter from './routes/auth.js'
 import workspacesRouter from './routes/workspaces.js'
 import postsRouter from './routes/posts.js'
@@ -197,6 +198,21 @@ app.use('/api/v1/evergreen', evergreenQueueRouter)
 app.use('/api/v1/automations', automationRouter)
 app.use('/api/v1/automation/inbound', automationInboundRouter)
 app.use('/uploads', express.static('public/uploads'))
+
+// Internal maintenance endpoint — INTERNAL_API_SECRET only, no user auth required
+app.post('/internal/queues/:name/clean-failed', async (req, res) => {
+  const secret = req.headers['x-internal-secret']
+  if (!env.INTERNAL_API_SECRET || secret !== env.INTERNAL_API_SECRET) {
+    res.status(401).json({ error: 'Unauthorized' }); return
+  }
+  try {
+    const q = new Queue(req.params.name, { connection: (await import('./lib/queue.js')).redisConnection })
+    const cleaned = await q.clean(0, 1000, 'failed')
+    res.json({ ok: true, queue: req.params.name, cleaned: cleaned.length })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
 
 // Sentry error handler — must be after all routes
 if (env.SENTRY_DSN) {
