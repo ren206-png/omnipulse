@@ -102,6 +102,9 @@ runMigrations().catch((e) => console.error('[Startup] runMigrations threw:', e))
 
 const app = express()
 
+// Trust Railway's reverse proxy so express-rate-limit and IP detection work correctly
+app.set('trust proxy', 1)
+
 app.use(cors({
   origin: env.CORS_ORIGINS,
   credentials: true,
