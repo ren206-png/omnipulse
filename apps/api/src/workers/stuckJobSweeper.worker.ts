@@ -61,8 +61,8 @@ export async function startStuckJobSweeperWorker(): Promise<void> {
       let requeued = 0
       let dlqd = 0
 
-      for (const post of stuckPosts) {
-        // Parse attempt count from errorLog or default to 0
+      // Parse attempt counts for each post
+      const postsWithAttempts = stuckPosts.map((post) => {
         let attempts = 0
         if (post.errorLog) {
           try {
@@ -70,64 +70,87 @@ export async function startStuckJobSweeperWorker(): Promise<void> {
             attempts = typeof parsed._attempts === 'number' ? parsed._attempts : 0
           } catch { /* ignore parse errors */ }
         }
+        return { ...post, attempts }
+      })
 
-        if (attempts < 3) {
-          // Requeue
-          try {
-            await (prisma as any).scheduledPost.update({
-              where: { id: post.id },
-              data: {
-                status: 'SCHEDULED',
-                errorLog: JSON.stringify({ _attempts: attempts + 1, _requeuedAt: new Date().toISOString() }),
-              },
-            })
-            await publishPostQueue.add(
-              'publish-post',
-              { postId: post.id, workspaceId: post.workspaceId },
-              { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
-            )
-            logger.info({ postId: post.id, attempts }, '[StuckJobSweeper] Requeued stuck post')
-            requeued++
-          } catch (err) {
-            logger.error({ err, postId: post.id }, '[StuckJobSweeper] Failed to requeue post')
-          }
-        } else {
-          // Move to DLQ
-          try {
-            await (prisma as any).postDlq.create({
+      const toRequeue = postsWithAttempts.filter((p) => p.attempts < 3)
+      const toDlq = postsWithAttempts.filter((p) => p.attempts >= 3)
+
+      // --- Requeue batch ---
+      if (toRequeue.length > 0) {
+        const requeueAt = new Date().toISOString()
+        await Promise.allSettled(
+          toRequeue.map(async (post) => {
+            try {
+              await (prisma as any).scheduledPost.update({
+                where: { id: post.id },
+                data: {
+                  status: 'SCHEDULED',
+                  errorLog: JSON.stringify({ _attempts: post.attempts + 1, _requeuedAt: requeueAt }),
+                },
+              })
+              await publishPostQueue.add(
+                'publish-post',
+                { postId: post.id, workspaceId: post.workspaceId },
+                { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+              )
+              requeued++
+            } catch (err) {
+              logger.error({ err, postId: post.id }, '[StuckJobSweeper] Failed to requeue post')
+            }
+          }),
+        )
+        logger.info({ requeued }, '[StuckJobSweeper] Requeued stuck posts')
+      }
+
+      // --- DLQ batch ---
+      if (toDlq.length > 0) {
+        // Create DLQ records individually (each has unique error message)
+        await Promise.allSettled(
+          toDlq.map((post) =>
+            (prisma as any).postDlq.create({
               data: {
                 postId: post.id,
                 workspaceId: post.workspaceId,
                 platform: (post.platforms as string[]).join(','),
-                errorMessage: `Post stuck in PROCESSING for >${STUCK_THRESHOLD_MS / 60000}min after ${attempts} attempts`,
-                attempts,
+                errorMessage: `Post stuck in PROCESSING for >${STUCK_THRESHOLD_MS / 60000}min after ${post.attempts} attempts`,
+                attempts: post.attempts,
               },
-            })
-            await (prisma as any).scheduledPost.update({
-              where: { id: post.id },
-              data: { status: 'FAILED' },
-            })
+            }),
+          ),
+        )
 
-            // Notify workspace admins
-            const adminIds = await getWorkspaceAdmins(post.workspaceId)
-            await Promise.allSettled(
-              adminIds.map((userId: string) =>
-                notify({
-                  userId,
-                  type: 'POST_FAILED',
-                  title: 'Post stuck and moved to DLQ',
-                  body: `Post ${post.id} was stuck in processing and has been moved to the dead-letter queue.`,
-                  link: '/dashboard/calendar',
-                }),
-              ),
-            )
+        // Batch-update all DLQ posts to FAILED in one query
+        await (prisma as any).scheduledPost.updateMany({
+          where: { id: { in: toDlq.map((p) => p.id) } },
+          data: { status: 'FAILED' },
+        })
+        dlqd = toDlq.length
+        logger.warn({ dlqd }, '[StuckJobSweeper] Moved stuck posts to DLQ')
 
-            logger.warn({ postId: post.id, attempts }, '[StuckJobSweeper] Moved stuck post to DLQ')
-            dlqd++
-          } catch (err) {
-            logger.error({ err, postId: post.id }, '[StuckJobSweeper] Failed to DLQ post')
-          }
-        }
+        // Notify workspace admins (grouped by workspace)
+        const workspaceIds = [...new Set(toDlq.map((p) => p.workspaceId))]
+        await Promise.allSettled(
+          workspaceIds.map(async (workspaceId) => {
+            try {
+              const adminIds = await getWorkspaceAdmins(workspaceId as string)
+              const count = toDlq.filter((p) => p.workspaceId === workspaceId).length
+              await Promise.allSettled(
+                adminIds.map((userId: string) =>
+                  notify({
+                    userId,
+                    type: 'POST_FAILED',
+                    title: `${count} post(s) moved to DLQ`,
+                    body: `${count} stuck post(s) were moved to the dead-letter queue after repeated failures.`,
+                    link: '/dashboard/admin/dlq',
+                  }),
+                ),
+              )
+            } catch (err) {
+              logger.error({ err, workspaceId }, '[StuckJobSweeper] Failed to send DLQ notifications')
+            }
+          }),
+        )
       }
 
       logger.info({ requeued, dlqd }, '[StuckJobSweeper] Sweep complete')

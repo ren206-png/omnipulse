@@ -16,6 +16,7 @@ if (env.SENTRY_DSN) {
   })
   logger.info('Sentry initialized')
 }
+import rateLimit from 'express-rate-limit'
 import authRouter from './routes/auth.js'
 import workspacesRouter from './routes/workspaces.js'
 import postsRouter from './routes/posts.js'
@@ -112,6 +113,16 @@ app.use('/api/v1/tradeflow/webhook', express.raw({ type: 'application/json' }))
 app.use(cookieParser())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
+
+// Global rate limiter — 300 req/min per IP for all API routes
+// Keeps tighter per-route limits on auth/AI via their own middleware
+app.use('/api/', rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_REQUESTS', message: 'Too many requests — please slow down' },
+}))
 
 app.get('/health', (_req, res) => {
   // Intentionally synchronous and bulletproof — must always return 200 for Railway healthcheck

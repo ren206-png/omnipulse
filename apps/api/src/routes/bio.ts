@@ -12,6 +12,14 @@ const SLUG_RE = /^[a-z0-9-]{3,30}$/
 // In-memory rate limiter for public bio link clicks: 10 per IP per linkId per 24 hours
 const clickRateLimiter = new Map<string, { count: number; resetAt: number }>()
 
+// Sweep expired entries every hour to prevent unbounded memory growth on high-traffic pages
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, entry] of clickRateLimiter) {
+    if (entry.resetAt <= now) clickRateLimiter.delete(key)
+  }
+}, 60 * 60 * 1000).unref()
+
 async function canAccessWorkspace(workspaceId: string, userId: string): Promise<boolean> {
   const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
   if (!workspace) return false

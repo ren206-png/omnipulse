@@ -352,6 +352,12 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
     const isPrivileged = role === 'OWNER' || role === 'ADMIN'
     const status = isPrivileged ? 'SCHEDULED' : 'PENDING_REVIEW'
 
+    // Validate campaignId belongs to the same workspace (prevents cross-workspace data leakage)
+    if (campaignId) {
+      const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, workspaceId } })
+      if (!campaign) { sendError(res, 400, 'INVALID_CAMPAIGN', 'Campaign not found in this workspace'); return }
+    }
+
     const post = await (prisma.scheduledPost.create as Function)({
       data: {
         workspaceId,
@@ -362,9 +368,6 @@ router.post('/schedule', async (req: Request, res: Response): Promise<void> => {
         status,
         submittedBy: req.user!.id,
         ...(firstComment?.trim() ? { firstComment: firstComment.trim() } : {}),
-        // WEEKLY-AUDIT: campaignId is not validated to belong to workspaceId — a user with access to workspace A
-        // could link posts to a campaign from workspace B if they know its ID. Add:
-        //   if (campaignId) { const c = await prisma.campaign.findFirst({ where: { id: campaignId, workspaceId } }); if (!c) return sendError(res, 400, 'INVALID_CAMPAIGN', '...') }
         ...(campaignId ? { campaignId } : {}),
         ...(recurrenceFreq && ['daily','weekdays','weekly','monthly'].includes(recurrenceFreq)
           ? { recurrenceFreq } : {}),
