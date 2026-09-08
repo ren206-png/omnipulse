@@ -203,7 +203,10 @@ async function run(): Promise<void> {
     return elapsedMinutes >= f.checkInterval
   })
 
-  if (!due.length) return
+  if (!due.length) {
+    await heartbeat('rss-feed') // record heartbeat even when no feeds are due
+    return
+  }
 
   logger.info({ count: due.length }, '[RssFeed] Checking due feeds')
 
