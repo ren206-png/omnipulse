@@ -88,9 +88,12 @@ async function runMigrations() {
   const { resolve, dirname } = await import('path')
   const { fileURLToPath } = await import('url')
   try {
-    // Resolve the apps/api directory from the source file location
+    // Compiled output lands in apps/api/dist/index.js so dirname = apps/api/dist.
+    // One level up (..) reaches apps/api/ — the correct apiDir.
+    // Previously used ../.. which resolved to apps/ (one level too high), causing
+    // "prisma: not found" on every Railway deploy.
     const srcDir = dirname(fileURLToPath(import.meta.url))
-    const apiDir = resolve(srcDir, '../..')
+    const apiDir = resolve(srcDir, '..')
     const prismaBin = resolve(apiDir, 'node_modules/.bin/prisma')
     execSync(`"${prismaBin}" migrate deploy`, { stdio: 'inherit', timeout: 60_000, cwd: apiDir })
     console.log('[Startup] Migrations applied successfully')
