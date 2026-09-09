@@ -34,7 +34,7 @@ const router = Router()
 
 // ── HMAC signature verification ───────────────────────────────────────────────
 
-function verifySignature(rawBody: string, signature: string | undefined): boolean {
+function verifySignature(rawBody: Buffer, signature: string | undefined): boolean {
   if (process.env.AUTOMATION_SKIP_SIG_VERIFY === 'true') return true
   if (!signature) return false
 
@@ -44,6 +44,8 @@ function verifySignature(rawBody: string, signature: string | undefined): boolea
     return false
   }
 
+  // Compute HMAC over the raw request bytes (not re-serialised JSON) to match
+  // exactly what the sender signed — avoids key-order / whitespace drift.
   const expected = `sha256=${createHmac('sha256', secret).update(rawBody).digest('hex')}`
 
   try {
@@ -62,8 +64,9 @@ router.post('/', async (req: Request, res: Response) => {
     return
   }
 
-  // Signature check — req.body is already parsed JSON; rebuild raw JSON for HMAC
-  const rawBody = JSON.stringify(req.body)
+  // req.body is a raw Buffer because express.raw() is mounted for this path in index.ts.
+  // Verify HMAC first (over the original bytes), then parse JSON manually.
+  const rawBody = req.body as Buffer
   const signature = req.headers['x-automation-signature'] as string | undefined
 
   if (!verifySignature(rawBody, signature)) {
@@ -71,8 +74,17 @@ router.post('/', async (req: Request, res: Response) => {
     return
   }
 
-  // Parse + validate body
-  const parsed = NormalizedInboundEventSchema.safeParse(req.body)
+  // Parse JSON from the raw buffer
+  let parsedJson: unknown
+  try {
+    parsedJson = JSON.parse(rawBody.toString('utf8'))
+  } catch {
+    sendError(res, 400, 'INVALID_JSON', 'Request body is not valid JSON')
+    return
+  }
+
+  // Validate body shape
+  const parsed = NormalizedInboundEventSchema.safeParse(parsedJson)
   if (!parsed.success) {
     sendError(res, 400, 'VALIDATION_ERROR', parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '))
     return

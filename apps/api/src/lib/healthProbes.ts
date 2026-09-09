@@ -80,6 +80,12 @@ const MONITORED_QUEUES = [
   'stuck-job-sweeper',
   'engagement-alert',
   'evergreen-recycler',
+  'automation-trigger',
+  'automation-execute',
+  'automation-resume',
+  'automation-outbox',
+  'automation-wakeup',
+  'auth-token-refresh',
 ]
 
 const FAILED_JOB_ALERT_THRESHOLD = 20

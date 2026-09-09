@@ -52,7 +52,10 @@ export function decryptToken(stored: string): string {
     decipher.setAuthTag(tag)
     return decipher.update(encrypted) + decipher.final('utf8')
   } catch (err) {
-    logger.error({ err }, 'Token decryption failed — returning stored value as-is')
-    return stored
+    // Return empty string rather than the raw ciphertext — callers that use the
+    // return value as a bearer token would otherwise send garbled ciphertext to
+    // the platform API, producing a cryptic auth error instead of a clear signal.
+    logger.error({ err }, 'Token decryption failed — returning empty string (caller must handle)')
+    return ''
   }
 }

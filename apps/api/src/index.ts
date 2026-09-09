@@ -110,6 +110,7 @@ async function cleanStaleBullMqJobs() {
     'evergreen', 'evergreen-recycler', 'guardian',
     'automation-execute', 'automation-outbox', 'automation-resume',
     'automation-trigger', 'automation-wakeup',
+    'engagement-alert', 'auth-token-refresh', 'weekly-digest', 'system-monitor',
   ]
   for (const name of queues) {
     try {
@@ -134,6 +135,8 @@ app.use(cors({
 app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }))
 // Raw body for TradeFlow webhooks — before express.json()
 app.use('/api/v1/tradeflow/webhook', express.raw({ type: 'application/json' }))
+// Raw body for Automation inbound webhooks — HMAC is verified against the raw bytes
+app.use('/api/v1/automation/inbound', express.raw({ type: 'application/json' }))
 
 app.use(cookieParser())
 app.use(express.json())
@@ -273,7 +276,7 @@ startSystemMonitorWorker().catch((err) => logger.error({ err }, 'Failed to start
 startAuthTokenRefreshWorker().catch((err) => logger.error({ err }, 'Failed to start auth token refresh worker'))
 
 // ─── Automation Engine Workers ────────────────────────────────────────────────
-if (process.env.AUTOMATION_ENGINE_ENABLED === 'true') {
+if (env.AUTOMATION_ENGINE_ENABLED) {
   startAutomationTriggerWorker()
   startAutomationExecuteWorker()
   startAutomationResumeWorker()

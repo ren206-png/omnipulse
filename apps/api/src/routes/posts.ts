@@ -846,7 +846,7 @@ router.post('/:id/approve', async (req: Request, res: Response): Promise<void> =
     const delay = post.scheduledFor.getTime() - Date.now()
     const job = await publishPostQueue.add(
       'publish-post',
-      { postId: post.id },
+      { postId: post.id, workspaceId: post.workspaceId },
       { delay, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
     )
 
@@ -1314,6 +1314,7 @@ router.post('/:id/comments', async (req: Request, res: Response): Promise<void> 
   const { id } = req.params
   const { body } = req.body as { body?: string }
   if (!body?.trim()) { sendError(res, 400, 'VALIDATION_ERROR', 'Comment body required'); return }
+  if (body.trim().length > 2000) { sendError(res, 400, 'VALIDATION_ERROR', 'Comment body must be 2000 characters or fewer'); return }
   try {
     const post = await prisma.scheduledPost.findUnique({ where: { id }, select: { workspaceId: true } })
     if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
