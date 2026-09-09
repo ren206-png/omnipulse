@@ -34,18 +34,20 @@ export async function startStuckJobSweeperWorker(): Promise<void> {
 
       const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MS)
 
-      // Find posts stuck in PROCESSING status
-      // Note: PostStatus enum uses uppercase values
+      // Find posts stuck in PROCESSING status.
+      // Use updatedAt (the time the status was last changed) as the cutoff so
+      // posts created long ago but only recently set to PROCESSING are swept
+      // correctly — createdAt was previously used but gave inaccurate results.
       const stuckPosts = await (prisma as any).scheduledPost.findMany({
         where: {
           status: 'PROCESSING',
-          createdAt: { lt: cutoff },
+          updatedAt: { lt: cutoff },
         },
         select: {
           id: true,
           workspaceId: true,
           platforms: true,
-          createdAt: true,
+          updatedAt: true,
           errorLog: true,
         },
       })
