@@ -68,9 +68,12 @@ export const env = {
   // Monitoring alerts
   SLACK_ALERT_WEBHOOK_URL: process.env.SLACK_ALERT_WEBHOOK_URL ?? '',
   MONITOR_ALERT_WEBHOOK_URL: process.env.MONITOR_ALERT_WEBHOOK_URL ?? '',
-  // Facebook/Instagram OAuth (for token auto-refresh)
-  FACEBOOK_APP_ID: process.env.FACEBOOK_APP_ID ?? '',
-  FACEBOOK_APP_SECRET: process.env.FACEBOOK_APP_SECRET ?? '',
+  // Facebook/Instagram OAuth credentials (used for both OAuth flow and token auto-refresh)
+  FACEBOOK_CLIENT_ID: process.env.FACEBOOK_CLIENT_ID ?? process.env.FACEBOOK_APP_ID ?? '',
+  FACEBOOK_CLIENT_SECRET: process.env.FACEBOOK_CLIENT_SECRET ?? process.env.FACEBOOK_APP_SECRET ?? '',
+  // Legacy aliases — some Railway envs may have APP_ID set instead of CLIENT_ID
+  FACEBOOK_APP_ID: process.env.FACEBOOK_APP_ID ?? process.env.FACEBOOK_CLIENT_ID ?? '',
+  FACEBOOK_APP_SECRET: process.env.FACEBOOK_APP_SECRET ?? process.env.FACEBOOK_CLIENT_SECRET ?? '',
   // Google / YouTube OAuth
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? '',
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? '',

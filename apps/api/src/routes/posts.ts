@@ -435,6 +435,12 @@ router.post('/queue-schedule', async (req: Request, res: Response): Promise<void
     const role = await getWorkspaceRole(workspaceId, req.user!.id)
     if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
 
+    // Validate campaignId belongs to the same workspace (prevents cross-workspace data leakage)
+    if (campaignId) {
+      const campaign = await prisma.campaign.findFirst({ where: { id: campaignId, workspaceId } })
+      if (!campaign) { sendError(res, 400, 'INVALID_CAMPAIGN', 'Campaign not found in this workspace'); return }
+    }
+
     // Load active queue slots for this workspace
     const activeSlots = await (prisma.queueSlot.findMany as Function)({
       where: { workspaceId, isActive: true },

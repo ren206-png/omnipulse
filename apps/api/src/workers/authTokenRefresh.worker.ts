@@ -33,8 +33,10 @@ let _worker: Worker | null = null
 // ── Platform-specific refresh logic ──────────────────────────────────────────
 
 async function refreshFacebookToken(accessToken: string): Promise<{ token: string; expiresAt: Date } | null> {
-  const appId     = process.env.FACEBOOK_APP_ID
-  const appSecret = process.env.FACEBOOK_APP_SECRET
+  // FACEBOOK_CLIENT_ID/SECRET is the primary name used across the codebase (OAuth flow)
+  // Fall back to FACEBOOK_APP_ID/SECRET for backwards compatibility
+  const appId     = process.env.FACEBOOK_CLIENT_ID ?? process.env.FACEBOOK_APP_ID
+  const appSecret = process.env.FACEBOOK_CLIENT_SECRET ?? process.env.FACEBOOK_APP_SECRET
   if (!appId || !appSecret) return null
 
   const url = `https://graph.facebook.com/oauth/access_token?grant_type=fb_exchange_token&client_id=${appId}&client_secret=${appSecret}&fb_exchange_token=${encodeURIComponent(accessToken)}`
