@@ -33,7 +33,7 @@ jobs:
         with:
           version: 11
 
-      - name: Setup Node 20
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -44,8 +44,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build API
-        working-directory: apps/api
-        run: pnpm run build
+        run: pnpm --filter @omnipulse/api run build
 
   # ─────────────────────────────────────────────
   # Job 2: API Tests (tenant isolation gate)
@@ -63,7 +62,7 @@ jobs:
         with:
           version: 11
 
-      - name: Setup Node 20
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -73,12 +72,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Add node_modules/.bin to PATH
-        run: echo "${{ github.workspace }}/node_modules/.bin" >> $GITHUB_PATH
-
       - name: Run tests
-        working-directory: apps/api
-        run: tsx --test src/routes/__tests__/tenantIsolation.test.ts
+        run: pnpm --filter @omnipulse/api exec tsx --test src/routes/__tests__/tenantIsolation.test.ts
 
   # ─────────────────────────────────────────────
   # Job 3: Web TypeCheck + Build
@@ -99,7 +94,7 @@ jobs:
         with:
           version: 11
 
-      - name: Setup Node 20
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -109,12 +104,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Add node_modules/.bin to PATH
-        run: echo "${{ github.workspace }}/node_modules/.bin" >> $GITHUB_PATH
-
       - name: Build Web
-        working-directory: apps/web
-        run: next build
+        run: pnpm --filter @omnipulse/web run build
 
   # ─────────────────────────────────────────────
   # Job 4: Security Audit (advisory only)
@@ -133,7 +124,7 @@ jobs:
         with:
           version: 11
 
-      - name: Setup Node 20
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
