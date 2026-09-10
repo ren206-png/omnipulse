@@ -549,21 +549,21 @@ router.post('/trends', async (req: Request, res: Response): Promise<void> => {
     const platformStr = platforms?.join(', ') ?? 'Instagram, TikTok, X'
     const message = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1000,
+      max_tokens: 2048,
       messages: [{
         role: 'user',
-        content: `You are a social media trends analyst. For the "${niche}" niche on ${platformStr}, generate current trending topics and content ideas. Today is ${new Date().toLocaleDateString()}. Return ONLY valid JSON, no markdown:
+        content: `You are a social media trends analyst. For the "${niche}" niche on ${platformStr}, generate current trending topics and content ideas. Today is ${new Date().toLocaleDateString()}. Return ONLY valid JSON, no markdown. Keep each field concise (description max 20 words, contentIdeas max 8 words each, 2 ideas per trend):
 {
   "trends": [
     {
       "topic": "Topic name",
       "momentum": "rising|hot|stable",
-      "description": "Why this is trending and what content to create",
-      "contentIdeas": ["Idea 1", "Idea 2", "Idea 3"],
+      "description": "Brief description under 20 words",
+      "contentIdeas": ["Short idea 1", "Short idea 2"],
       "suggestedHashtags": ["#tag1", "#tag2", "#tag3"]
     }
   ],
-  "summary": "Overall trend summary for this niche this week"
+  "summary": "One sentence summary"
 }
 Return exactly 6 trends.`,
       }],
@@ -573,10 +573,8 @@ Return exactly 6 trends.`,
     const result = JSON.parse(cleaned)
     res.json(result)
   } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err)
-    console.error('[trends] error:', errMsg)
     logger.error({ err }, 'Trend detection error')
-    sendError(res, 500, 'INTERNAL_ERROR', `Trend detection failed: ${errMsg}`)
+    sendError(res, 500, 'INTERNAL_ERROR', 'Trend detection failed')
   }
 })
 
