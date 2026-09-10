@@ -45,7 +45,7 @@ jobs:
 
       - name: Generate Prisma client
         working-directory: apps/api
-        run: npx prisma generate
+        run: pnpm exec prisma generate
 
       - name: Build API
         working-directory: apps/api
@@ -79,11 +79,11 @@ jobs:
 
       - name: Generate Prisma client
         working-directory: apps/api
-        run: npx prisma generate
+        run: pnpm exec prisma generate
 
       - name: Run tests
         working-directory: apps/api
-        run: npx tsx --test src/routes/__tests__/tenantIsolation.test.ts
+        run: pnpm exec tsx --test src/routes/__tests__/tenantIsolation.test.ts
 
   # ─────────────────────────────────────────────
   # Job 3: Web TypeCheck + Build
@@ -115,8 +115,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Web
-        working-directory: apps/web
-        run: pnpm run build
+        run: pnpm --filter @omnipulse/web build
 
   # ─────────────────────────────────────────────
   # Job 4: Security Audit (advisory only)
