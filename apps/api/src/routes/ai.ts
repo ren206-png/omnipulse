@@ -573,8 +573,10 @@ Return exactly 6 trends.`,
     const result = JSON.parse(cleaned)
     res.json(result)
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err)
+    console.error('[trends] error:', errMsg)
     logger.error({ err }, 'Trend detection error')
-    sendError(res, 500, 'INTERNAL_ERROR', 'Trend detection failed')
+    sendError(res, 500, 'INTERNAL_ERROR', `Trend detection failed: ${errMsg}`)
   }
 })
 
