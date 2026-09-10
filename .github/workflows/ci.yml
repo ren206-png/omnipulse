@@ -75,10 +75,11 @@ jobs:
       - name: Run tests
         run: pnpm --filter @omnipulse/api exec tsx --test src/routes/__tests__/tenantIsolation.test.ts
         env:
-          # Tenant isolation tests mock Prisma — dummy URL prevents env.ts from throwing
+          # Tenant isolation tests mock Prisma — dummy values prevent env.ts from throwing
           DATABASE_URL: postgresql://x:x@localhost:5432/x
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: test-secret-for-tenant-isolation-32bytes!!
+          JWT_EXPIRES_IN: 7d
           NODE_ENV: test
 
   # ─────────────────────────────────────────────
