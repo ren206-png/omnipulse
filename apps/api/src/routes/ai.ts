@@ -165,7 +165,7 @@ ${numVariations > 1 ? `Generate exactly ${numVariations} distinct variations sep
 
   try {
     const stream = client.messages.stream({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 1024,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -252,7 +252,7 @@ Return JSON like: { "INSTAGRAM": ["#tag1", "#tag2"], "X": ["#tag1"] }`
   try {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 512,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -290,7 +290,7 @@ router.post('/hashtag-research', aiLimiter, async (req: Request, res: Response):
   try {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 1024,
       messages: [{
         role: 'user',
@@ -443,7 +443,7 @@ Distribute evenly across platforms and days. Write ready-to-publish content.`
   try {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 4096,
       messages: [{ role: 'user', content: userPrompt }],
       system: systemPrompt,
@@ -477,7 +477,7 @@ router.post('/translate', aiLimiter, async (req: Request, res: Response): Promis
   try {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 1024,
       messages: [{
         role: 'user',
@@ -501,7 +501,7 @@ router.post('/score-post', async (req: Request, res: Response): Promise<void> =>
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const platformStr = platforms?.join(', ') ?? 'general social media'
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 600,
       messages: [{
         role: 'user',
@@ -548,7 +548,7 @@ router.post('/trends', async (req: Request, res: Response): Promise<void> => {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const platformStr = platforms?.join(', ') ?? 'Instagram, TikTok, X'
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 1000,
       messages: [{
         role: 'user',
@@ -585,7 +585,7 @@ router.post('/draft-reply', aiLimiter, async (req: Request, res: Response): Prom
   try {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message_result = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 300,
       messages: [{
         role: 'user',
@@ -851,7 +851,7 @@ router.post('/repurpose', aiLimiter, async (req: Request, res: Response): Promis
   try {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 2048,
       messages: [{
         role: 'user',
@@ -953,7 +953,7 @@ router.post('/coach', aiLimiter, async (req: Request, res: Response): Promise<vo
   try {
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 600,
       messages: [{
         role: 'user',
@@ -1117,7 +1117,7 @@ Return ONLY a JSON array of strings. No markdown, no labels, no explanations. Ex
 
     const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
     const message = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 1024,
       messages: [{ role: 'user', content: userPrompt }],
     })
@@ -1360,7 +1360,7 @@ Rules:
   let raw: string
   try {
     const msg = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 4096,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
