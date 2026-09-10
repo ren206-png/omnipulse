@@ -31,7 +31,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 11
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
@@ -61,7 +61,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 11
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
@@ -73,11 +73,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Add node_modules/.bin to PATH
+        run: echo "${{ github.workspace }}/node_modules/.bin" >> $GITHUB_PATH
+
       - name: Run tests
         working-directory: apps/api
         run: tsx --test src/routes/__tests__/tenantIsolation.test.ts
-        env:
-          PATH: ${{ github.workspace }}/node_modules/.bin:$PATH
 
   # ─────────────────────────────────────────────
   # Job 3: Web TypeCheck + Build
@@ -96,7 +97,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 11
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
@@ -108,11 +109,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Add node_modules/.bin to PATH
+        run: echo "${{ github.workspace }}/node_modules/.bin" >> $GITHUB_PATH
+
       - name: Build Web
         working-directory: apps/web
         run: next build
-        env:
-          PATH: ${{ github.workspace }}/node_modules/.bin:$PATH
 
   # ─────────────────────────────────────────────
   # Job 4: Security Audit (advisory only)
@@ -129,7 +131,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 11
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
