@@ -42,6 +42,8 @@ export const env = {
   STRIPE_PRO_PRICE_ID: process.env.STRIPE_PRO_PRICE_ID,
   STRIPE_AGENCY_PRICE_ID: process.env.STRIPE_AGENCY_PRICE_ID,
   STRIPE_STARTER_PRICE_ID: process.env.STRIPE_STARTER_PRICE_ID,
+  STRIPE_AI_METERED_PRICE_ID: process.env.STRIPE_AI_METERED_PRICE_ID,
+  STRIPE_AI_METER_EVENT_NAME: process.env.STRIPE_AI_METER_EVENT_NAME ?? '',
   APP_URL: process.env.APP_URL ?? 'http://localhost:3000',
   API_URL: process.env.API_URL ?? process.env.APP_URL ?? 'http://localhost:4000',
   ADMIN_EMAIL: process.env.ADMIN_EMAIL ?? '',

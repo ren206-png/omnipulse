@@ -72,6 +72,9 @@ model Workspace {
   approvalMagicLinks  ApprovalMagicLink[]
   branding            WorkspaceBranding?
   evergreenQueue      EvergreenQueue[]
+  stripeMeteredItemId   String?   // Stripe subscription item ID for metered AI billing
+  aiGenerationsMonth    Int       @default(0)  // total AI usage this billing period
+  aiUsagePeriodStart    DateTime? // start of current billing period
   // Automation engine — additive, default off
   automationEnabled          Boolean                  @default(false)
   automationOptOutKeywords   String[]                 @default([])

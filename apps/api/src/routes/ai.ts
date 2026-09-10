@@ -15,6 +15,7 @@ import { scanContent } from '../lib/safeguard.js'
 import { generateCaption } from '../lib/visualCopywriter.js'
 import { logActivity } from '../lib/activity.js'
 import { assertWorkspaceAccess, TenantAccessError } from '../lib/tenantGuard.js'
+import { trackAiGeneration } from '../lib/trackAiUsage.js'
 
 // Singleton Redis for AI rate-limit counters
 let _aiRedis: IORedis | null = null
@@ -93,14 +94,14 @@ router.post('/generate', aiLimiter, async (req: Request, res: Response): Promise
     return
   }
 
-  // Plan gate: AI requires PRO or AGENCY
+  // Plan gate: FREE plan blocks AI entirely; paid plans allow overages (billed via Stripe)
   const { workspaceId } = req.body as { workspaceId?: string }
   if (workspaceId) {
     const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
     if (workspace) {
       const limits = PLAN_LIMITS[workspace.plan as Plan]
       if (limits.aiGenerations === 0) {
-        sendError(res, 402, 'PLAN_LIMIT', 'AI content generation requires a Pro or Agency plan. Upgrade to unlock this feature.')
+        sendError(res, 402, 'PLAN_REQUIRED', 'AI features require a paid plan. Upgrade to Starter to get started.')
         return
       }
     }
@@ -180,6 +181,7 @@ ${numVariations > 1 ? `Generate exactly ${numVariations} distinct variations sep
     res.write('data: [DONE]\n\n')
     res.end()
 
+    if (workspaceId) trackAiGeneration(workspaceId).catch(() => {}) // fire and forget
     logger.info({ userId: req.user!.id, platforms, tone, variations: numVariations }, 'AI content generated')
   } catch (err) {
     logger.error({ err }, 'AI generation error')
@@ -222,7 +224,7 @@ router.post('/hashtags', aiLimiter, async (req: Request, res: Response): Promise
     if (workspace) {
       const limits = PLAN_LIMITS[workspace.plan as Plan]
       if (limits.aiGenerations === 0) {
-        sendError(res, 402, 'PLAN_LIMIT', 'AI hashtag suggestions require a Pro or Agency plan.')
+        sendError(res, 402, 'PLAN_REQUIRED', 'AI features require a paid plan. Upgrade to Starter to get started.')
         return
       }
     }
@@ -263,6 +265,7 @@ Return JSON like: { "INSTAGRAM": ["#tag1", "#tag2"], "X": ["#tag1"] }`
     const hashtags = jsonMatch ? JSON.parse(jsonMatch[0]) as Record<string, string[]> : {}
 
     res.json({ hashtags })
+    if (workspaceId) trackAiGeneration(workspaceId).catch(() => {}) // fire and forget
     logger.info({ userId: req.user!.id, platforms }, 'Hashtags generated')
   } catch (err) {
     logger.error({ err }, 'Hashtag generation error')
@@ -452,6 +455,9 @@ Distribute evenly across platforms and days. Write ready-to-publish content.`
     const jsonMatch = raw.match(/\[[\s\S]*\]/)
     const plan = jsonMatch ? JSON.parse(jsonMatch[0]) : []
     res.json({ plan })
+    // content-calendar has no workspaceId in body per current signature, but track if provided
+    const { workspaceId: calWsId } = req.body as { workspaceId?: string }
+    if (calWsId) trackAiGeneration(calWsId).catch(() => {}) // fire and forget
     logger.info({ userId: req.user!.id, niche, platforms, weeks: numWeeks }, 'AI calendar generated')
   } catch (err) {
     logger.error({ err }, 'AI calendar generation error')
@@ -486,6 +492,8 @@ router.post('/translate', aiLimiter, async (req: Request, res: Response): Promis
     })
     const translated = message.content[0].type === 'text' ? message.content[0].text : ''
     res.json({ translated })
+    const { workspaceId: translateWsId } = req.body as { workspaceId?: string }
+    if (translateWsId) trackAiGeneration(translateWsId).catch(() => {}) // fire and forget
   } catch (err) {
     logger.error({ err }, 'Translation error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Translation failed')
@@ -597,6 +605,8 @@ router.post('/draft-reply', aiLimiter, async (req: Request, res: Response): Prom
     })
     const reply = message_result.content[0].type === 'text' ? message_result.content[0].text : ''
     res.json({ reply })
+    const { workspaceId: replyWsId } = req.body as { workspaceId?: string }
+    if (replyWsId) trackAiGeneration(replyWsId).catch(() => {}) // fire and forget
   } catch (err) {
     logger.error({ err }, 'Draft reply error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Draft failed')
@@ -619,13 +629,13 @@ router.post('/multiply', async (req: Request, res: Response): Promise<void> => {
     return
   }
 
-  // Plan gate: require PRO or AGENCY
+  // Plan gate: FREE plan blocks AI entirely; paid plans allow overages (billed via Stripe)
   if (workspaceId) {
     const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
     if (workspace) {
       const limits = PLAN_LIMITS[workspace.plan as Plan]
       if (limits.aiGenerations === 0) {
-        sendError(res, 402, 'PLAN_LIMIT', 'AI features require a Pro or Agency plan.')
+        sendError(res, 402, 'PLAN_REQUIRED', 'AI features require a paid plan. Upgrade to Starter to get started.')
         return
       }
     }
@@ -654,6 +664,7 @@ router.post('/multiply', async (req: Request, res: Response): Promise<void> => {
     const variants = await generateVariants(masterContent.trim(), brandName)
 
     await incrementDailyLimit(userId, 'ai:multiply')
+    if (workspaceId) trackAiGeneration(workspaceId).catch(() => {}) // fire and forget
     logger.info({ userId, workspaceId, variantCount: Object.keys(variants).length }, 'Content Multiplier used')
 
     res.json({ variants })
@@ -768,13 +779,13 @@ router.post('/caption-suggestion', aiLimiter, async (req: Request, res: Response
     return
   }
 
-  // Plan gate
+  // Plan gate: FREE plan blocks AI entirely; paid plans allow overages (billed via Stripe)
   if (workspaceId) {
     const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
     if (workspace) {
       const limits = PLAN_LIMITS[workspace.plan as Plan]
       if (limits.aiGenerations === 0) {
-        sendError(res, 402, 'PLAN_LIMIT', 'AI features require a Pro or Agency plan.')
+        sendError(res, 402, 'PLAN_REQUIRED', 'AI features require a paid plan. Upgrade to Starter to get started.')
         return
       }
     }
@@ -802,6 +813,7 @@ router.post('/caption-suggestion', aiLimiter, async (req: Request, res: Response
     const suggestedCaption = await generateCaption(imageUrl.trim(), brandName)
 
     await incrementDailyLimit(userId, 'ai:vision')
+    if (workspaceId) trackAiGeneration(workspaceId).catch(() => {}) // fire and forget
     logger.info({ userId, workspaceId }, 'Visual caption generated')
 
     res.json({ suggestedCaption })
@@ -879,6 +891,7 @@ router.post('/repurpose', aiLimiter, async (req: Request, res: Response): Promis
       slides,
       sourcePost: { id: post.id, content: post.content.slice(0, 100) },
     })
+    if (workspaceId) trackAiGeneration(workspaceId).catch(() => {}) // fire and forget
     logger.info({ userId: req.user!.id, postId, targetFormat }, 'Post repurposed')
   } catch (err) {
     logger.error({ err }, 'Repurpose error')
@@ -970,6 +983,8 @@ Rewrite the post following the instruction exactly. Return ONLY the improved pos
     })
     const improved = response.content[0].type === 'text' ? response.content[0].text.trim() : content
     res.json({ improved, original: content })
+    const { workspaceId: coachWsId } = req.body as { workspaceId?: string }
+    if (coachWsId) trackAiGeneration(coachWsId).catch(() => {}) // fire and forget
   } catch (err) {
     logger.error({ err }, 'AI coach error')
     sendError(res, 500, 'AI_ERROR', 'AI coach failed')
@@ -1134,6 +1149,7 @@ Return ONLY a JSON array of strings. No markdown, no labels, no explanations. Ex
     }
 
     res.json({ captions })
+    trackAiGeneration(workspaceId).catch(() => {}) // fire and forget
     logger.info({ userId: req.user!.id, workspaceId, topic, platform, count: numCaptions }, 'Brand voice captions generated')
   } catch (err) {
     logger.error({ err }, 'Brand voice generation error')
@@ -1449,6 +1465,7 @@ Rules:
       hook: plan.posts[i]?.hook ?? '',
     })),
   })
+  trackAiGeneration(workspaceId).catch(() => {}) // fire and forget
 })
 
 export default router

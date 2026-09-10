@@ -36,6 +36,8 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
       limits: PLAN_LIMITS[plan],
       subscriptionStatus: workspace.subscriptionStatus ?? null,
       stripeCustomerId: workspace.stripeCustomerId ?? null,
+      aiGenerationsMonth: workspace.aiGenerationsMonth,
+      aiUsagePeriodStart: workspace.aiUsagePeriodStart ?? null,
     })
   } catch (err) {
     logger.error({ err }, 'Billing status error')
@@ -189,6 +191,11 @@ async function handleWebhookEvent(event: Stripe.Event) {
           subscriptionStatus: 'active',
         },
       })
+      // Reset AI usage counter for new subscription period
+      await prisma.workspace.update({
+        where: { id: workspaceId },
+        data: { aiGenerationsMonth: 0, aiUsagePeriodStart: new Date() },
+      })
       logger.info({ workspaceId, plan }, 'Subscription activated')
       break
     }
@@ -255,6 +262,22 @@ async function handleWebhookEvent(event: Stripe.Event) {
         body: 'Your 14-day free trial ends in 3 days. Add a payment method to keep your account active.',
       })
       logger.info({ workspaceId }, 'trial_will_end notification sent')
+      break
+    }
+
+    case 'invoice.payment_succeeded': {
+      const invoice = event.data.object as Stripe.Invoice
+      const subId = (invoice as any).subscription as string | null
+      if (!subId) break
+      // Reset monthly AI usage counter at billing period renewal
+      await prisma.workspace.updateMany({
+        where: { stripeSubscriptionId: subId },
+        data: {
+          aiGenerationsMonth: 0,
+          aiUsagePeriodStart: new Date(),
+        }
+      })
+      logger.info({ subId }, 'Reset AI usage counter for new billing period')
       break
     }
 

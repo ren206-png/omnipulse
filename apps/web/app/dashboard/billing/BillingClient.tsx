@@ -24,6 +24,8 @@ interface BillingStatus {
   limits: PlanLimits
   subscriptionStatus: string | null
   stripeCustomerId: string | null
+  aiGenerationsMonth: number
+  aiUsagePeriodStart: string | null
 }
 
 interface Props {
@@ -234,6 +236,23 @@ export function BillingClient({ token }: Props) {
               {actionLoading === 'portal' ? 'Opening…' : 'Manage Subscription'}
             </Button>
           )}
+        </div>
+      )}
+
+      {/* AI Usage */}
+      {status && status.plan !== 'FREE' && (
+        <div className="rounded-lg border bg-muted/30 px-4 py-4 space-y-1">
+          <p className="text-sm font-medium">AI Usage This Billing Period</p>
+          <p className="text-2xl font-bold">{status.aiGenerationsMonth.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground">
+            generations used
+            {status.aiUsagePeriodStart
+              ? ` since ${new Date(status.aiUsagePeriodStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+              : ''}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Your plan includes {status.limits.aiGenerations} generations/hour. Overage beyond your plan&apos;s included generations is billed at $0.05/generation at month end.
+          </p>
         </div>
       )}
 
