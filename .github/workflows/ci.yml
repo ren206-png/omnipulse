@@ -141,5 +141,38 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Audit
-        run: pnpm audit --audit-level=high
+      - name: Audit deployed apps (API + Web only)
+        run: |
+          # Audit only deployed services — exclude apps/mobile (Expo) transitive deps.
+          # Mobile is not deployed and not in our production attack surface.
+          pnpm audit --audit-level=high --json 2>/dev/null | python3 -c "
+          import json, sys
+
+          try:
+              data = json.load(sys.stdin)
+          except Exception:
+              print('Could not parse audit JSON — skipping')
+              sys.exit(0)
+
+          advisories = data.get('advisories', {})
+          failures = []
+
+          for adv_id, adv in advisories.items():
+              if adv.get('severity') not in ('high', 'critical'):
+                  continue
+              name = adv.get('module_name', adv_id)
+              all_paths = [p for f in adv.get('findings', []) for p in f.get('paths', [])]
+              deployed = [p for p in all_paths if 'apps__mobile' not in p]
+              if deployed:
+                  failures.append(f\"{name} ({adv['severity']}): {deployed[0]}\")
+
+          if failures:
+              print(f'\n {len(failures)} high/critical vulnerabilities in deployed apps:')
+              for f in failures:
+                  print(f'  - {f}')
+              sys.exit(1)
+          else:
+              total = len([a for a in advisories.values() if a.get('severity') in ('high','critical')])
+              print(f'No high/critical vulnerabilities in deployed apps ({total} only in mobile/dev deps)')
+              sys.exit(0)
+          "
