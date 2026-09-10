@@ -50,7 +50,7 @@ export function decryptToken(stored: string): string {
     const encrypted = Buffer.from(parts[2], 'base64')
     const decipher = createDecipheriv(ALGO, key, iv)
     decipher.setAuthTag(tag)
-    return decipher.update(encrypted) + decipher.final('utf8')
+    return decipher.update(encrypted).toString('utf8') + decipher.final('utf8')
   } catch (err) {
     // Return empty string rather than the raw ciphertext — callers that use the
     // return value as a bearer token would otherwise send garbled ciphertext to

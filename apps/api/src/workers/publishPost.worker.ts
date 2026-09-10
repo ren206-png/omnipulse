@@ -369,7 +369,7 @@ const worker = new Worker(
               try {
                 capturedExternalId = await publishToPlatform(
                   { content, mediaUrls },
-                  { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
+                  { platform, accessToken: decryptToken(account.accessToken), externalProfileId: account.externalProfileId },
                 )
                 return { success: true, statusCode: 200 }
               } catch (err) {
@@ -388,7 +388,7 @@ const worker = new Worker(
         } else {
           externalId = await publishToPlatform(
             { content, mediaUrls },
-            { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
+            { platform, accessToken: decryptToken(account.accessToken), externalProfileId: account.externalProfileId },
           )
         }
         responseLog[platform] = externalId
@@ -453,9 +453,7 @@ const worker = new Worker(
         const account = accounts.find((a) => a.platform === platform)
         if (!account) continue
         // For LinkedIn, use the raw decrypted token
-        const accessToken = platform === 'LINKEDIN'
-          ? decryptToken(account.accessToken)
-          : account.accessToken
+        const accessToken = decryptToken(account.accessToken)
         await postFirstComment(platform, externalId, accessToken, post.firstComment)
       }
       logger.info({ postId, platforms: Object.keys(responseLog) }, 'First comment posted')
