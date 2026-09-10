@@ -8,6 +8,15 @@ import { computeRecommendations } from '../lib/bestTimes.js'
 import { syncAnalytics } from '../workers/analyticsSync.worker.js'
 import { assertWorkspaceAccess, TenantAccessError } from '../lib/tenantGuard.js'
 
+async function assertAnalyticsPlanAccess(workspaceId: string, res: Response): Promise<boolean> {
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { plan: true } })
+  if (workspace?.plan === 'FREE') {
+    res.status(403).json({ error: 'PLAN_REQUIRED', message: 'Analytics requires the Starter plan or higher' })
+    return false
+  }
+  return true
+}
+
 const router = Router()
 
 router.use(requireAuth)
@@ -39,6 +48,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
       return
     }
+
+    if (!await assertAnalyticsPlanAccess(workspaceId, res)) return
 
     const accounts = await prisma.socialAccount.findMany({
       where: { workspaceId },
@@ -82,6 +93,8 @@ router.get('/best-times', async (req: Request, res: Response): Promise<void> => 
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
       return
     }
+
+    if (!await assertAnalyticsPlanAccess(workspaceId, res)) return
 
     const posts = await prisma.scheduledPost.findMany({
       where: { workspaceId, status: 'PUBLISHED' },
@@ -127,6 +140,8 @@ router.get('/top-posts', async (req: Request, res: Response): Promise<void> => {
       return
     }
 
+    if (!await assertAnalyticsPlanAccess(workspaceId, res)) return
+
     const posts = await (prisma.scheduledPost.findMany as Function)({
       where: { workspaceId, status: 'PUBLISHED' },
       include: { metrics: true },
@@ -166,6 +181,8 @@ router.post('/sync', async (req: Request, res: Response): Promise<void> => {
     return
   }
 
+  if (!await assertAnalyticsPlanAccess(workspaceId, res)) return
+
   // Run async — don't await so the response is immediate
   syncAnalytics(workspaceId).catch((err) => logger.error({ err }, 'Manual analytics sync error'))
 
@@ -184,6 +201,8 @@ router.get('/insights', async (req: Request, res: Response): Promise<void> => {
   try {
     const role = await getWorkspaceRole(workspaceId, req.user!.id)
     if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+
+    if (!await assertAnalyticsPlanAccess(workspaceId, res)) return
 
     const daysNum = Math.min(Math.max(parseInt(days, 10) || 30, 7), 365)
     const since = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000)
@@ -286,6 +305,8 @@ router.get('/platform-comparison', async (req: Request, res: Response): Promise<
     throw err
   }
 
+  if (!await assertAnalyticsPlanAccess(workspaceId, res)) return
+
   const since = new Date(Date.now() - parseInt(days, 10) * 24 * 60 * 60 * 1000)
 
   const metrics = await (prisma as any).postMetric.findMany({
@@ -333,6 +354,8 @@ router.get('/hashtag-performance', async (req: Request, res: Response): Promise<
     if (err instanceof TenantAccessError) { sendError(res, err.statusCode, err.code, err.message); return }
     throw err
   }
+
+  if (!await assertAnalyticsPlanAccess(workspaceId, res)) return
 
   const since = new Date(Date.now() - parseInt(days, 10) * 24 * 60 * 60 * 1000)
 

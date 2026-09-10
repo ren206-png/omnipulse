@@ -43,9 +43,14 @@ export default function TermsPage() {
 
       {/* Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="mb-6">
+          <Link href="/" className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+            ← Back to Home
+          </Link>
+        </div>
         <div className="mb-10">
-          <h1 className="text-4xl font-extrabold tracking-tight mb-3">Terms and Conditions</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Effective date: July 27, 2026</p>
+          <h1 className="text-4xl font-extrabold tracking-tight mb-3">Terms of Service</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Last updated: September 2026</p>
         </div>
 
         <div className="prose prose-gray dark:prose-invert max-w-none space-y-10 text-gray-700 dark:text-gray-300 leading-relaxed">

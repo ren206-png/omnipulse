@@ -8,6 +8,7 @@ import { logger } from '../lib/logger.js'
 import { env } from '../config/env.js'
 import { PLAN_LIMITS, PLAN_NAMES, PLAN_PRICES } from '../lib/plans.js'
 import type { Plan } from '../lib/plans.js'
+import { notify } from '../lib/notify.js'
 
 const router = Router()
 
@@ -182,7 +183,7 @@ async function handleWebhookEvent(event: Stripe.Event) {
       await prisma.workspace.update({
         where: { id: workspaceId },
         data: {
-          plan,
+          plan: plan as any,
           stripeCustomerId: session.customer as string,
           stripeSubscriptionId: session.subscription as string,
           subscriptionStatus: 'active',
@@ -203,7 +204,7 @@ async function handleWebhookEvent(event: Stripe.Event) {
       await prisma.workspace.update({
         where: { stripeSubscriptionId: sub.id },
         data: {
-          plan: status === 'active' || status === 'trialing' ? plan : 'FREE',
+          plan: (status === 'active' || status === 'trialing' ? plan : 'FREE') as any,
           subscriptionStatus: status,
         },
       })
@@ -232,6 +233,28 @@ async function handleWebhookEvent(event: Stripe.Event) {
         data: { subscriptionStatus: 'past_due' },
       })
       logger.warn({ subId }, 'Payment failed — subscription past_due')
+      break
+    }
+
+    case 'customer.subscription.trial_will_end': {
+      const sub = event.data.object as Stripe.Subscription
+      const workspaceId = sub.metadata?.workspaceId
+      if (!workspaceId) {
+        logger.info({ subId: sub.id }, 'trial_will_end: no workspaceId in metadata — skipping')
+        break
+      }
+      const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { ownerId: true } })
+      if (!workspace) {
+        logger.warn({ workspaceId }, 'trial_will_end: workspace not found — skipping')
+        break
+      }
+      await notify({
+        userId: workspace.ownerId,
+        type: 'POST_PUBLISHED', // reuse a generic type for billing notifications
+        title: 'Trial ending soon',
+        body: 'Your 14-day free trial ends in 3 days. Add a payment method to keep your account active.',
+      })
+      logger.info({ workspaceId }, 'trial_will_end notification sent')
       break
     }
 

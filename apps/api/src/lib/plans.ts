@@ -7,6 +7,7 @@ export interface PlanLimits {
   aiGenerations: number     // max AI generations per hour (0 = disabled)
   socialAccounts: number    // max connected social accounts per workspace
   approvalWorkflow: boolean
+  whiteLabel: boolean
 }
 
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
@@ -17,6 +18,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     aiGenerations:   0,    // no AI on free
     socialAccounts:  1,
     approvalWorkflow: false,
+    whiteLabel:      false,
   },
   STARTER: {
     workspaces:      1,
@@ -25,14 +27,16 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     aiGenerations:   10,
     socialAccounts:  3,
     approvalWorkflow: false,
+    whiteLabel:      false,
   },
   PRO: {
-    workspaces:      3,
+    workspaces:      5,
     teamMembers:     5,
-    scheduledPosts:  500,
+    scheduledPosts:  200,
     aiGenerations:   30,
     socialAccounts:  10,
     approvalWorkflow: true,
+    whiteLabel:      false,
   },
   AGENCY: {
     workspaces:      Infinity,
@@ -41,6 +45,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     aiGenerations:   100,
     socialAccounts:  Infinity,
     approvalWorkflow: true,
+    whiteLabel:      true,
   },
 }
 
@@ -51,9 +56,9 @@ export const PLAN_NAMES: Record<Plan, string> = {
   AGENCY:  'Agency',
 }
 
-export const PLAN_PRICES: Record<Plan, { monthly: number; label: string }> = {
-  FREE:    { monthly: 0,    label: 'Free forever' },
-  STARTER: { monthly: 9.99, label: '$9.99 / month' },
-  PRO:     { monthly: 29,   label: '$29 / month' },
-  AGENCY:  { monthly: 99,   label: '$99 / month' },
+export const PLAN_PRICES: Record<Plan, { monthly: number; yearlyMonthly: number; label: string }> = {
+  FREE:    { monthly: 0,    yearlyMonthly: 0,    label: 'Free forever' },
+  STARTER: { monthly: 9.99, yearlyMonthly: 7.99, label: '$9.99 / month' },
+  PRO:     { monthly: 29,   yearlyMonthly: 23,   label: '$29 / month' },
+  AGENCY:  { monthly: 99,   yearlyMonthly: 79,   label: '$99 / month' },
 }
