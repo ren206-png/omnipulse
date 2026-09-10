@@ -93,10 +93,36 @@ export async function reliablePublish(params: {
   publishFn: () => Promise<{ success: boolean; error?: string; statusCode?: number }>
   postContent?: string
 }): Promise<{ success: boolean; dlqId?: string }> {
-  // Feature flag guard: pass-through if flag is off
+  // Feature flag guard: skip retry loop when flag is off, but still write DLQ/notify on failure
+  // so admins always see failures regardless of whether the reliability layer is active.
   if (!FF_PUBLISH_RELIABILITY) {
     const result = await params.publishFn()
-    return { success: result.success }
+    if (!result.success) {
+      const errMsg = result.error ?? 'Publish failed (no retry — FF_PUBLISH_RELIABILITY is off)'
+      try {
+        const dlqId = await writeDlq({
+          postId: params.postId,
+          workspaceId: params.workspaceId,
+          platform: params.platform,
+          errorCode: result.statusCode,
+          errorMessage: errMsg,
+          attempts: 1,
+        })
+        await notifyFailure({
+          postId: params.postId,
+          workspaceId: params.workspaceId,
+          platform: params.platform,
+          errorMessage: errMsg,
+          dlqId,
+          postContent: params.postContent,
+        })
+        return { success: false, dlqId }
+      } catch (dlqErr) {
+        logger.error({ err: dlqErr, postId: params.postId }, '[reliablePublish] Failed to write DLQ on pass-through failure')
+        return { success: false }
+      }
+    }
+    return { success: true }
   }
 
   let lastError = ''

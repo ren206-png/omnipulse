@@ -459,19 +459,25 @@ const worker = new Worker(
       logger.info({ postId, platforms: Object.keys(responseLog) }, 'First comment posted')
     }
 
-    // Seed initial metrics (0s) — the analytics-sync worker will fill real numbers later
-    await (prisma as unknown as { postMetric: { createMany: (args: unknown) => Promise<unknown> } }).postMetric.createMany({
-      data: post.platforms.map((platform: string) => ({
-        postId,
-        platform,
-        likes: 0,
-        comments: 0,
-        shares: 0,
-        reach: 0,
-        impressions: 0,
-      })),
-      skipDuplicates: true,
-    })
+    // Seed initial metrics (0s) — the analytics-sync worker will fill real numbers later.
+    // IMPORTANT: wrapped in its own try/catch so a metrics failure does NOT cause BullMQ to
+    // retry this job — the post is already marked PUBLISHED above and a retry would re-publish.
+    try {
+      await (prisma as unknown as { postMetric: { createMany: (args: unknown) => Promise<unknown> } }).postMetric.createMany({
+        data: post.platforms.map((platform: string) => ({
+          postId,
+          platform,
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          reach: 0,
+          impressions: 0,
+        })),
+        skipDuplicates: true,
+      })
+    } catch (metricsErr) {
+      logger.warn({ err: metricsErr, postId }, 'Failed to seed initial post metrics — non-fatal, continuing')
+    }
 
     if (!allFailed) {
       logger.info({ postId, status: 'PUBLISHED', platforms: post.platforms, responseLog }, 'Post published successfully')

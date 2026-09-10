@@ -13,4 +13,4 @@ RUN npm run build
 EXPOSE 4000
 ENV NODE_ENV=production
 
-CMD ["node", "dist/src/index.js"]
+CMD ["node", "--import", "tsx/esm", "dist/src/index.js"]

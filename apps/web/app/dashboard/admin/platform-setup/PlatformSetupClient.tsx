@@ -69,8 +69,9 @@ export function PlatformSetupClient({ token }: { token: string }) {
   if (loading) return <div className="animate-pulse h-96 bg-muted rounded-xl" />
   if (error || !data) return <div className="text-destructive p-4">{error ?? 'Error'}</div>
 
-  const configured = data.platforms.filter(p => p.configured).length
-  const total = data.platforms.length
+  const platforms = Array.isArray(data.platforms) ? data.platforms : []
+  const configured = platforms.filter(p => p.configured).length
+  const total = platforms.length
 
   return (
     <div className="space-y-8 max-w-3xl">
@@ -109,7 +110,7 @@ export function PlatformSetupClient({ token }: { token: string }) {
 
       {/* Platform cards */}
       <div className="space-y-4">
-        {data.platforms.map(platform => (
+        {platforms.map(platform => (
           <div key={platform.id} className="rounded-xl border bg-card overflow-hidden">
             {/* Header */}
             <button

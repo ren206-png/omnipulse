@@ -8,6 +8,7 @@ import { prisma } from './prisma.js'
 import { logger } from './logger.js'
 import { publishPostQueue } from './queue.js'
 import { notify, getWorkspaceAdmins } from './notify.js'
+import type { BulkJobOptions } from 'bullmq'
 
 const ZOMBIE_THRESHOLD_MS = 10 * 60 * 1000 // 10 minutes past due
 
@@ -48,47 +49,56 @@ export async function detectAndFix(): Promise<GuardianReport> {
 
   logger.warn({ count: zombies.length }, '[Guardian] Zombie posts detected — re-queuing')
 
-  for (const post of zombies) {
-    try {
-      // Reset status to SCHEDULED so the worker will pick it up fresh
-      await prisma.scheduledPost.update({
-        where: { id: post.id },
-        data: { status: 'SCHEDULED', errorLog: null },
-      })
+  try {
+    // Batch-reset all zombie posts in one query instead of N individual updates
+    await prisma.scheduledPost.updateMany({
+      where: { id: { in: zombies.map((p) => p.id) } },
+      data: { status: 'SCHEDULED', errorLog: null },
+    })
 
-      // Re-enqueue immediately (short delay to avoid thundering herd)
-      await publishPostQueue.add(
-        'publish-post',
-        { postId: post.id, workspaceId: post.workspaceId },
-        { delay: 2000, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
-      )
+    // Batch-enqueue all zombie posts in one BullMQ call
+    const jobs: { name: string; data: { postId: string; workspaceId: string }; opts: BulkJobOptions }[] =
+      zombies.map((post, i) => ({
+        name: 'publish-post',
+        data: { postId: post.id, workspaceId: post.workspaceId },
+        opts: { delay: 2000 + i * 200, attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
+      }))
+    await publishPostQueue.addBulk(jobs)
 
-      report.fixedPostIds.push(post.id)
-      report.zombiesFixed++
+    report.fixedPostIds = zombies.map((p) => p.id)
+    report.zombiesFixed = zombies.length
 
-      logger.info({ postId: post.id }, '[Guardian] Zombie post re-queued')
-
-      // Notify workspace owners + admins
-      const adminIds = await getWorkspaceAdmins(post.workspaceId)
-      const truncated = post.content.slice(0, 60) + (post.content.length > 60 ? '…' : '')
-
-      await Promise.all(
-        adminIds.map((userId) =>
-          notify({
-            userId,
-            type: 'POST_PUBLISHED',
-            title: '⚙️ Auto-fix: Post re-queued',
-            body: `A stalled post was automatically re-queued on ${post.platforms.join(', ')}: "${truncated}"`,
-            link: '/dashboard/calendar',
-          }),
-        ),
-      )
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      report.errors.push(`Post ${post.id}: ${msg}`)
-      logger.error({ err, postId: post.id }, '[Guardian] Failed to re-queue zombie post')
-    }
+    logger.info({ count: zombies.length }, '[Guardian] Zombie posts batch re-queued')
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    report.errors.push(`Batch re-queue failed: ${msg}`)
+    logger.error({ err }, '[Guardian] Failed to batch re-queue zombie posts')
+    return report
   }
+
+  // Notify workspace admins (grouped by workspaceId to avoid redundant queries)
+  const workspaceIds = [...new Set(zombies.map((p) => p.workspaceId))]
+  await Promise.allSettled(
+    workspaceIds.map(async (workspaceId) => {
+      try {
+        const adminIds = await getWorkspaceAdmins(workspaceId)
+        const postsInWs = zombies.filter((p) => p.workspaceId === workspaceId)
+        await Promise.allSettled(
+          adminIds.map((userId) =>
+            notify({
+              userId,
+              type: 'POST_PUBLISHED',
+              title: `⚙️ Auto-fix: ${postsInWs.length} post(s) re-queued`,
+              body: `${postsInWs.length} stalled post(s) were automatically re-queued.`,
+              link: '/dashboard/calendar',
+            }),
+          ),
+        )
+      } catch (err) {
+        logger.error({ err, workspaceId }, '[Guardian] Failed to send re-queue notifications')
+      }
+    }),
+  )
 
   return report
 }

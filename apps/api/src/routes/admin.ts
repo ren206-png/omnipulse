@@ -7,6 +7,8 @@ import { env } from '../config/env.js'
 import { getDeepHealth } from '../lib/healthProbes.js'
 import { clearAlertCache } from '../lib/alertManager.js'
 import { getAllBreakers } from '../lib/circuitBreaker.js'
+import { Queue } from 'bullmq'
+import { redisConnection } from '../lib/queue.js'
 
 const router = Router()
 
@@ -238,4 +240,17 @@ router.post('/health/reset-breaker/:name', (req: Request, res: Response): void =
   res.json({ ok: true, breaker: breaker.toJSON() })
 })
 
+// POST /api/v1/admin/queues/:name/clean-failed (admin-auth protected)
+router.post('/queues/:name/clean-failed', async (req: Request, res: Response): Promise<void> => {
+  const { name } = req.params
+  try {
+    const q = new Queue(name, { connection: redisConnection })
+    const cleaned = await q.clean(0, 1000, 'failed')
+    res.json({ ok: true, queue: name, cleaned: cleaned.length })
+  } catch (err) {
+    sendError(res, 500, 'INTERNAL_ERROR', `Failed to clean queue: ${err instanceof Error ? err.message : String(err)}`)
+  }
+})
+
+export { Queue, redisConnection }
 export default router

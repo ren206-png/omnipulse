@@ -16,6 +16,8 @@ if (env.SENTRY_DSN) {
   })
   logger.info('Sentry initialized')
 }
+import rateLimit from 'express-rate-limit'
+import { Queue } from 'bullmq'
 import authRouter from './routes/auth.js'
 import workspacesRouter from './routes/workspaces.js'
 import postsRouter from './routes/posts.js'
@@ -64,6 +66,7 @@ import { startEvergreenWorker } from './workers/evergreen.worker.js'
 import { startEvergreenRecyclerWorker } from './workers/evergreenRecycler.worker.js'
 import { startStuckJobSweeperWorker } from './workers/stuckJobSweeper.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
+import { analyticsWorker } from './workers/analytics.worker.js'
 import { startGuardianWorker } from './workers/guardian.worker.js'
 import { engagementAlertWorker } from './workers/engagementAlert.worker.js'
 import { startRssFeedWorker } from './workers/rssFeed.worker.js'
@@ -85,9 +88,12 @@ async function runMigrations() {
   const { resolve, dirname } = await import('path')
   const { fileURLToPath } = await import('url')
   try {
-    // Resolve the apps/api directory from the source file location
+    // Compiled output lands in apps/api/dist/index.js so dirname = apps/api/dist.
+    // One level up (..) reaches apps/api/ — the correct apiDir.
+    // Previously used ../.. which resolved to apps/ (one level too high), causing
+    // "prisma: not found" on every Railway deploy.
     const srcDir = dirname(fileURLToPath(import.meta.url))
-    const apiDir = resolve(srcDir, '../..')
+    const apiDir = resolve(srcDir, '..')
     const prismaBin = resolve(apiDir, 'node_modules/.bin/prisma')
     execSync(`"${prismaBin}" migrate deploy`, { stdio: 'inherit', timeout: 60_000, cwd: apiDir })
     console.log('[Startup] Migrations applied successfully')
@@ -98,7 +104,31 @@ async function runMigrations() {
 // Fire-and-forget: let Express start immediately
 runMigrations().catch((e) => console.error('[Startup] runMigrations threw:', e))
 
+// On startup, clean stale failed BullMQ jobs left over from prior deploys.
+// Each service restart marks in-flight jobs as failed — this keeps the queue clean.
+async function cleanStaleBullMqJobs() {
+  const { redisConnection } = await import('./lib/queue.js')
+  const queues = [
+    'stuck-job-sweeper', 'publish-post', 'analytics-sync',
+    'evergreen', 'evergreen-recycler', 'guardian',
+    'automation-execute', 'automation-outbox', 'automation-resume',
+    'automation-trigger', 'automation-wakeup',
+    'engagement-alert', 'auth-token-refresh', 'weekly-digest', 'system-monitor',
+  ]
+  for (const name of queues) {
+    try {
+      const q = new Queue(name, { connection: redisConnection })
+      const cleaned = await q.clean(0, 500, 'failed')
+      if (cleaned.length > 0) logger.info({ queue: name, cleaned: cleaned.length }, '[Startup] Cleaned stale failed jobs')
+    } catch { /* ignore — queue may not exist yet */ }
+  }
+}
+cleanStaleBullMqJobs().catch((e) => logger.warn({ err: e }, '[Startup] Failed to clean stale BullMQ jobs'))
+
 const app = express()
+
+// Trust Railway's reverse proxy so express-rate-limit and IP detection work correctly
+app.set('trust proxy', 1)
 
 app.use(cors({
   origin: env.CORS_ORIGINS,
@@ -108,10 +138,22 @@ app.use(cors({
 app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }))
 // Raw body for TradeFlow webhooks — before express.json()
 app.use('/api/v1/tradeflow/webhook', express.raw({ type: 'application/json' }))
+// Raw body for Automation inbound webhooks — HMAC is verified against the raw bytes
+app.use('/api/v1/automation/inbound', express.raw({ type: 'application/json' }))
 
 app.use(cookieParser())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
+
+// Global rate limiter — 300 req/min per IP for all API routes
+// Keeps tighter per-route limits on auth/AI via their own middleware
+app.use('/api/', rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_REQUESTS', message: 'Too many requests — please slow down' },
+}))
 
 app.get('/health', (_req, res) => {
   // Intentionally synchronous and bulletproof — must always return 200 for Railway healthcheck
@@ -183,6 +225,21 @@ app.use('/api/v1/automations', automationRouter)
 app.use('/api/v1/automation/inbound', automationInboundRouter)
 app.use('/uploads', express.static('public/uploads'))
 
+// Internal maintenance endpoint — INTERNAL_API_SECRET only, no user auth required
+app.post('/internal/queues/:name/clean-failed', async (req, res) => {
+  const secret = req.headers['x-internal-secret']
+  if (!env.INTERNAL_API_SECRET || secret !== env.INTERNAL_API_SECRET) {
+    res.status(401).json({ error: 'Unauthorized' }); return
+  }
+  try {
+    const q = new Queue(req.params.name, { connection: (await import('./lib/queue.js')).redisConnection })
+    const cleaned = await q.clean(0, 1000, 'failed')
+    res.json({ ok: true, queue: req.params.name, cleaned: cleaned.length })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // Sentry error handler — must be after all routes
 if (env.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app)
@@ -208,8 +265,10 @@ startStuckJobSweeperWorker().catch((err) => logger.error({ err }, 'Failed to sta
 // Engagement Alert worker — auto-starts on import (Worker instantiated at module level).
 // `void` suppresses the unused-import lint warning; the side effect is the worker registration.
 void engagementAlertWorker
-// Sync analytics every 6 hours
+// Sync analytics every 6 hours (direct platform API calls)
 setInterval(() => { syncAnalytics().catch(() => {}) }, 6 * 60 * 60 * 1000)
+// BullMQ analytics worker (Ayrshare-based daily sync — registers heartbeat)
+void analyticsWorker
 // RSS Feed worker — polls active feeds on their configured interval (every 5 min check)
 startRssFeedWorker()
 // Weekly Digest worker — sends Monday 08:00 UTC performance emails
@@ -220,7 +279,7 @@ startSystemMonitorWorker().catch((err) => logger.error({ err }, 'Failed to start
 startAuthTokenRefreshWorker().catch((err) => logger.error({ err }, 'Failed to start auth token refresh worker'))
 
 // ─── Automation Engine Workers ────────────────────────────────────────────────
-if (process.env.AUTOMATION_ENGINE_ENABLED === 'true') {
+if (env.AUTOMATION_ENGINE_ENABLED) {
   startAutomationTriggerWorker()
   startAutomationExecuteWorker()
   startAutomationResumeWorker()

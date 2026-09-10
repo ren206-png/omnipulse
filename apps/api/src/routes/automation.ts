@@ -68,21 +68,10 @@ async function guardWorkspace(req: Request, res: Response): Promise<string | nul
   return workspaceId
 }
 
-// ── Feature flag guard ─────────────────────────────────────────────────────────
-
-function checkAutomationEnabled(res: Response): boolean {
-  if (process.env.AUTOMATION_ENGINE_ENABLED !== 'true') {
-    sendError(res, 503, 'AUTOMATION_DISABLED', 'Automation engine is not enabled')
-    return false
-  }
-  return true
-}
-
 // ── Flow CRUD ──────────────────────────────────────────────────────────────────
 
 // GET /automations?workspaceId=
 router.get('/', requireAuth, async (req: Request, res: Response) => {
-  if (!checkAutomationEnabled(res)) return
   const workspaceId = await guardWorkspace(req, res)
   if (!workspaceId) return
 
@@ -113,7 +102,6 @@ const CreateFlowSchema = z.object({
 
 // POST /automations
 router.post('/', requireAuth, async (req: Request, res: Response) => {
-  if (!checkAutomationEnabled(res)) return
   const parsed = CreateFlowSchema.safeParse(req.body)
   if (!parsed.success) {
     sendError(res, 400, 'VALIDATION_ERROR', parsed.error.issues.map((i) => i.message).join('; '))
@@ -153,7 +141,6 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
 
 // GET /automations/:flowId
 router.get('/:flowId', requireAuth, async (req: Request, res: Response) => {
-  if (!checkAutomationEnabled(res)) return
   const workspaceId = await guardWorkspace(req, res)
   if (!workspaceId) return
 
@@ -183,7 +170,6 @@ const UpdateFlowSchema = z.object({
 
 // PATCH /automations/:flowId
 router.patch('/:flowId', requireAuth, async (req: Request, res: Response) => {
-  if (!checkAutomationEnabled(res)) return
   const parsed = UpdateFlowSchema.safeParse(req.body)
   if (!parsed.success) {
     sendError(res, 400, 'VALIDATION_ERROR', parsed.error.issues.map((i) => i.message).join('; '))
@@ -207,7 +193,6 @@ router.patch('/:flowId', requireAuth, async (req: Request, res: Response) => {
 
 // DELETE /automations/:flowId
 router.delete('/:flowId', requireAuth, async (req: Request, res: Response) => {
-  if (!checkAutomationEnabled(res)) return
   const workspaceId = await guardWorkspace(req, res)
   if (!workspaceId) return
 
@@ -230,7 +215,6 @@ const CreateVersionSchema = z.object({
 
 // POST /automations/:flowId/versions
 router.post('/:flowId/versions', requireAuth, async (req: Request, res: Response) => {
-  if (!checkAutomationEnabled(res)) return
   const parsed = CreateVersionSchema.safeParse(req.body)
   if (!parsed.success) {
     sendError(res, 400, 'VALIDATION_ERROR', parsed.error.issues.map((i) => i.message).join('; '))
@@ -269,7 +253,6 @@ router.post('/:flowId/versions', requireAuth, async (req: Request, res: Response
 
 // POST /automations/:flowId/versions/:versionId/publish
 router.post('/:flowId/versions/:versionId/publish', requireAuth, async (req: Request, res: Response) => {
-  if (!checkAutomationEnabled(res)) return
   const workspaceId = await guardWorkspace(req, res)
   if (!workspaceId) return
 
@@ -346,7 +329,6 @@ const AddNodeSchema = z.object({
 
 // POST /automations/:flowId/versions/:versionId/nodes
 router.post('/:flowId/versions/:versionId/nodes', requireAuth, async (req: Request, res: Response) => {
-  if (!checkAutomationEnabled(res)) return
   const parsed = AddNodeSchema.safeParse(req.body)
   if (!parsed.success) {
     sendError(res, 400, 'VALIDATION_ERROR', parsed.error.issues.map((i) => i.message).join('; '))
@@ -386,7 +368,6 @@ router.post('/:flowId/versions/:versionId/nodes', requireAuth, async (req: Reque
 
 // DELETE /automations/:flowId/versions/:versionId/nodes/:nodeId
 router.delete('/:flowId/versions/:versionId/nodes/:nodeId', requireAuth, async (req: Request, res: Response) => {
-  if (!checkAutomationEnabled(res)) return
   const workspaceId = await guardWorkspace(req, res)
   if (!workspaceId) return
 
@@ -419,7 +400,6 @@ const AddEdgeSchema = z.object({
 
 // POST /automations/:flowId/versions/:versionId/edges
 router.post('/:flowId/versions/:versionId/edges', requireAuth, async (req: Request, res: Response) => {
-  if (!checkAutomationEnabled(res)) return
   const parsed = AddEdgeSchema.safeParse(req.body)
   if (!parsed.success) {
     sendError(res, 400, 'VALIDATION_ERROR', parsed.error.issues.map((i) => i.message).join('; '))
@@ -451,7 +431,6 @@ router.post('/:flowId/versions/:versionId/edges', requireAuth, async (req: Reque
 
 // DELETE /automations/:flowId/versions/:versionId/edges/:edgeId
 router.delete('/:flowId/versions/:versionId/edges/:edgeId', requireAuth, async (req: Request, res: Response) => {
-  if (!checkAutomationEnabled(res)) return
   const workspaceId = await guardWorkspace(req, res)
   if (!workspaceId) return
 

@@ -68,7 +68,33 @@ export const env = {
   // Monitoring alerts
   SLACK_ALERT_WEBHOOK_URL: process.env.SLACK_ALERT_WEBHOOK_URL ?? '',
   MONITOR_ALERT_WEBHOOK_URL: process.env.MONITOR_ALERT_WEBHOOK_URL ?? '',
-  // Facebook/Instagram OAuth (for token auto-refresh)
-  FACEBOOK_APP_ID: process.env.FACEBOOK_APP_ID ?? '',
-  FACEBOOK_APP_SECRET: process.env.FACEBOOK_APP_SECRET ?? '',
+  // Facebook/Instagram OAuth credentials (used for both OAuth flow and token auto-refresh)
+  FACEBOOK_CLIENT_ID: process.env.FACEBOOK_CLIENT_ID ?? process.env.FACEBOOK_APP_ID ?? '',
+  FACEBOOK_CLIENT_SECRET: process.env.FACEBOOK_CLIENT_SECRET ?? process.env.FACEBOOK_APP_SECRET ?? '',
+  // Legacy aliases — some Railway envs may have APP_ID set instead of CLIENT_ID
+  FACEBOOK_APP_ID: process.env.FACEBOOK_APP_ID ?? process.env.FACEBOOK_CLIENT_ID ?? '',
+  FACEBOOK_APP_SECRET: process.env.FACEBOOK_APP_SECRET ?? process.env.FACEBOOK_CLIENT_SECRET ?? '',
+  // Google / YouTube OAuth
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? '',
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? '',
+  // X (Twitter) OAuth
+  X_CLIENT_ID: process.env.X_CLIENT_ID ?? '',
+  X_CLIENT_SECRET: process.env.X_CLIENT_SECRET ?? '',
+  // TikTok OAuth
+  TIKTOK_CLIENT_KEY: process.env.TIKTOK_CLIENT_KEY ?? '',
+  TIKTOK_CLIENT_SECRET: process.env.TIKTOK_CLIENT_SECRET ?? '',
+  // Feature flags
+  FF_AGENCY_APPROVALS: process.env.FF_AGENCY_APPROVALS === 'true',
+  FF_EVERGREEN_QUEUE: process.env.FF_EVERGREEN_QUEUE === 'true',
+  FF_OUTCOME_ANALYTICS: process.env.FF_OUTCOME_ANALYTICS === 'true',
+  FF_PHOTO_TO_POST: process.env.FF_PHOTO_TO_POST === 'true',
+  FF_PUBLISH_RELIABILITY: process.env.FF_PUBLISH_RELIABILITY === 'true',
+  FF_TRADEFLOW_BRIDGE: process.env.FF_TRADEFLOW_BRIDGE === 'true',
+  // Automation
+  AUTOMATION_ENGINE_ENABLED: process.env.AUTOMATION_ENGINE_ENABLED === 'true',
+  AUTOMATION_WEBHOOK_SECRET: process.env.AUTOMATION_WEBHOOK_SECRET ?? '',
+  // Logging
+  LOG_LEVEL: process.env.LOG_LEVEL ?? 'info',
+  // Frontend URL (for email links etc.)
+  WEB_URL: process.env.WEB_URL ?? process.env.APP_URL ?? 'http://localhost:3000',
 }

@@ -1,12 +1,30 @@
 import { prisma } from '../lib/prisma.js'
 import { logger } from '../lib/logger.js'
 
+/** Run up to `concurrency` async tasks at a time, in chunks */
+async function runWithConcurrency<T>(
+  items: T[],
+  fn: (item: T) => Promise<void>,
+  concurrency = 5,
+): Promise<void> {
+  for (let i = 0; i < items.length; i += concurrency) {
+    await Promise.allSettled(items.slice(i, i + concurrency).map(fn))
+  }
+}
+
 // Called on a schedule or manually — syncs follower/engagement data from social APIs
 export async function syncAnalytics(workspaceId?: string): Promise<void> {
   const where = workspaceId ? { workspaceId } : {}
-  const accounts = await prisma.socialAccount.findMany({ where })
 
-  for (const account of accounts) {
+  let accounts: Awaited<ReturnType<typeof prisma.socialAccount.findMany>>
+  try {
+    accounts = await prisma.socialAccount.findMany({ where })
+  } catch (err) {
+    logger.error({ err }, '[AnalyticsSync] Failed to fetch social accounts — aborting sync')
+    return
+  }
+
+  await runWithConcurrency(accounts, async (account) => {
     try {
       let followers = 0
       let impressions = 0
@@ -115,5 +133,5 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
     } catch (err) {
       logger.error({ err, accountId: account.id }, 'Analytics sync failed for account')
     }
-  }
+  })
 }

@@ -167,6 +167,7 @@ model ScheduledPost {
   submittedBy       String?
   reviewedBy        String?
   createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
   evergreen         Boolean     @default(false)
   evergreenInterval Int?
   evergreenParentId String?

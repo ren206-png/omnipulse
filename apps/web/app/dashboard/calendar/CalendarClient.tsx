@@ -168,33 +168,25 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
   const [currentWeek, setCurrentWeek] = useState(new Date())
   const [posts, setPosts] = useState<Post[]>([])
   const [fetchError, setFetchError] = useState<string | null>(null)
-  const [selectedDate, setSelectedDate] = useState<Date | null>(() => {
-    // If arriving via "Reuse", auto-select tomorrow
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      if (params.get('reuse') === '1') {
-        const tomorrow = new Date()
-        tomorrow.setDate(tomorrow.getDate() + 1)
-        tomorrow.setHours(0, 0, 0, 0)
-        return tomorrow
-      }
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [showCreateForm, setShowCreateForm] = useState(false)
+
+  // Open the composer on mount when ?new=1 or ?reuse=1 is in the URL.
+  // Must be useEffect (not useState initializer) — SSR renders false for both,
+  // and React's hydration locks in that value before the client reads the URL.
+  const isNew = searchParams.get('new') === '1'
+  useEffect(() => {
+    if (isNew || isReuse) {
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      tomorrow.setHours(0, 0, 0, 0)
+      setSelectedDate(tomorrow)
+      setDialogOpen(true)
+      setShowCreateForm(true)
     }
-    return null
-  })
-  const [dialogOpen, setDialogOpen] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      return params.get('reuse') === '1'
-    }
-    return false
-  })
-  const [showCreateForm, setShowCreateForm] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search)
-      return params.get('reuse') === '1'
-    }
-    return false
-  })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // run once on mount only
   const [toastOpen, setToastOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
   const [formKey, setFormKey] = useState(0)
