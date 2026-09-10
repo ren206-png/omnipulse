@@ -169,10 +169,10 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
   const [posts, setPosts] = useState<Post[]>([])
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(() => {
-    // If arriving via "Reuse", auto-select tomorrow
+    // If arriving via "Reuse" or "New Post" button, auto-select tomorrow so the form is ready
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
-      if (params.get('reuse') === '1') {
+      if (params.get('reuse') === '1' || params.get('new') === '1') {
         const tomorrow = new Date()
         tomorrow.setDate(tomorrow.getDate() + 1)
         tomorrow.setHours(0, 0, 0, 0)
@@ -184,14 +184,14 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
   const [dialogOpen, setDialogOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
-      return params.get('reuse') === '1'
+      return params.get('reuse') === '1' || params.get('new') === '1'
     }
     return false
   })
   const [showCreateForm, setShowCreateForm] = useState(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
-      return params.get('reuse') === '1'
+      return params.get('reuse') === '1' || params.get('new') === '1'
     }
     return false
   })
