@@ -53,12 +53,12 @@ const FEATURES = [
 
 const PRICING = [
   {
-    name: 'FREE',
-    price: '$0',
+    name: 'STARTER',
+    price: '$9.99',
     period: '/mo',
-    features: ['1 workspace', '1 account', '3 posts/month'],
+    features: ['1 workspace', '3 accounts', '30 posts/month', 'AI features (10/day)', '14-day free trial'],
     highlighted: false,
-    badge: null,
+    badge: '14-day free trial',
   },
   {
     name: 'PRO',
@@ -285,7 +285,7 @@ export default function HomePage() {
               'AI-powered social media management platform for scheduling, analytics, AI captions, SEO, and team collaboration.',
             url: 'https://getomnipulse.com',
             offers: [
-              { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free Plan' },
+              { '@type': 'Offer', price: '9.99', priceCurrency: 'USD', name: 'Starter Plan' },
               { '@type': 'Offer', price: '29', priceCurrency: 'USD', name: 'Pro Plan' },
               { '@type': 'Offer', price: '99', priceCurrency: 'USD', name: 'Agency Plan' },
             ],

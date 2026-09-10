@@ -51,11 +51,11 @@ router.post('/checkout', requireAuth, async (req: Request, res: Response): Promi
 
   const { workspaceId, plan } = req.body as { workspaceId?: string; plan?: string }
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
-  if (!plan || !['PRO', 'AGENCY'].includes(plan)) {
-    sendError(res, 400, 'INVALID_PLAN', 'plan must be PRO or AGENCY'); return
+  if (!plan || !['STARTER', 'PRO', 'AGENCY'].includes(plan)) {
+    sendError(res, 400, 'INVALID_PLAN', 'plan must be STARTER, PRO or AGENCY'); return
   }
 
-  const priceId = plan === 'PRO' ? env.STRIPE_PRO_PRICE_ID : env.STRIPE_AGENCY_PRICE_ID
+  const priceId = plan === 'PRO' ? env.STRIPE_PRO_PRICE_ID : plan === 'AGENCY' ? env.STRIPE_AGENCY_PRICE_ID : env.STRIPE_STARTER_PRICE_ID
   if (!priceId) {
     sendError(res, 503, 'STRIPE_UNAVAILABLE', `Price ID for ${plan} plan is not configured`)
     return
@@ -92,7 +92,10 @@ router.post('/checkout', requireAuth, async (req: Request, res: Response): Promi
       success_url: `${env.APP_URL}/dashboard/billing?success=1&workspaceId=${workspaceId}`,
       cancel_url: `${env.APP_URL}/dashboard/billing?cancelled=1&workspaceId=${workspaceId}`,
       metadata: { workspaceId, plan },
-      subscription_data: { metadata: { workspaceId, plan } },
+      subscription_data: {
+        metadata: { workspaceId, plan },
+        ...(plan === 'STARTER' ? { trial_period_days: 14 } : {}),
+      },
     })
 
     logger.info({ workspaceId, plan, sessionId: session.id }, 'Checkout session created')

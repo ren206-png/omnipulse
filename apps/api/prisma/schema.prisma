@@ -85,6 +85,7 @@ model Workspace {
 
 enum Plan {
   FREE
+  STARTER
   PRO
   AGENCY
 }

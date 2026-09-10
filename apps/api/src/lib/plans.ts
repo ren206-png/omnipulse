@@ -1,4 +1,4 @@
-export type Plan = 'FREE' | 'PRO' | 'AGENCY'
+export type Plan = 'FREE' | 'STARTER' | 'PRO' | 'AGENCY'
 
 export interface PlanLimits {
   workspaces: number        // max workspaces owned
@@ -16,6 +16,14 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     scheduledPosts:  3,
     aiGenerations:   0,    // no AI on free
     socialAccounts:  1,
+    approvalWorkflow: false,
+  },
+  STARTER: {
+    workspaces:      1,
+    teamMembers:     1,
+    scheduledPosts:  30,
+    aiGenerations:   10,
+    socialAccounts:  3,
     approvalWorkflow: false,
   },
   PRO: {
@@ -37,13 +45,15 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
 }
 
 export const PLAN_NAMES: Record<Plan, string> = {
-  FREE:   'Free',
-  PRO:    'Pro',
-  AGENCY: 'Agency',
+  FREE:    'Free',
+  STARTER: 'Starter',
+  PRO:     'Pro',
+  AGENCY:  'Agency',
 }
 
 export const PLAN_PRICES: Record<Plan, { monthly: number; label: string }> = {
-  FREE:   { monthly: 0,   label: 'Free forever' },
-  PRO:    { monthly: 29,  label: '$29 / month' },
-  AGENCY: { monthly: 99,  label: '$99 / month' },
+  FREE:    { monthly: 0,    label: 'Free forever' },
+  STARTER: { monthly: 9.99, label: '$9.99 / month' },
+  PRO:     { monthly: 29,   label: '$29 / month' },
+  AGENCY:  { monthly: 99,   label: '$99 / month' },
 }
