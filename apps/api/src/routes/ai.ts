@@ -1385,7 +1385,8 @@ Rules:
   }
 
   // Create Campaign record
-  const name = campaignName?.trim() || `${topic} Campaign`
+  const baseName = campaignName?.trim() || `${topic} Campaign`
+  const name = campaignName?.trim() ? baseName : `${baseName} – ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
   const colorOptions = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
   const color = colorOptions[Math.floor(Math.random() * colorOptions.length)]
 
