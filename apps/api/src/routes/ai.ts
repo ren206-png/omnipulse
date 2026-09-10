@@ -568,8 +568,9 @@ router.post('/trends', async (req: Request, res: Response): Promise<void> => {
 Return exactly 6 trends.`,
       }],
     })
-    const text = message.content[0].type === 'text' ? message.content[0].text : '{}'
-    const result = JSON.parse(text)
+    const raw = message.content[0].type === 'text' ? message.content[0].text : '{}'
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
+    const result = JSON.parse(cleaned)
     res.json(result)
   } catch (err) {
     logger.error({ err }, 'Trend detection error')
