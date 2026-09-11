@@ -13,8 +13,6 @@ out/
 .env.production
 .env*.local
 
-# Generated Prisma client
-apps/api/generated/
 
 # Logs
 *.log

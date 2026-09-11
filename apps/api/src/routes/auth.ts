@@ -75,8 +75,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
     res.status(201).json({ token, user })
   } catch (err) {
     logger.error({ err }, 'Register error')
-    const msg = err instanceof Error ? err.message.slice(0, 200) : String(err)
-    sendError(res, 500, 'INTERNAL_ERROR', `Registration failed: ${msg}`)
+    sendError(res, 500, 'INTERNAL_ERROR', 'Registration failed')
   }
 })
 
