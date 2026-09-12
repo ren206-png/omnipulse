@@ -2,12 +2,18 @@ import 'dotenv/config'
 import { Queue } from 'bullmq'
 
 function parseRedisUrl(url: string): { host: string; port: number; password?: string; db?: number } {
-  const parsed = new URL(url)
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error(`REDIS_URL is not a valid URL: ${url}`)
+  }
+  const dbIndex = parsed.pathname.length > 1 ? parseInt(parsed.pathname.slice(1), 10) : NaN
   return {
     host: parsed.hostname,
     port: parseInt(parsed.port || '6379', 10),
     password: parsed.password || undefined,
-    db: parsed.pathname.length > 1 ? parseInt(parsed.pathname.slice(1), 10) : undefined,
+    db: Number.isNaN(dbIndex) ? undefined : dbIndex,
   }
 }
 

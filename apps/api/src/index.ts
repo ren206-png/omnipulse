@@ -1,13 +1,16 @@
 import './config/env.js'
-import 'dotenv/config'
 import * as Sentry from '@sentry/node'
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import rateLimit from 'express-rate-limit'
+import { Queue } from 'bullmq'
+import { fileURLToPath } from 'url'
+import path from 'path'
 import { logger } from './lib/logger.js'
 import { env } from './config/env.js'
 
-// Init Sentry before anything else (no-ops if SENTRY_DSN is not set)
+// Init Sentry before any route handlers (no-ops if SENTRY_DSN is not set)
 if (env.SENTRY_DSN) {
   Sentry.init({
     dsn: env.SENTRY_DSN,
@@ -16,8 +19,6 @@ if (env.SENTRY_DSN) {
   })
   logger.info('Sentry initialized')
 }
-import rateLimit from 'express-rate-limit'
-import { Queue } from 'bullmq'
 import authRouter from './routes/auth.js'
 import workspacesRouter from './routes/workspaces.js'
 import postsRouter from './routes/posts.js'
@@ -53,7 +54,6 @@ import searchRouter from './routes/search.js'
 import seoRouter from './routes/seo.js'
 import seoDataRouter from './routes/seoData.js'
 import dlqRouter from './routes/dlq.js'
-import tradeflowRouter from './routes/tradeflow.js'
 import photoToPostRouter from './routes/photoToPost.js'
 import outcomeAnalyticsRouter from './routes/outcomeAnalytics.js'
 import approvalsRouter from './routes/approvals.js'
@@ -79,7 +79,6 @@ import { startAutomationResumeWorker  } from './workers/automation.resume.worker
 import { startAutomationOutboxWorker  } from './workers/automation.outbox.worker.js'
 import { startAutomationWakeupWorker  } from './workers/automation.wakeup.worker.js'
 import { prisma } from './lib/prisma.js'
-import IORedis from 'ioredis'
 
 // Run DB migrations in the background — do NOT block Express startup.
 // The /health endpoint must respond within 30s for Railway healthcheck to pass.
@@ -223,13 +222,25 @@ app.use('/api/v1/agency-branding', agencyBrandingRouter)
 app.use('/api/v1/evergreen', evergreenQueueRouter)
 app.use('/api/v1/automations', automationRouter)
 app.use('/api/v1/automation/inbound', automationInboundRouter)
-app.use('/uploads', express.static('public/uploads'))
+const _uploadsDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'uploads')
+app.use('/uploads', express.static(_uploadsDir))
+
+const ALLOWED_QUEUES = new Set([
+  'stuck-job-sweeper', 'publish-post', 'analytics-sync',
+  'evergreen', 'evergreen-recycler', 'guardian',
+  'automation-execute', 'automation-outbox', 'automation-resume',
+  'automation-trigger', 'automation-wakeup',
+  'engagement-alert', 'auth-token-refresh', 'weekly-digest', 'system-monitor',
+])
 
 // Internal maintenance endpoint — INTERNAL_API_SECRET only, no user auth required
 app.post('/internal/queues/:name/clean-failed', async (req, res) => {
   const secret = req.headers['x-internal-secret']
   if (!env.INTERNAL_API_SECRET || secret !== env.INTERNAL_API_SECRET) {
     res.status(401).json({ error: 'Unauthorized' }); return
+  }
+  if (!ALLOWED_QUEUES.has(req.params.name)) {
+    res.status(400).json({ error: 'Unknown queue name' }); return
   }
   try {
     const q = new Queue(req.params.name, { connection: (await import('./lib/queue.js')).redisConnection })

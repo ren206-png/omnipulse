@@ -24,9 +24,9 @@ export function rateLimit({ windowMs, max, message }: RateLimitOptions) {
   }, windowMs).unref()
 
   return (req: Request, res: Response, next: NextFunction): void => {
-    const ip = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0].trim()
-      ?? req.socket.remoteAddress
-      ?? 'unknown'
+    // Use req.ip which is normalised by Express trust proxy, not the raw header
+    // (raw X-Forwarded-For can be forged by clients to bypass rate limiting)
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown'
 
     const now = Date.now()
     const record = hits.get(ip)

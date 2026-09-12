@@ -295,7 +295,7 @@ export function DashboardContent({ token }: { token: string }) {
         const { posts: fetchedPosts } = (await postsRes.json()) as { posts: Post[] }
 
         const ws = workspaces.find((w) => w.id === workspaceId)
-        setActiveSocialAccounts(ws?._count.socialAccounts ?? 0)
+        setActiveSocialAccounts(ws?._count?.socialAccounts ?? 0)
         setPosts(fetchedPosts)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error')

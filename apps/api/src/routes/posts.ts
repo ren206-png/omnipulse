@@ -968,10 +968,10 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
     if (platformVariants !== undefined) {
       const { variants, error: variantError } = validateVariants(platformVariants)
       if (variantError) { sendError(res, 400, 'INVALID_VARIANT', variantError); return }
-      // Delete existing variants for this post, then recreate (clean upsert)
-      await (prisma.platformVariant.deleteMany as Function)({ where: { postId: id } })
-      if (variants!.length > 0) {
-        await (prisma.platformVariant.createMany as Function)({
+      // Delete and recreate variants atomically to prevent partial data loss on failure
+      await prisma.$transaction([
+        (prisma.platformVariant.deleteMany as Function)({ where: { postId: id } }),
+        ...(variants!.length > 0 ? [(prisma.platformVariant.createMany as Function)({
           data: variants!.map((v) => ({
             postId: id,
             platform: v.platform,
@@ -980,8 +980,8 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
             mediaUrls: v.mediaUrls ?? [],
             ...(v.altText ? { altText: v.altText } : {}),
           })),
-        })
-      }
+        })] : []),
+      ])
     }
 
     const updated = await (prisma.scheduledPost.update as Function)({
