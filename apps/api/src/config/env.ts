@@ -11,13 +11,17 @@ for (const key of required) {
   }
 }
 
+// Use console here — logger cannot be imported into env.ts (circular dependency)
+if ((process.env.JWT_SECRET ?? '').length < 32) {
+  throw new Error('[STARTUP] JWT_SECRET must be at least 32 characters for security.')
+}
+
 if (process.env.NODE_ENV === 'production') {
   const encKey = process.env.TOKEN_ENCRYPTION_KEY ?? ''
   if (!encKey || encKey.length !== 64) {
-    // Use console.error here — logger cannot be imported into env.ts (circular dependency)
-    console.error(
+    throw new Error(
       '[STARTUP] TOKEN_ENCRYPTION_KEY must be a 64-character hex string (32 bytes) in production. ' +
-        'Social account tokens will not be encrypted correctly.',
+        'Refusing to start with unencrypted OAuth token storage.',
     )
   }
 }

@@ -243,7 +243,7 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
       })
       const data = (await res.json()) as { comment?: PostCommentItem; error?: string }
       if (!res.ok) { setCommentError(data.error ?? 'Failed to post'); return }
-      setComments((prev) => [...prev, data.comment!])
+      if (data.comment) setComments((prev) => [...prev, data.comment!])
       setCommentBody('')
     } catch { setCommentError('Network error') }
     finally { setCommentSubmitting(false) }
@@ -253,12 +253,17 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
     setDeletingCommentId(commentId)
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
     try {
-      await fetch(`${apiUrl}/api/v1/posts/${postId}/comments/${commentId}`, {
+      const res = await fetch(`${apiUrl}/api/v1/posts/${postId}/comments/${commentId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
-      setComments((prev) => prev.filter((c) => c.id !== commentId))
-    } catch { /* ignore */ }
+      if (res.ok) {
+        setComments((prev) => prev.filter((c) => c.id !== commentId))
+      } else {
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        setCommentError(data.error ?? 'Failed to delete comment')
+      }
+    } catch { setCommentError('Network error') }
     finally { setDeletingCommentId(null) }
   }
 

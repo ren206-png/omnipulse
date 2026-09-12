@@ -25,6 +25,7 @@ setTimeout(() => { registerScheduler().catch(() => {}) }, 2000)
 const worker = new Worker(
   'analytics-sync',
   async () => {
+    // WEEKLY-AUDIT: no pagination here — fetches every row in one query; will timeout as table grows. Add take/cursor batching.
     const accounts = await prisma.socialAccount.findMany()
     let successCount = 0
     let failureCount = 0
@@ -34,6 +35,7 @@ const worker = new Worker(
     for (const account of accounts) {
       try {
         const analytics = await service.getAnalytics(account.externalProfileId)
+        // WEEKLY-AUDIT: use upsert keyed on (socialAccountId, date) to prevent duplicate rows if the scheduler fires twice (e.g. Redis failover).
         await prisma.analyticsSnapshot.create({
           data: {
             socialAccountId: account.id,

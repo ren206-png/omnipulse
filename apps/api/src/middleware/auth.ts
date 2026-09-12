@@ -24,7 +24,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const token = req.headers.authorization?.startsWith('Bearer ')
     ? req.headers.authorization.slice(7)
     : (req.cookies as Record<string, string> | undefined)?.token
-    ?? (typeof req.query.token === 'string' ? req.query.token : undefined)
 
   if (!token) {
     sendError(res, 401, 'UNAUTHORIZED', 'Missing or invalid Authorization header')
@@ -32,7 +31,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   }
   let payload: JwtPayload
   try {
-    payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload
+    payload = jwt.verify(token, env.JWT_SECRET, { algorithms: ['HS256'] }) as JwtPayload
   } catch {
     sendError(res, 401, 'INVALID_TOKEN', 'Token is invalid or expired')
     return
@@ -41,7 +40,12 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   // Check if the token was issued before a password reset
   prisma.user.findUnique({ where: { id: payload.id }, select: { passwordChangedAt: true } })
     .then((user) => {
-      if (user?.passwordChangedAt && payload.iat !== undefined) {
+      if (user?.passwordChangedAt) {
+        // Fail closed: if iat is missing, treat as before-reset to prevent bypass
+        if (payload.iat === undefined) {
+          sendError(res, 401, 'TOKEN_REVOKED', 'Token invalidated by password reset')
+          return
+        }
         const changedAtSec = Math.floor(user.passwordChangedAt.getTime() / 1000)
         if (payload.iat < changedAtSec) {
           sendError(res, 401, 'TOKEN_REVOKED', 'Token invalidated by password reset')

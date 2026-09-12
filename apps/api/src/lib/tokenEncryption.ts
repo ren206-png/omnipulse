@@ -11,10 +11,14 @@ const ALGO = 'aes-256-gcm'
 const IV_LEN = 12  // 96-bit IV for GCM
 const TAG_LEN = 16 // 128-bit auth tag
 
+// Cache the key once at module load — avoids repeated Buffer allocation per call
+const _keyHex = process.env.TOKEN_ENCRYPTION_KEY ?? ''
+const _cachedKey: Buffer | null = (_keyHex && _keyHex.length === 64)
+  ? Buffer.from(_keyHex, 'hex')
+  : null
+
 function getKey(): Buffer | null {
-  const hex = process.env.TOKEN_ENCRYPTION_KEY ?? ''
-  if (!hex || hex.length !== 64) return null
-  return Buffer.from(hex, 'hex')
+  return _cachedKey
 }
 
 /**
@@ -50,7 +54,7 @@ export function decryptToken(stored: string): string {
     const encrypted = Buffer.from(parts[2], 'base64')
     const decipher = createDecipheriv(ALGO, key, iv)
     decipher.setAuthTag(tag)
-    return decipher.update(encrypted) + decipher.final('utf8')
+    return decipher.update(encrypted).toString('utf8') + decipher.final('utf8')
   } catch (err) {
     // Return empty string rather than the raw ciphertext — callers that use the
     // return value as a bearer token would otherwise send garbled ciphertext to

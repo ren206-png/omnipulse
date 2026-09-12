@@ -126,9 +126,20 @@ export function extractOAuthStatePayload(
     throw new TenantAccessError(400, 'INVALID_STATE', 'OAuth state missing workspaceId')
   }
 
+  if (typeof payload.userId !== 'string' || !payload.userId) {
+    throw new TenantAccessError(400, 'INVALID_STATE', 'OAuth state missing userId')
+  }
+
+  // Reject state tokens older than 10 minutes to prevent replay attacks
+  const MAX_STATE_AGE_MS = 10 * 60 * 1000
+  const rawPayload = payload as { iat?: number }
+  if (typeof rawPayload.iat !== 'number' || Date.now() - rawPayload.iat > MAX_STATE_AGE_MS) {
+    throw new TenantAccessError(400, 'STATE_EXPIRED', 'OAuth state token has expired')
+  }
+
   return {
     workspaceId: payload.workspaceId,
-    userId: payload.userId ?? '',
+    userId: payload.userId,
     platform: payload.platform ?? '',
     pkceVerifier: payload.pkceVerifier,
   }

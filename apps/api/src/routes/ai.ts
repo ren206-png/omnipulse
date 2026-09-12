@@ -94,24 +94,26 @@ router.post('/generate', aiLimiter, async (req: Request, res: Response): Promise
     return
   }
 
-  // Plan gate: FREE plan blocks AI entirely; paid plans allow overages (billed via Stripe)
-  const { workspaceId } = req.body as { workspaceId?: string }
-  if (workspaceId) {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-    if (workspace) {
-      const limits = PLAN_LIMITS[workspace.plan as Plan]
-      if (limits.aiGenerations === 0) {
-        sendError(res, 402, 'PLAN_REQUIRED', 'AI features require a paid plan. Upgrade to Starter to get started.')
-        return
-      }
-    }
-  }
-
-  const { prompt, platforms, tone = 'casual', variations = 1 } = req.body as {
+  // Plan gate: workspaceId required — omitting it cannot bypass the FREE plan check
+  const { workspaceId, prompt, platforms, tone = 'casual', variations = 1 } = req.body as {
+    workspaceId?: string
     prompt?: string
     platforms?: string[]
     tone?: string
     variations?: number
+  }
+
+  if (!workspaceId) {
+    sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required')
+    return
+  }
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  if (workspace) {
+    const limits = PLAN_LIMITS[workspace.plan as Plan]
+    if (limits.aiGenerations === 0) {
+      sendError(res, 402, 'PLAN_REQUIRED', 'AI features require a paid plan. Upgrade to Starter to get started.')
+      return
+    }
   }
 
   if (!prompt || !prompt.trim()) {
@@ -323,6 +325,29 @@ router.post('/hashtag-research', aiLimiter, async (req: Request, res: Response):
   }
 })
 
+// Block private/loopback/link-local IPs to prevent SSRF attacks
+function isPrivateIp(hostname: string): boolean {
+  // IPv4 private ranges
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
+  const match = ipv4.exec(hostname)
+  if (match) {
+    const [, a, b] = match.map(Number)
+    if (a === 10) return true                        // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true // 172.16.0.0/12
+    if (a === 192 && b === 168) return true           // 192.168.0.0/16
+    if (a === 127) return true                        // 127.0.0.0/8
+    if (a === 169 && b === 254) return true           // 169.254.0.0/16 link-local
+    if (a === 0) return true                          // 0.0.0.0/8
+    if (a === 100 && b >= 64 && b <= 127) return true // 100.64.0.0/10 CGNAT
+  }
+  // IPv6 loopback and link-local
+  if (hostname === '::1') return true
+  if (hostname.startsWith('fe80:') || hostname.startsWith('fe80::')) return true
+  // Reject bare localhost
+  if (hostname.toLowerCase() === 'localhost') return true
+  return false
+}
+
 router.post('/link-preview', async (req: Request, res: Response): Promise<void> => {
   const { url } = req.body as { url?: string }
 
@@ -340,6 +365,13 @@ router.post('/link-preview', async (req: Request, res: Response): Promise<void> 
     }
   } catch {
     sendError(res, 400, 'INVALID_URL', 'Invalid URL')
+    return
+  }
+
+  // SSRF protection: block requests to private/loopback/link-local addresses
+  const hostname = parsedUrl.hostname
+  if (isPrivateIp(hostname)) {
+    sendError(res, 400, 'INVALID_URL', 'URL resolves to a private or internal address')
     return
   }
 

@@ -267,7 +267,9 @@ async function handleWebhookEvent(event: Stripe.Event) {
 
     case 'invoice.payment_succeeded': {
       const invoice = event.data.object as Stripe.Invoice
-      const subId = (invoice as any).subscription as string | null
+      // Use the same Stripe v18+ path as invoice.payment_failed
+      const succeededParent = (invoice as unknown as { parent?: { subscription_details?: { subscription?: string } } }).parent
+      const subId = succeededParent?.subscription_details?.subscription ?? null
       if (!subId) break
       // Reset monthly AI usage counter at billing period renewal
       await prisma.workspace.updateMany({

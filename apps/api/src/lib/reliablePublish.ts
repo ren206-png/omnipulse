@@ -187,34 +187,39 @@ export async function reliablePublish(params: {
     '[reliablePublish] All attempts exhausted — writing to DLQ',
   )
 
-  const dlqId = await writeDlq({
-    postId: params.postId,
-    workspaceId: params.workspaceId,
-    platform: params.platform,
-    errorCode: lastStatusCode,
-    errorMessage: lastError,
-    attempts: MAX_ATTEMPTS,
-  })
-
-  // Update post status to failed
   try {
-    await (prisma as any).scheduledPost.update({
-      where: { id: params.postId },
-      data: { status: 'FAILED', errorLog: JSON.stringify({ [params.platform]: lastError }) },
+    const dlqId = await writeDlq({
+      postId: params.postId,
+      workspaceId: params.workspaceId,
+      platform: params.platform,
+      errorCode: lastStatusCode,
+      errorMessage: lastError,
+      attempts: MAX_ATTEMPTS,
     })
+
+    // Update post status to failed
+    try {
+      await (prisma as any).scheduledPost.update({
+        where: { id: params.postId },
+        data: { status: 'FAILED', errorLog: JSON.stringify({ [params.platform]: lastError }) },
+      })
+    } catch (err) {
+      logger.error({ err, postId: params.postId }, '[reliablePublish] Failed to update post status to FAILED')
+    }
+
+    // Send notifications
+    await notifyFailure({
+      postId: params.postId,
+      workspaceId: params.workspaceId,
+      platform: params.platform,
+      errorMessage: lastError,
+      dlqId,
+      postContent: params.postContent,
+    })
+
+    return { success: false, dlqId }
   } catch (err) {
-    logger.error({ err, postId: params.postId }, '[reliablePublish] Failed to update post status to FAILED')
+    logger.error({ err, postId: params.postId }, '[reliablePublish] DLQ write failed — post left in unknown state')
+    return { success: false }
   }
-
-  // Send notifications
-  await notifyFailure({
-    postId: params.postId,
-    workspaceId: params.workspaceId,
-    platform: params.platform,
-    errorMessage: lastError,
-    dlqId,
-    postContent: params.postContent,
-  })
-
-  return { success: false, dlqId }
 }

@@ -17,12 +17,15 @@ export async function checkLimit(
   if (resource === 'socialAccounts') {
     current = await prisma.socialAccount.count({ where: { workspaceId } })
   } else if (resource === 'scheduledPosts') {
+    // Use UTC to avoid timezone/DST drift at month boundaries
     const startOfMonth = new Date()
-    startOfMonth.setDate(1)
-    startOfMonth.setHours(0, 0, 0, 0)
+    startOfMonth.setUTCDate(1)
+    startOfMonth.setUTCHours(0, 0, 0, 0)
     current = await prisma.scheduledPost.count({ where: { workspaceId, createdAt: { gte: startOfMonth } } })
   } else if (resource === 'teamMembers') {
     current = await prisma.workspaceMember.count({ where: { workspaceId } })
+  } else if (resource === 'workspaces') {
+    current = await prisma.workspace.count({ where: { ownerId: workspace.ownerId } })
   }
 
   return { allowed: current < limit, limit: limit === Infinity ? -1 : limit, current }

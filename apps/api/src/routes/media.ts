@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
+import { fileURLToPath } from 'url'
 import { v4 as uuidv4 } from 'uuid'
 import { requireAuth } from '../middleware/auth.js'
 import { env } from '../config/env.js'
@@ -13,7 +14,8 @@ import { assertWorkspaceAccess, assertResourceBelongsToWorkspace, TenantAccessEr
 const router = Router()
 
 // ── Storage ───────────────────────────────────────────────────────────────────
-const UPLOAD_DIR = path.resolve('public/uploads')
+const _mediaDir = path.dirname(fileURLToPath(import.meta.url))
+const UPLOAD_DIR = path.resolve(_mediaDir, '../../public/uploads')
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true })
 
 // WEEKLY-AUDIT: readStore/writeStore use synchronous fs I/O, blocking the event loop on every upload request.
@@ -44,10 +46,21 @@ function writeStore(assets: MediaAsset[]) {
   fs.writeFileSync(STORE_FILE, JSON.stringify(assets, null, 2))
 }
 
+// Allowlisted extensions — never derive from client-supplied filename to prevent upload of executable files
+const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4'])
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'video/mp4': '.mp4',
+}
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname)
+    // Use the safe MIME-derived extension, not the client-supplied filename
+    const ext = MIME_TO_EXT[file.mimetype] ?? '.bin'
     cb(null, `${uuidv4()}${ext}`)
   },
 })
@@ -56,8 +69,13 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
   fileFilter: (_req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4']
-    cb(null, allowed.includes(file.mimetype))
+    const clientExt = path.extname(file.originalname).toLowerCase()
+    const allowed = Object.keys(MIME_TO_EXT)
+    if (!allowed.includes(file.mimetype) || !ALLOWED_EXTENSIONS.has(clientExt)) {
+      cb(null, false)
+      return
+    }
+    cb(null, true)
   },
 })
 

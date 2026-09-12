@@ -61,6 +61,8 @@ async function postFirstComment(
           'X-Restli-Protocol-Version': '2.0.0',
           'LinkedIn-Version': '202406',
         },
+        // WEEKLY-AUDIT: 'urn:li:person:me' is not a valid LinkedIn REST URN — LinkedIn rejects this with 400.
+        // Fix: pass linkedinPersonUrn as a parameter to postFirstComment and use it here.
         body: JSON.stringify({
           actor: 'urn:li:person:me',
           message: { text: comment },
@@ -388,7 +390,7 @@ const worker = new Worker(
         } else {
           externalId = await publishToPlatform(
             { content, mediaUrls },
-            { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
+            { platform, accessToken: decryptToken(account.accessToken), externalProfileId: account.externalProfileId },
           )
         }
         responseLog[platform] = externalId
@@ -406,7 +408,7 @@ const worker = new Worker(
                 const replyRes = await fetch('https://api.twitter.com/2/tweets', {
                   method: 'POST',
                   headers: {
-                    Authorization: `Bearer ${account.accessToken}`,
+                    Authorization: `Bearer ${decryptToken(account.accessToken)}`,
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify({
@@ -452,10 +454,7 @@ const worker = new Worker(
         if (!externalId || externalId.includes('_manual_required')) continue
         const account = accounts.find((a) => a.platform === platform)
         if (!account) continue
-        // For LinkedIn, use the raw decrypted token
-        const accessToken = platform === 'LINKEDIN'
-          ? decryptToken(account.accessToken)
-          : account.accessToken
+        const accessToken = decryptToken(account.accessToken)
         await postFirstComment(platform, externalId, accessToken, post.firstComment)
       }
       logger.info({ postId, platforms: Object.keys(responseLog) }, 'First comment posted')

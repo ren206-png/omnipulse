@@ -65,7 +65,7 @@ Scan criteria:
 
 Return ONLY valid JSON. No markdown fences, no prose.`
 
-function failSafe(platform: string): SafeGuardResult {
+function failSafe(): SafeGuardResult {
   return {
     status: 'warning',
     flags: ['Safety scan unavailable — review manually before publishing'],
@@ -91,7 +91,8 @@ async function scanSingle(client: Anthropic, platform: string, content: string, 
       system: SYSTEM_PROMPT,
       messages: [{
         role: 'user',
-        content: `Platform: ${platform}\n\nContent to scan:\n"${content.trim()}"`,
+        // Use XML tags to prevent content from being interpreted as instructions
+      content: `Platform: ${platform}\n\nContent to scan:\n<content>${content.trim()}</content>`,
       }],
     })
 
@@ -113,7 +114,7 @@ async function scanSingle(client: Anthropic, platform: string, content: string, 
     }
     // Both attempts failed — fail safe to warning, never to clear
     logger.error({ err, platform }, 'SafeGuard: both scan attempts failed, returning fail-safe warning')
-    return failSafe(platform)
+    return failSafe()
   }
 }
 
@@ -123,7 +124,7 @@ export async function scanContent(
   if (!env.ANTHROPIC_API_KEY) {
     // Fail safe — return warning for each platform
     return Object.fromEntries(
-      Object.keys(variants).map((p) => [p, failSafe(p)])
+      Object.keys(variants).map((p) => [p, failSafe()])
     )
   }
 

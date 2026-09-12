@@ -100,15 +100,16 @@ async function runMonitorCycle(): Promise<void> {
         meta: qCount,
       })
       // Auto-heal: clean up failed jobs older than 1 hour to prevent backlog bloat
+      const q = new Queue(qName, { connection: redisConnection })
       try {
-        const q = new Queue(qName, { connection: redisConnection })
         const cleaned = await q.clean(60 * 60 * 1000, 100, 'failed')
-        await q.close()
         if (cleaned.length > 0) {
           logger.warn({ queue: qName, cleaned: cleaned.length }, '[SystemMonitor] Auto-cleaned failed jobs')
         }
       } catch (err) {
         logger.error({ err, queue: qName }, '[SystemMonitor] Failed to clean failed jobs')
+      } finally {
+        await q.close()
       }
     } else if (qCount.failed >= QUEUE_FAILED_WARN) {
       await sendAlert({

@@ -188,8 +188,8 @@ router.post('/2fa/verify-login', authLimiter, async (req: Request, res: Response
 })
 
 router.post('/forgot-password', resetLimiter, async (req: Request, res: Response): Promise<void> => {
-  const { email } = req.body as { email?: string }
-  if (!email || !email.includes('@')) {
+  const { email } = req.body as { email?: unknown }
+  if (typeof email !== 'string' || !email || !email.includes('@')) {
     sendError(res, 400, 'INVALID_EMAIL', 'A valid email address is required')
     return
   }
@@ -213,7 +213,7 @@ router.post('/forgot-password', resetLimiter, async (req: Request, res: Response
     logger.info({ userId: user.id }, 'Password reset token generated')
     await sendPasswordResetEmail({ to: user.email, resetToken: token })
     if (env.NODE_ENV !== 'production') {
-      console.log(`\n[DEV] Password reset link: ${process.env.WEB_URL ?? 'http://localhost:3000'}/reset-password/${token}\n`)
+      logger.debug({ userId: user.id }, `[DEV] Password reset token generated — check email or logs`)
     }
 
     res.json({ message: 'If that email exists, a reset link has been sent.' })
