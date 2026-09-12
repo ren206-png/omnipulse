@@ -65,6 +65,9 @@ export async function startStuckJobSweeperWorker(): Promise<void> {
 
       // Parse attempt counts for each post
       const postsWithAttempts = stuckPosts.map((post) => {
+        // WEEKLY-AUDIT: _attempts is stored in errorLog, but publishPost.worker.ts overwrites errorLog on failure (line ~445).
+        // If a post gets stuck again after a failed publish attempt, _attempts resets to 0 — allowing unbounded requeues.
+        // Fix: add a dedicated sweeperAttempts column on ScheduledPost and read/write that instead.
         let attempts = 0
         if (post.errorLog) {
           try {

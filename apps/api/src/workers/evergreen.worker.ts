@@ -34,6 +34,14 @@ export function startEvergreenWorker() {
           })
           await publishPostQueue.add('publish-post', { postId: (newPost as { id: string }).id, workspaceId: post.workspaceId }, {
             delay: post.evergreenInterval * 24 * 60 * 60 * 1000,
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5000 },
+          })
+          // Advance the anchor date so the next hourly tick computes a future nextDate
+          // and doesn't spawn another duplicate copy immediately.
+          await (prisma.scheduledPost.update as Function)({
+            where: { id: post.id },
+            data: { scheduledFor: nextDate },
           })
           logger.info({ originalPostId: post.id, newPostId: (newPost as { id: string }).id }, 'Evergreen post recycled')
         }
