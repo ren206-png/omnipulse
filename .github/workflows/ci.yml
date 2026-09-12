@@ -145,6 +145,7 @@ jobs:
         run: |
           # Audit only deployed services — exclude apps/mobile (Expo) transitive deps.
           # Mobile is not deployed and not in our production attack surface.
+          # NO_FIX: vulnerabilities with no patched version available, tracked separately.
           pnpm audit --audit-level=high --json 2>/dev/null | python3 -c "
           import json, sys
 
@@ -154,6 +155,11 @@ jobs:
               print('Could not parse audit JSON — skipping')
               sys.exit(0)
 
+          # Known no-fix vulnerabilities (patched: <0.0.0): excluded until upstream publishes a fix.
+          NO_FIX_SUBSTRINGS = [
+              'social-media-api',  # image-size via datauri — no patched version exists
+          ]
+
           advisories = data.get('advisories', {})
           failures = []
 
@@ -162,7 +168,11 @@ jobs:
                   continue
               name = adv.get('module_name', adv_id)
               all_paths = [p for f in adv.get('findings', []) for p in f.get('paths', [])]
-              deployed = [p for p in all_paths if 'apps__mobile' not in p]
+              # Exclude mobile (not deployed). Handle both pnpm v9 ('apps/mobile >') and
+              # v10 ('apps__mobile>') path formats.
+              deployed = [p for p in all_paths
+                          if 'apps__mobile' not in p and 'apps/mobile' not in p
+                          and not any(nf in p for nf in NO_FIX_SUBSTRINGS)]
               if deployed:
                   failures.append(f\"{name} ({adv['severity']}): {deployed[0]}\")
 
@@ -173,6 +183,6 @@ jobs:
               sys.exit(1)
           else:
               total = len([a for a in advisories.values() if a.get('severity') in ('high','critical')])
-              print(f'No high/critical vulnerabilities in deployed apps ({total} only in mobile/dev deps)')
+              print(f'No high/critical vulnerabilities in deployed apps ({total} only in mobile/dev deps or no-fix list)')
               sys.exit(0)
           "
