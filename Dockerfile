@@ -8,10 +8,11 @@ WORKDIR /app
 # Copy everything first (needed for monorepo context)
 COPY . .
 
-# Install ALL deps (including devDependencies needed for the TypeScript build),
-# skip postinstall to avoid prisma generate failing, then build TypeScript.
-# The Prisma client is pre-generated and committed to the repo.
-RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts && npm run build
+# Install ALL deps including devDependencies (needed for tsc build).
+# NODE_ENV=production is set by Railway which normally skips devDeps,
+# so we explicitly force --include=dev. Skip postinstall (prisma generate)
+# since the client is pre-committed. Then compile TypeScript.
+RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts --include=dev && npm run build
 
 EXPOSE 3001
 
