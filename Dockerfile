@@ -8,11 +8,11 @@ WORKDIR /app
 # Copy everything first (needed for monorepo context)
 COPY . .
 
-# Install ALL deps including devDependencies (needed for tsc build).
-# NODE_ENV=production is set by Railway which normally skips devDeps,
-# so we explicitly force --include=dev. Skip postinstall (prisma generate)
-# since the client is pre-committed. Then compile TypeScript.
-RUN cd apps/api && NODE_ENV=development npm install --legacy-peer-deps --ignore-scripts && npm run build
+# Disable production mode so npm installs devDependencies (needed for tsc).
+# Skip postinstall lifecycle scripts (avoids prisma generate running prematurely
+# since the Prisma client is already pre-committed to the repo).
+RUN npm config set production false
+RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts && npm run build
 
 EXPOSE 3001
 
