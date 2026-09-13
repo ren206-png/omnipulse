@@ -8,8 +8,8 @@ WORKDIR /app
 # Copy everything first (needed for monorepo context)
 COPY . .
 
-# Install deps (skip tsc — tsx runs TS directly; Prisma client is pre-generated and committed)
-RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts
+# Install deps and regenerate Prisma client (pinned to exact version to avoid mismatches)
+RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts && ./node_modules/.bin/prisma generate
 
 EXPOSE 3001
 
