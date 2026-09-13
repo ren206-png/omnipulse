@@ -8,11 +8,11 @@ WORKDIR /app
 # Copy everything first (needed for monorepo context)
 COPY . .
 
-# Install deps only — the Prisma client is pre-generated and committed to the repo,
-# so we skip prisma generate entirely (avoids pg resolution issues in Docker).
-# --ignore-scripts prevents the postinstall hook from trying to run prisma generate.
-RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts
+# Install ALL deps (including devDependencies needed for the TypeScript build),
+# skip postinstall to avoid prisma generate failing, then build TypeScript.
+# The Prisma client is pre-generated and committed to the repo.
+RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts && npm run build
 
 EXPOSE 3001
 
-CMD ["apps/api/node_modules/.bin/tsx", "apps/api/src/index.ts"]
+CMD ["node", "--import", "tsx/esm", "apps/api/dist/src/index.js"]
