@@ -30,7 +30,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
         COUNT(DISTINCT sa.id) AS "socialAccountCount",
         'OWNER' AS "memberRole"
       FROM "Workspace" w
-      LEFT JOIN "Post" p ON p."workspaceId" = w.id
+      LEFT JOIN "ScheduledPost" p ON p."workspaceId" = w.id
       LEFT JOIN "SocialAccount" sa ON sa."workspaceId" = w.id
       WHERE w."ownerId" = ${userId}
       GROUP BY w.id
@@ -43,7 +43,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
         wm.role AS "memberRole"
       FROM "WorkspaceMember" wm
       JOIN "Workspace" w ON w.id = wm."workspaceId"
-      LEFT JOIN "Post" p ON p."workspaceId" = w.id
+      LEFT JOIN "ScheduledPost" p ON p."workspaceId" = w.id
       LEFT JOIN "SocialAccount" sa ON sa."workspaceId" = w.id
       WHERE wm."userId" = ${userId} AND w."ownerId" != ${userId}
       GROUP BY w.id, wm.role
