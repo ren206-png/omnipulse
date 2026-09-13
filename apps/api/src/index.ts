@@ -2,6 +2,7 @@ import './config/env.js'
 import 'dotenv/config'
 import * as Sentry from '@sentry/node'
 import express from 'express'
+import helmet from 'helmet'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import { logger } from './lib/logger.js'
@@ -129,6 +130,12 @@ const app = express()
 
 // Trust Railway's reverse proxy so express-rate-limit and IP detection work correctly
 app.set('trust proxy', 1)
+
+// Security headers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' }, // allow CDN/font requests
+  contentSecurityPolicy: false, // API — CSP handled by frontend
+}))
 
 app.use(cors({
   origin: env.CORS_ORIGINS,
