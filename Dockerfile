@@ -12,7 +12,7 @@ COPY . .
 # NODE_ENV=production is set by Railway which normally skips devDeps,
 # so we explicitly force --include=dev. Skip postinstall (prisma generate)
 # since the client is pre-committed. Then compile TypeScript.
-RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts --include=dev && npm run build
+RUN cd apps/api && NODE_ENV=development npm install --legacy-peer-deps --ignore-scripts && npm run build
 
 EXPOSE 3001
 
