@@ -1,4 +1,5 @@
 FROM node:22-slim
+# cache-bust: prisma-7.10.0-fix
 
 # Install OpenSSL for Prisma
 RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
