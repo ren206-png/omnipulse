@@ -36,10 +36,11 @@ export async function findWorkspaceById(id: string): Promise<WorkspaceRow | null
       id, name, "ownerId", plan,
       "stripeCustomerId", "stripeSubscriptionId", "subscriptionStatus",
       "onboardingComplete", "brandName", "brandLogoUrl", "brandColor",
-      "customDomain", "stripeMeteredItemId",
-      COALESCE("aiGenerationsMonth", 0)::int AS "aiGenerationsMonth",
-      "aiUsagePeriodStart",
-      COALESCE("automationEnabled", false) AS "automationEnabled"
+      "customDomain",
+      NULL::text AS "stripeMeteredItemId",
+      0::int AS "aiGenerationsMonth",
+      NULL::timestamptz AS "aiUsagePeriodStart",
+      false AS "automationEnabled"
     FROM "Workspace"
     WHERE id = ${id}
     LIMIT 1
@@ -56,10 +57,11 @@ export async function findWorkspaceByOwner(ownerId: string): Promise<WorkspaceRo
       id, name, "ownerId", plan,
       "stripeCustomerId", "stripeSubscriptionId", "subscriptionStatus",
       "onboardingComplete", "brandName", "brandLogoUrl", "brandColor",
-      "customDomain", "stripeMeteredItemId",
-      COALESCE("aiGenerationsMonth", 0)::int AS "aiGenerationsMonth",
-      "aiUsagePeriodStart",
-      COALESCE("automationEnabled", false) AS "automationEnabled"
+      "customDomain",
+      NULL::text AS "stripeMeteredItemId",
+      0::int AS "aiGenerationsMonth",
+      NULL::timestamptz AS "aiUsagePeriodStart",
+      false AS "automationEnabled"
     FROM "Workspace"
     WHERE "ownerId" = ${ownerId}
     LIMIT 1
@@ -89,10 +91,11 @@ export async function updateWorkspace(
       id, name, "ownerId", plan,
       "stripeCustomerId", "stripeSubscriptionId", "subscriptionStatus",
       "onboardingComplete", "brandName", "brandLogoUrl", "brandColor",
-      "customDomain", "stripeMeteredItemId",
-      COALESCE("aiGenerationsMonth", 0)::int AS "aiGenerationsMonth",
-      "aiUsagePeriodStart",
-      COALESCE("automationEnabled", false) AS "automationEnabled"`,
+      "customDomain",
+      NULL::text AS "stripeMeteredItemId",
+      0::int AS "aiGenerationsMonth",
+      NULL::timestamptz AS "aiUsagePeriodStart",
+      false AS "automationEnabled"`,
     ...values,
   )
   return rows[0] ?? null
