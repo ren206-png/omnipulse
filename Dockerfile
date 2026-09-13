@@ -8,9 +8,11 @@ WORKDIR /app
 # Copy everything first (needed for monorepo context)
 COPY . .
 
-# Install deps (without --ignore-scripts so native modules like pg install correctly)
-# Then regenerate Prisma client to ensure it matches the schema
-RUN cd apps/api && npm install --legacy-peer-deps && ./node_modules/.bin/prisma generate
+# Install deps skipping postinstall (which runs prisma generate before pg is ready),
+# then run prisma generate manually with a dummy DATABASE_URL so prisma.config.ts
+# can instantiate the pg Pool without a real connection string.
+RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts \
+    && DATABASE_URL="postgresql://x:x@localhost/x" ./node_modules/.bin/prisma generate
 
 EXPOSE 3001
 
