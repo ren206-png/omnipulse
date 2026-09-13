@@ -483,7 +483,8 @@ describe('Static guard presence checks (regression: guard cannot be silently rem
 // Prefer assertWorkspaceAccess (centralized), but recognise pre-existing local helpers.
 const GUARD_PATTERNS = [
   'assertWorkspaceAccess',        // centralized guard (tenantGuard.ts) — preferred
-  'getWorkspaceRole',             // local helper in posts.ts
+  'getWorkspaceRole',             // local helper in posts.ts / workspaceRaw.ts
+  'findWorkspaceById',            // raw SQL workspace lookup (workspaceRaw.ts)
   'canAccessWorkspace',           // local helper in templates.ts
   'checkLinkAccess',              // local helper in links.ts
   'workspaceMember.findUnique',   // direct membership query
