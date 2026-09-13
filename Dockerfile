@@ -8,11 +8,11 @@ WORKDIR /app
 # Copy everything first (needed for monorepo context)
 COPY . .
 
-# Disable production mode so npm installs devDependencies (needed for tsc).
+# Install all deps including devDependencies (needed for tsc/tsx build tools).
+# Unset NODE_ENV during install so npm doesn't skip devDeps, then restore for build.
 # Skip postinstall lifecycle scripts (avoids prisma generate running prematurely
 # since the Prisma client is already pre-committed to the repo).
-RUN npm config set production false
-RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts && npm run build
+RUN cd apps/api && unset NODE_ENV && npm install --legacy-peer-deps --ignore-scripts && npm run build
 
 EXPOSE 3001
 
