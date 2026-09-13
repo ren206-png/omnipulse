@@ -8,14 +8,9 @@ WORKDIR /app
 # Copy everything first (needed for monorepo context)
 COPY . .
 
-# Override NODE_ENV so npm installs devDependencies (needed for tsx to run TS directly).
-# Skip postinstall lifecycle scripts (avoids prisma generate failing since
-# the Prisma client is already pre-generated and committed to the repo).
-ENV NODE_ENV=development
+# Install production deps (tsx is now a production dependency so it will be installed).
+# Skip postinstall (prisma generate) since the Prisma client is pre-committed.
 RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts
-
-# Restore production NODE_ENV for runtime
-ENV NODE_ENV=production
 
 EXPOSE 3001
 
