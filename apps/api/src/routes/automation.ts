@@ -29,6 +29,7 @@ import { requireAuth } from '../middleware/auth.js'
 import { assertWorkspaceAccess, TenantAccessError } from '../lib/tenantGuard.js'
 import { sendError } from '../lib/apiError.js'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { NodeConfigSchema, TriggerConfigSchema, EdgeLabelSchema } from '../automation/types/index.js'
 import { validateGraph } from '../automation/services/flowValidator.service.js'
 
@@ -117,10 +118,7 @@ router.post('/', requireAuth, async (req: Request, res: Response) => {
   }
 
   // Check workspace automation flag
-  const workspace = await prisma.workspace.findUnique({
-    where:  { id: workspaceId },
-    select: { automationEnabled: true },
-  })
+  const workspace = await findWorkspaceById(workspaceId)
   if (!workspace?.automationEnabled) {
     sendError(res, 403, 'AUTOMATION_NOT_ENABLED', 'Automation is not enabled for this workspace')
     return

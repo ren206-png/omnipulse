@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById, getWorkspaceRole } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -37,15 +38,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 
   try {
     // Verify workspace ownership/membership
-    const workspace = await prisma.workspace.findFirst({
-      where: {
-        id: workspaceId,
-        OR: [
-          { ownerId: req.user!.id },
-          { members: { some: { userId: req.user!.id } } },
-        ],
-      },
-    })
+    const _wsRole = await getWorkspaceRole(workspaceId, req.user!.id)
+    const workspace = _wsRole ? await findWorkspaceById(workspaceId) : null
 
     if (!workspace) {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
@@ -100,16 +94,8 @@ router.post('/seed', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const workspace = await prisma.workspace.findFirst({
-      where: {
-        id: workspaceId,
-        OR: [
-          { ownerId: req.user!.id },
-          { members: { some: { userId: req.user!.id } } },
-        ],
-      },
-      include: { socialAccounts: true },
-    })
+    const _wsRole2 = await getWorkspaceRole(workspaceId, req.user!.id)
+    const workspace = _wsRole2 ? Object.assign(await findWorkspaceById(workspaceId) ?? {}, { socialAccounts: await prisma.socialAccount.findMany({ where: { workspaceId: workspaceId } }) }) : null
 
     if (!workspace) {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
@@ -170,15 +156,8 @@ router.patch('/:id/read', async (req: Request, res: Response): Promise<void> => 
     if (!msg) { sendError(res, 404, 'NOT_FOUND', 'Message not found'); return }
 
     // Verify workspace access
-    const workspace = await prisma.workspace.findFirst({
-      where: {
-        id: msg.workspaceId,
-        OR: [
-          { ownerId: req.user!.id },
-          { members: { some: { userId: req.user!.id } } },
-        ],
-      },
-    })
+    const _role_msg_workspaceId = await getWorkspaceRole(msg.workspaceId, req.user!.id)
+    const workspace = _role_msg_workspaceId ? true : null
     if (!workspace) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
 
     const updated = await prisma.inboxMessage.update({
@@ -206,15 +185,8 @@ router.patch('/:id/reply', async (req: Request, res: Response): Promise<void> =>
     const msg = await prisma.inboxMessage.findUnique({ where: { id } })
     if (!msg) { sendError(res, 404, 'NOT_FOUND', 'Message not found'); return }
 
-    const workspace = await prisma.workspace.findFirst({
-      where: {
-        id: msg.workspaceId,
-        OR: [
-          { ownerId: req.user!.id },
-          { members: { some: { userId: req.user!.id } } },
-        ],
-      },
-    })
+    const _role_msg_workspaceId = await getWorkspaceRole(msg.workspaceId, req.user!.id)
+    const workspace = _role_msg_workspaceId ? true : null
     if (!workspace) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
 
     const updated = await prisma.inboxMessage.update({
@@ -235,15 +207,8 @@ router.patch('/:id/dismiss', async (req: Request, res: Response): Promise<void> 
     const msg = await prisma.inboxMessage.findUnique({ where: { id } })
     if (!msg) { sendError(res, 404, 'NOT_FOUND', 'Message not found'); return }
 
-    const workspace = await prisma.workspace.findFirst({
-      where: {
-        id: msg.workspaceId,
-        OR: [
-          { ownerId: req.user!.id },
-          { members: { some: { userId: req.user!.id } } },
-        ],
-      },
-    })
+    const _role_msg_workspaceId = await getWorkspaceRole(msg.workspaceId, req.user!.id)
+    const workspace = _role_msg_workspaceId ? true : null
     if (!workspace) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
 
     const updated = await prisma.inboxMessage.update({

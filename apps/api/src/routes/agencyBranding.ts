@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -22,7 +23,7 @@ const DEFAULT_BRANDING = {
 router.get('/:workspaceId', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.params
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace) { sendError(res, 404, 'NOT_FOUND', 'Workspace not found'); return }
     if (!PLAN_LIMITS[workspace.plan as Plan]?.whiteLabel) {
       res.status(403).json({ error: 'PLAN_REQUIRED', message: 'White-label branding requires the Agency plan' })
@@ -54,7 +55,7 @@ router.put('/', requireAuth, async (req: Request, res: Response): Promise<void> 
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId is required'); return }
 
   // Only workspace owner may update branding
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  const workspace = await findWorkspaceById(workspaceId)
   if (!workspace) { sendError(res, 404, 'NOT_FOUND', 'Workspace not found'); return }
   if (!PLAN_LIMITS[workspace.plan as Plan]?.whiteLabel) {
     res.status(403).json({ error: 'PLAN_REQUIRED', message: 'White-label branding requires the Agency plan' })

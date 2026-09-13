@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 
@@ -16,7 +17,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   const member = await prisma.workspaceMember.findUnique({
     where: { workspaceId_userId: { workspaceId, userId: req.user!.id } },
   })
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  const workspace = await findWorkspaceById(workspaceId)
   if (!member && workspace?.ownerId !== req.user!.id) {
     sendError(res, 403, 'FORBIDDEN', 'Access denied'); return
   }

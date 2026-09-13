@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -27,7 +28,7 @@ async function requireOwnerOrAdmin(
   res: Response,
   workspaceId: string,
 ): Promise<boolean> {
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  const workspace = await findWorkspaceById(workspaceId)
   if (!workspace) { sendError(res, 404, 'NOT_FOUND', 'Workspace not found'); return false }
   if (workspace.ownerId === req.user!.id) return true
   const membership = await prisma.workspaceMember.findUnique({
@@ -69,7 +70,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
           expiresAt,
         },
       }),
-      prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } }),
+      findWorkspaceById(workspaceId),
     ])
 
     // Send magic link email to recipient

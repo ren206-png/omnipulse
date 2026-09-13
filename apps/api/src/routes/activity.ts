@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -23,7 +24,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   // Verify workspace membership
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  const workspace = await findWorkspaceById(workspaceId)
   if (!workspace) {
     sendError(res, 404, 'NOT_FOUND', 'Workspace not found')
     return

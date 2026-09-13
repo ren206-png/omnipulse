@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -21,7 +22,7 @@ async function requireAdmin(
   const membership = await prisma.workspaceMember.findUnique({
     where: { workspaceId_userId: { workspaceId, userId: req.user!.id } },
   })
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  const workspace = await findWorkspaceById(workspaceId)
 
   const isOwner = workspace?.ownerId === req.user!.id
   const isAdmin = membership?.role === 'ADMIN'
@@ -39,7 +40,7 @@ async function requireMember(
   res: Response,
   workspaceId: string,
 ): Promise<boolean> {
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  const workspace = await findWorkspaceById(workspaceId)
   if (!workspace) {
     sendError(res, 404, 'NOT_FOUND', 'Workspace not found')
     return false
@@ -64,28 +65,27 @@ router.get('/:workspaceId/members', async (req: Request, res: Response): Promise
   if (!await requireMember(req, res, workspaceId)) return
 
   try {
-    const workspace = await prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      include: {
-        owner: { select: { id: true, email: true } },
-        members: {
-          include: { user: { select: { id: true, email: true } } },
-          orderBy: { joinedAt: 'asc' },
-        },
-      },
-    })
-
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace) { sendError(res, 404, 'NOT_FOUND', 'Workspace not found'); return }
 
+    const [ownerUser, members] = await Promise.all([
+      prisma.user.findUnique({ where: { id: workspace.ownerId }, select: { id: true, email: true } }),
+      prisma.workspaceMember.findMany({
+        where: { workspaceId },
+        include: { user: { select: { id: true, email: true } } },
+        orderBy: { joinedAt: 'asc' },
+      }),
+    ])
+
     const ownerEntry = {
-      id: workspace.owner.id,
-      email: workspace.owner.email,
+      id: ownerUser?.id ?? workspace.ownerId,
+      email: ownerUser?.email ?? '',
       role: 'OWNER' as const,
       joinedAt: null,
       memberId: null,
     }
 
-    const memberEntries = workspace.members.map((m) => ({
+    const memberEntries = members.map((m) => ({
       id: m.user.id,
       email: m.user.email,
       role: m.role,
@@ -144,7 +144,7 @@ router.post('/:workspaceId/invitations', async (req: Request, res: Response): Pr
     // Check user isn't already a member
     const existingUser = await prisma.user.findUnique({ where: { email } })
     if (existingUser) {
-      const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+      const workspace = await findWorkspaceById(workspaceId)
       if (workspace?.ownerId === existingUser.id) {
         sendError(res, 409, 'ALREADY_MEMBER', 'This user is already the owner')
         return
@@ -170,7 +170,7 @@ router.post('/:workspaceId/invitations', async (req: Request, res: Response): Pr
     logger.info({ inviteUrl, email, workspaceId }, 'Invitation created (dev: use this URL)')
 
     // Send invitation email (non-fatal — errors are logged inside sendInvitationEmail)
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     await sendInvitationEmail({
       to: email,
       inviterEmail: req.user!.email,
@@ -212,7 +212,7 @@ router.patch('/:workspaceId/members/:userId', async (req: Request, res: Response
   }
 
   // Cannot demote yourself if you're the only admin
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  const workspace = await findWorkspaceById(workspaceId)
   if (workspace?.ownerId === userId) {
     sendError(res, 400, 'CANNOT_MODIFY_OWNER', 'Cannot change the owner\'s role')
     return
@@ -234,7 +234,7 @@ router.patch('/:workspaceId/members/:userId', async (req: Request, res: Response
 router.delete('/:workspaceId/members/:userId', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId, userId } = req.params
 
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  const workspace = await findWorkspaceById(workspaceId)
   if (!workspace) { sendError(res, 404, 'NOT_FOUND', 'Workspace not found'); return }
 
   // Owner can remove anyone; admins can remove members; members can only remove themselves

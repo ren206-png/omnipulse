@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { publishPostQueue } from '../lib/queue.js'
 import { sendError } from '../lib/apiError.js'
@@ -200,7 +201,7 @@ router.get('/ical', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE', 'workspaceId required'); return }
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     const posts = await prisma.scheduledPost.findMany({
       where: { workspaceId, scheduledFor: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
@@ -634,7 +635,7 @@ router.post('/bulk-schedule', async (req: Request, res: Response): Promise<void>
     if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
 
     // Plan limit check — count existing scheduled posts
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (workspace) {
       const limits = PLAN_LIMITS[workspace.plan as Plan]
       if (limits.scheduledPosts !== Infinity) {
@@ -797,7 +798,7 @@ router.post('/:id/submit-review', async (req: Request, res: Response): Promise<v
       try {
         const [submitter, workspace, adminUsers] = await Promise.all([
           prisma.user.findUnique({ where: { id: req.user!.id }, select: { email: true } }),
-          prisma.workspace.findUnique({ where: { id: post.workspaceId }, select: { name: true } }),
+          findWorkspaceById(post.workspaceId),
           prisma.user.findMany({ where: { id: { in: submitterIds } }, select: { email: true } }),
         ])
         const appUrl = process.env.WEB_URL ?? 'http://localhost:3000'
@@ -1198,7 +1199,7 @@ router.post('/:id/ab-test', async (req: Request, res: Response): Promise<void> =
   try {
     const original = await (prisma.scheduledPost.findUnique as Function)({ where: { id } })
     if (!original) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
-    const workspace = await prisma.workspace.findUnique({ where: { id: original.workspaceId } })
+    const workspace = await findWorkspaceById(original.workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     // Mark original as A/B test active
     await (prisma.scheduledPost.update as Function)({ where: { id }, data: { abTestActive: true } })
@@ -1286,7 +1287,7 @@ router.get('/:id/ab-variants', async (req: Request, res: Response): Promise<void
   try {
     const original = await (prisma.scheduledPost.findUnique as Function)({ where: { id }, include: { metrics: true } })
     if (!original) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
-    const workspace = await prisma.workspace.findUnique({ where: { id: original.workspaceId } })
+    const workspace = await findWorkspaceById(original.workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     const variants = await (prisma.scheduledPost.findMany as Function)({ where: { abVariantOf: id }, include: { metrics: true } })
     res.json({ original, variants })
@@ -1304,7 +1305,7 @@ router.get('/:id/comments', async (req: Request, res: Response): Promise<void> =
     const post = await prisma.scheduledPost.findUnique({ where: { id }, select: { workspaceId: true } })
     if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
     const member = await prisma.workspaceMember.findFirst({ where: { workspaceId: post.workspaceId, userId: req.user!.id } })
-    const workspace = await prisma.workspace.findUnique({ where: { id: post.workspaceId }, select: { ownerId: true } })
+    const workspace = await findWorkspaceById(post.workspaceId)
     if (!member && workspace?.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     const comments = await (prisma as any).postComment.findMany({ where: { postId: id }, orderBy: { createdAt: 'asc' } })
     res.json({ comments })
@@ -1323,7 +1324,7 @@ router.post('/:id/comments', async (req: Request, res: Response): Promise<void> 
     const post = await prisma.scheduledPost.findUnique({ where: { id }, select: { workspaceId: true } })
     if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
     const member = await prisma.workspaceMember.findFirst({ where: { workspaceId: post.workspaceId, userId: req.user!.id } })
-    const workspace = await prisma.workspace.findUnique({ where: { id: post.workspaceId }, select: { ownerId: true } })
+    const workspace = await findWorkspaceById(post.workspaceId)
     if (!member && workspace?.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     const comment = await (prisma as any).postComment.create({
       data: { postId: id, userId: req.user!.id, userEmail: req.user!.email, body: body.trim() },
@@ -1362,7 +1363,7 @@ router.post('/:id/smart-schedule', async (req: Request, res: Response): Promise<
     if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
 
     // Auth: workspace owner or member
-    const workspace = await prisma.workspace.findUnique({ where: { id: post.workspaceId }, select: { ownerId: true } })
+    const workspace = await findWorkspaceById(post.workspaceId)
     if (!workspace) { sendError(res, 404, 'NOT_FOUND', 'Workspace not found'); return }
     const isMember = workspace.ownerId === req.user!.id ||
       !!(await prisma.workspaceMember.findUnique({

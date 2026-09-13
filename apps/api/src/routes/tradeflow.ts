@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { getWorkspaceRole } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -11,20 +12,6 @@ const router = Router()
 const db = prisma as any
 
 const tradeFlowAdapter = new TradeFlowAdapter(process.env.TRADEFLOW_WEBHOOK_SECRET ?? '')
-
-async function getWorkspaceRole(
-  workspaceId: string,
-  userId: string,
-): Promise<'OWNER' | 'ADMIN' | 'MEMBER' | null> {
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-  if (!workspace) return null
-  if (workspace.ownerId === userId) return 'OWNER'
-
-  const membership = await prisma.workspaceMember.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId } },
-  })
-  return (membership?.role as 'ADMIN' | 'MEMBER') ?? null
-}
 
 // POST /api/v1/tradeflow/webhook — inbound job events from TradeFlow (no auth, raw body)
 router.post('/webhook', async (req: Request, res: Response): Promise<void> => {

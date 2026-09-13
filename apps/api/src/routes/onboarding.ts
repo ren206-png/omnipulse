@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 
@@ -14,19 +15,17 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId required'); return }
 
   try {
-    const workspace = await prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      include: {
-        _count: { select: { socialAccounts: true, posts: true, members: true } },
-      },
-    })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) {
       sendError(res, 403, 'FORBIDDEN', 'Not found'); return
     }
 
-    const hasPublishedPost = await prisma.scheduledPost.count({
-      where: { workspaceId, status: 'PUBLISHED' },
-    }) > 0
+    const [socialCount, postCount, memberCount, hasPublishedPost] = await Promise.all([
+      prisma.socialAccount.count({ where: { workspaceId } }),
+      prisma.scheduledPost.count({ where: { workspaceId } }),
+      prisma.workspaceMember.count({ where: { workspaceId } }),
+      prisma.scheduledPost.count({ where: { workspaceId, status: 'PUBLISHED' } }).then(n => n > 0),
+    ])
 
     const steps = [
       {
@@ -34,14 +33,14 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
         label: 'Connect a social account',
         description: 'Link Instagram, X, LinkedIn, or TikTok to start publishing.',
         href: '/dashboard/accounts',
-        done: workspace._count.socialAccounts > 0,
+        done: socialCount > 0,
       },
       {
         id: 'create_post',
         label: 'Create your first post',
         description: 'Draft or schedule content from the calendar.',
         href: '/dashboard/calendar',
-        done: workspace._count.posts > 0,
+        done: postCount > 0,
       },
       {
         id: 'publish_post',
@@ -55,7 +54,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
         label: 'Invite a team member',
         description: 'Collaborate with your team on content creation.',
         href: '/dashboard/settings',
-        done: workspace._count.members > 1,
+        done: memberCount > 1,
         skipForFree: false,
       },
     ]
@@ -77,11 +76,11 @@ router.post('/dismiss', async (req: Request, res: Response): Promise<void> => {
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE_ID', 'workspaceId required'); return }
 
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) {
       sendError(res, 403, 'FORBIDDEN', 'Not found'); return
     }
-    await prisma.workspace.update({ where: { id: workspaceId }, data: { onboardingComplete: true } })
+    await prisma.$executeRaw`UPDATE "Workspace" SET "onboardingComplete" = true WHERE id = ${workspaceId}`
     res.json({ dismissed: true })
   } catch {
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to dismiss onboarding')

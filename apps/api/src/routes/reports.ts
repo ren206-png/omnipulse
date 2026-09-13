@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -25,9 +26,8 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
 
   try {
     // Verify the user owns this workspace
-    const workspace = await prisma.workspace.findFirst({
-      where: { id: workspaceId, ownerId: req.user!.id },
-    })
+    const _ws = await findWorkspaceById(workspaceId)
+    const workspace = (_ws && _ws.ownerId === req.user!.id) ? _ws : null
     if (!workspace) {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
       return
@@ -72,9 +72,8 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
 
   try {
     // Verify ownership
-    const workspace = await prisma.workspace.findFirst({
-      where: { id: workspaceId, ownerId: req.user!.id },
-    })
+    const _ws = await findWorkspaceById(workspaceId)
+    const workspace = (_ws && _ws.ownerId === req.user!.id) ? _ws : null
     if (!workspace) {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
       return
@@ -115,9 +114,8 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
     }
 
     // Verify ownership through workspace
-    const workspace = await prisma.workspace.findFirst({
-      where: { id: report.workspaceId, ownerId: req.user!.id },
-    })
+    const _ws_report_workspaceId = await findWorkspaceById(report.workspaceId)
+    const workspace = (_ws_report_workspaceId && _ws_report_workspaceId.ownerId === req.user!.id) ? _ws_report_workspaceId : null
     if (!workspace) {
       sendError(res, 403, 'FORBIDDEN', 'Access denied')
       return

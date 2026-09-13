@@ -3,6 +3,7 @@ import type { Request, Response } from 'express'
 import { requireAuth } from '../middleware/auth.js'
 import { FF_PHOTO_TO_POST } from '../lib/featureFlags.js'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById, getWorkspaceRole } from '../lib/workspaceRaw.js'
 import { env } from '../config/env.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -24,17 +25,16 @@ router.use((_req: Request, res: Response, next: () => void): void => {
 // Helper: verify the authenticated user is a member or owner of the workspace.
 // Returns the workspace row (with brandName + socialAccounts) or null.
 async function getWorkspaceMembership(workspaceId: string, userId: string) {
-  const workspace = await prisma.workspace.findUnique({
-    where: { id: workspaceId },
-    include: { socialAccounts: { select: { platform: true } } },
+  const role = await getWorkspaceRole(workspaceId, userId)
+  if (!role) return null
+  const ws = await findWorkspaceById(workspaceId)
+  if (!ws) return null
+  // Attach socialAccounts for downstream use
+  const socialAccounts = await prisma.socialAccount.findMany({
+    where: { workspaceId },
+    select: { platform: true },
   })
-  if (!workspace) return null
-  if (workspace.ownerId === userId) return workspace
-
-  const member = await prisma.workspaceMember.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId } },
-  })
-  return member ? workspace : null
+  return Object.assign(ws, { socialAccounts })
 }
 
 // ── POST /api/v1/photo-to-post/analyze ──────────────────────────────────────

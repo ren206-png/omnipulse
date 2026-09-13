@@ -7,6 +7,7 @@
  */
 import { Router, type Request, type Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { FF_EVERGREEN_QUEUE } from '../lib/featureFlags.js'
@@ -32,7 +33,7 @@ const MD_REGEX = /^\d{2}-\d{2}$/
  */
 async function checkOwnerOrAdmin(workspaceId: string, userId: string): Promise<boolean> {
   const [ws, member] = await Promise.all([
-    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { ownerId: true } }),
+    findWorkspaceById(workspaceId),
     prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
       select: { role: true },

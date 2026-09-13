@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 
@@ -13,7 +14,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
   const { workspaceId } = req.query as { workspaceId: string }
   if (!workspaceId) { sendError(res, 400, 'BAD_REQUEST', 'workspaceId required'); return }
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     const portal = await db.clientPortal.findUnique({ where: { workspaceId } })
     res.json({ portal: portal ?? null })
@@ -24,7 +25,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
 router.post('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { workspaceId, clientName, clientEmail } = req.body
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     const portal = await db.clientPortal.upsert({
       where: { workspaceId },
@@ -40,7 +41,7 @@ router.patch('/', requireAuth, async (req: Request, res: Response): Promise<void
   const { workspaceId, clientName, clientEmail, active } = req.body
   if (!workspaceId) { sendError(res, 400, 'BAD_REQUEST', 'workspaceId required'); return }
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     const data: any = {}
     if (clientName !== undefined) data.clientName = clientName
@@ -55,7 +56,7 @@ router.patch('/', requireAuth, async (req: Request, res: Response): Promise<void
 router.delete('/:workspaceId', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.params
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     await db.clientPortal.update({ where: { workspaceId }, data: { active: false } })
     res.json({ message: 'Portal disabled' })

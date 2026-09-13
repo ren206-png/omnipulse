@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById, getWorkspaceRole } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -9,7 +10,7 @@ import { syncAnalytics } from '../workers/analyticsSync.worker.js'
 import { assertWorkspaceAccess, TenantAccessError } from '../lib/tenantGuard.js'
 
 async function assertAnalyticsPlanAccess(workspaceId: string, res: Response): Promise<boolean> {
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { plan: true } })
+  const workspace = await findWorkspaceById(workspaceId)
   if (workspace?.plan === 'FREE') {
     res.status(403).json({ error: 'PLAN_REQUIRED', message: 'Analytics requires the Starter plan or higher' })
     return false
@@ -20,20 +21,6 @@ async function assertAnalyticsPlanAccess(workspaceId: string, res: Response): Pr
 const router = Router()
 
 router.use(requireAuth)
-
-async function getWorkspaceRole(
-  workspaceId: string,
-  userId: string,
-): Promise<'OWNER' | 'ADMIN' | 'MEMBER' | null> {
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-  if (!workspace) return null
-  if (workspace.ownerId === userId) return 'OWNER'
-
-  const membership = await prisma.workspaceMember.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId } },
-  })
-  return (membership?.role as 'ADMIN' | 'MEMBER') ?? null
-}
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }

@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -448,7 +449,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     return
   }
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
       return
@@ -488,7 +489,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) {
       sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied')
       return

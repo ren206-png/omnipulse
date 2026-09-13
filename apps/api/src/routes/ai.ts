@@ -8,6 +8,7 @@ import { sendError } from '../lib/apiError.js'
 import { env } from '../config/env.js'
 import { logger } from '../lib/logger.js'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { PLAN_LIMITS } from '../lib/plans.js'
 import type { Plan } from '../lib/plans.js'
 import { generateVariants } from '../lib/contentMultiplier.js'
@@ -97,7 +98,7 @@ router.post('/generate', aiLimiter, async (req: Request, res: Response): Promise
   // Plan gate: FREE plan blocks AI entirely; paid plans allow overages (billed via Stripe)
   const { workspaceId } = req.body as { workspaceId?: string }
   if (workspaceId) {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (workspace) {
       const limits = PLAN_LIMITS[workspace.plan as Plan]
       if (limits.aiGenerations === 0) {
@@ -220,7 +221,7 @@ router.post('/hashtags', aiLimiter, async (req: Request, res: Response): Promise
   }
 
   if (workspaceId) {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (workspace) {
       const limits = PLAN_LIMITS[workspace.plan as Plan]
       if (limits.aiGenerations === 0) {
@@ -631,7 +632,7 @@ router.post('/multiply', async (req: Request, res: Response): Promise<void> => {
 
   // Plan gate: FREE plan blocks AI entirely; paid plans allow overages (billed via Stripe)
   if (workspaceId) {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (workspace) {
       const limits = PLAN_LIMITS[workspace.plan as Plan]
       if (limits.aiGenerations === 0) {
@@ -657,7 +658,7 @@ router.post('/multiply', async (req: Request, res: Response): Promise<void> => {
     // Get brand name for context if workspaceId provided
     let brandName: string | undefined
     if (workspaceId) {
-      const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { brandName: true } })
+      const ws = await findWorkspaceById(workspaceId)
       brandName = ws?.brandName ?? undefined
     }
 
@@ -781,7 +782,7 @@ router.post('/caption-suggestion', aiLimiter, async (req: Request, res: Response
 
   // Plan gate: FREE plan blocks AI entirely; paid plans allow overages (billed via Stripe)
   if (workspaceId) {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (workspace) {
       const limits = PLAN_LIMITS[workspace.plan as Plan]
       if (limits.aiGenerations === 0) {
@@ -806,7 +807,7 @@ router.post('/caption-suggestion', aiLimiter, async (req: Request, res: Response
   try {
     let brandName: string | undefined
     if (workspaceId) {
-      const ws = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { brandName: true } })
+      const ws = await findWorkspaceById(workspaceId)
       brandName = ws?.brandName ?? undefined
     }
 

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import type { Request, Response } from 'express'
 import Stripe from 'stripe'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -23,7 +24,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
 
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) {
       sendError(res, 403, 'FORBIDDEN', 'Access denied'); return
     }
@@ -65,7 +66,7 @@ router.post('/checkout', requireAuth, async (req: Request, res: Response): Promi
   }
 
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) {
       sendError(res, 403, 'FORBIDDEN', 'Only the workspace owner can manage billing'); return
     }
@@ -81,10 +82,7 @@ router.post('/checkout', requireAuth, async (req: Request, res: Response): Promi
         metadata: { workspaceId, userId: req.user!.id },
       })
       customerId = customer.id
-      await prisma.workspace.update({
-        where: { id: workspaceId },
-        data: { stripeCustomerId: customerId },
-      })
+      await prisma.$executeRaw`UPDATE "Workspace" SET "stripeCustomerId" = ${customerId} WHERE id = ${workspaceId}`
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -119,7 +117,7 @@ router.post('/portal', requireAuth, async (req: Request, res: Response): Promise
   if (!workspaceId) { sendError(res, 400, 'MISSING_FIELD', 'workspaceId is required'); return }
 
   try {
-    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+    const workspace = await findWorkspaceById(workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) {
       sendError(res, 403, 'FORBIDDEN', 'Access denied'); return
     }
@@ -182,20 +180,9 @@ async function handleWebhookEvent(event: Stripe.Event) {
       const plan = session.metadata?.plan as Plan | undefined
       if (!workspaceId || !plan) break
 
-      await prisma.workspace.update({
-        where: { id: workspaceId },
-        data: {
-          plan: plan as any,
-          stripeCustomerId: session.customer as string,
-          stripeSubscriptionId: session.subscription as string,
-          subscriptionStatus: 'active',
-        },
-      })
+      await prisma.$executeRaw`UPDATE "Workspace" SET plan = ${plan}::"Plan", "stripeCustomerId" = ${session.customer as string}, "stripeSubscriptionId" = ${session.subscription as string}, "subscriptionStatus" = 'active' WHERE id = ${workspaceId}`
       // Reset AI usage counter for new subscription period
-      await prisma.workspace.update({
-        where: { id: workspaceId },
-        data: { aiGenerationsMonth: 0, aiUsagePeriodStart: new Date() },
-      })
+      await prisma.$executeRaw`UPDATE "Workspace" SET "aiGenerationsMonth" = 0, "aiUsagePeriodStart" = NOW() WHERE id = ${workspaceId}`
       logger.info({ workspaceId, plan }, 'Subscription activated')
       break
     }
@@ -208,23 +195,15 @@ async function handleWebhookEvent(event: Stripe.Event) {
       const plan = (sub.metadata?.plan as Plan) ?? 'FREE'
       const status = sub.status
 
-      await prisma.workspace.update({
-        where: { stripeSubscriptionId: sub.id },
-        data: {
-          plan: (status === 'active' || status === 'trialing' ? plan : 'FREE') as any,
-          subscriptionStatus: status,
-        },
-      })
+      const newPlan = (status === 'active' || status === 'trialing' ? plan : 'FREE')
+      await prisma.$executeRaw`UPDATE "Workspace" SET plan = ${newPlan}::"Plan", "subscriptionStatus" = ${status} WHERE "stripeSubscriptionId" = ${sub.id}`
       logger.info({ workspaceId, plan, status }, 'Subscription updated')
       break
     }
 
     case 'customer.subscription.deleted': {
       const sub = event.data.object as Stripe.Subscription
-      await prisma.workspace.update({
-        where: { stripeSubscriptionId: sub.id },
-        data: { plan: 'FREE', subscriptionStatus: 'cancelled', stripeSubscriptionId: null },
-      })
+      await prisma.$executeRaw`UPDATE "Workspace" SET plan = 'FREE'::"Plan", "subscriptionStatus" = 'cancelled', "stripeSubscriptionId" = NULL WHERE "stripeSubscriptionId" = ${sub.id}`
       logger.info({ subId: sub.id }, 'Subscription cancelled — downgraded to FREE')
       break
     }
@@ -235,10 +214,7 @@ async function handleWebhookEvent(event: Stripe.Event) {
       const parent = (invoice as unknown as { parent?: { subscription_details?: { subscription?: string } } }).parent
       const subId = parent?.subscription_details?.subscription
       if (!subId) break
-      await prisma.workspace.update({
-        where: { stripeSubscriptionId: subId },
-        data: { subscriptionStatus: 'past_due' },
-      })
+      await prisma.$executeRaw`UPDATE "Workspace" SET "subscriptionStatus" = 'past_due' WHERE "stripeSubscriptionId" = ${subId}`
       logger.warn({ subId }, 'Payment failed — subscription past_due')
       break
     }
@@ -250,7 +226,7 @@ async function handleWebhookEvent(event: Stripe.Event) {
         logger.info({ subId: sub.id }, 'trial_will_end: no workspaceId in metadata — skipping')
         break
       }
-      const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { ownerId: true } })
+      const workspace = await findWorkspaceById(workspaceId)
       if (!workspace) {
         logger.warn({ workspaceId }, 'trial_will_end: workspace not found — skipping')
         break
@@ -270,13 +246,7 @@ async function handleWebhookEvent(event: Stripe.Event) {
       const subId = (invoice as any).subscription as string | null
       if (!subId) break
       // Reset monthly AI usage counter at billing period renewal
-      await prisma.workspace.updateMany({
-        where: { stripeSubscriptionId: subId },
-        data: {
-          aiGenerationsMonth: 0,
-          aiUsagePeriodStart: new Date(),
-        }
-      })
+      await prisma.$executeRaw`UPDATE "Workspace" SET "aiGenerationsMonth" = 0, "aiUsagePeriodStart" = NOW() WHERE "stripeSubscriptionId" = ${subId}`
       logger.info({ subId }, 'Reset AI usage counter for new billing period')
       break
     }

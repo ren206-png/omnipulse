@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { getWorkspaceRole } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -9,20 +10,6 @@ const router = Router()
 router.use(requireAuth)
 
 const db = prisma as any
-
-async function getWorkspaceRole(
-  workspaceId: string,
-  userId: string,
-): Promise<'OWNER' | 'ADMIN' | 'MEMBER' | null> {
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-  if (!workspace) return null
-  if (workspace.ownerId === userId) return 'OWNER'
-
-  const membership = await prisma.workspaceMember.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId } },
-  })
-  return (membership?.role as 'ADMIN' | 'MEMBER') ?? null
-}
 
 // GET /api/v1/competitors?workspaceId=
 router.get('/', async (req: Request, res: Response): Promise<void> => {

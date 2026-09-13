@@ -20,6 +20,9 @@ COPY apps/api/tsconfig.json ./apps/api/tsconfig.json
 # Regenerate Prisma client with the installed version
 RUN cd apps/api && ./node_modules/.bin/prisma generate
 
+# Create startup script that runs migrations then starts the server
+RUN printf '#!/bin/sh\nset -e\ncd /app/apps/api\necho "Running database migrations..."\n./node_modules/.bin/prisma migrate deploy\necho "Starting server..."\nexec node_modules/.bin/tsx src/index.ts\n' > /app/start.sh && chmod +x /app/start.sh
+
 EXPOSE 3001
 
-CMD ["apps/api/node_modules/.bin/tsx", "apps/api/src/index.ts"]
+CMD ["/app/start.sh"]

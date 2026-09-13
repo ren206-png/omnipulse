@@ -3,6 +3,7 @@ import type { Request, Response } from 'express'
 import crypto from 'crypto'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.js'
+import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { validateBody, validateQuery, urlField, webhookEventField, WEBHOOK_EVENTS, idField } from '../middleware/validate.js'
 import { sendError } from '../lib/apiError.js'
@@ -46,7 +47,7 @@ const UpdateWebhookBody = z.object({
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 async function assertOwner(workspaceId: string, userId: string, res: Response): Promise<boolean> {
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
+  const workspace = await findWorkspaceById(workspaceId)
   if (!workspace || workspace.ownerId !== userId) {
     sendError(res, 403, 'FORBIDDEN', 'Access denied')
     return false

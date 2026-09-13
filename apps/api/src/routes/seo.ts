@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { prisma } from '../lib/prisma.js'
+import { getWorkspaceRole } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
@@ -9,11 +10,8 @@ const router = Router()
 router.use(requireAuth)
 
 async function checkSeoAccess(workspaceId: string, userId: string): Promise<boolean> {
-  const [ws, member] = await Promise.all([
-    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { ownerId: true } }),
-    prisma.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId } } }),
-  ])
-  return !!(ws && (ws.ownerId === userId || member))
+  const role = await getWorkspaceRole(workspaceId, userId)
+  return role !== null
 }
 
 // GET /api/v1/seo/:postId?workspaceId=...
