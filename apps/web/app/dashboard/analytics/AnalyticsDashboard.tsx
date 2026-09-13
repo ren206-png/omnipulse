@@ -352,6 +352,10 @@ export function AnalyticsDashboard({ workspaceId, token }: Props) {
       const res = await fetch(`${apiUrl}/api/v1/analytics?workspaceId=${workspaceId}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
+      if (res.status === 403) {
+        setError('PLAN_REQUIRED')
+        return
+      }
       if (!res.ok) throw new Error(`API error ${res.status}`)
       const data = (await res.json()) as { data: AccountData[] }
       setAccounts(data.data)
@@ -392,6 +396,18 @@ export function AnalyticsDashboard({ workspaceId, token }: Props) {
         <ChartSkeleton />
         <ChartSkeleton />
         <ChartSkeleton />
+      </div>
+    )
+  }
+
+  if (error === 'PLAN_REQUIRED') {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-6 py-8 text-center">
+        <h3 className="text-lg font-semibold text-amber-900 mb-2">Analytics requires a paid plan</h3>
+        <p className="text-sm text-amber-700 mb-4">Upgrade to Starter or higher to unlock detailed analytics for your social accounts.</p>
+        <Button asChild>
+          <a href="/dashboard/billing">Upgrade Now</a>
+        </Button>
       </div>
     )
   }
