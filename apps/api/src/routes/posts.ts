@@ -24,14 +24,18 @@ async function getWorkspaceRole(
   workspaceId: string,
   userId: string,
 ): Promise<'OWNER' | 'ADMIN' | 'MEMBER' | null> {
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId } })
-  if (!workspace) return null
-  if (workspace.ownerId === userId) return 'OWNER'
+  // Use raw SQL to avoid Prisma model validation issues with Workspace model
+  const rows = await prisma.$queryRaw<{ ownerId: string }[]>`
+    SELECT "ownerId" FROM "Workspace" WHERE id = ${workspaceId} LIMIT 1
+  `
+  if (!rows.length) return null
+  if (rows[0].ownerId === userId) return 'OWNER'
 
-  const membership = await prisma.workspaceMember.findUnique({
-    where: { workspaceId_userId: { workspaceId, userId } },
-  })
-  return (membership?.role as 'ADMIN' | 'MEMBER') ?? null
+  const members = await prisma.$queryRaw<{ role: string }[]>`
+    SELECT role FROM "WorkspaceMember"
+    WHERE "workspaceId" = ${workspaceId} AND "userId" = ${userId} LIMIT 1
+  `
+  return (members[0]?.role as 'ADMIN' | 'MEMBER') ?? null
 }
 
 // GET /api/v1/posts?workspaceId=

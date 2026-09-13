@@ -5,12 +5,10 @@ RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /v
 
 WORKDIR /app
 
-# Copy everything first (needed for monorepo context)
 COPY . .
 
-# Install production deps (tsx is now a production dependency so it will be installed).
-# Skip postinstall (prisma generate) since the Prisma client is pre-committed.
-RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts
+# Install deps then explicitly regenerate Prisma client so runtime and client always match
+RUN cd apps/api && npm install --legacy-peer-deps --ignore-scripts && ./node_modules/.bin/prisma generate
 
 EXPOSE 3001
 
