@@ -216,16 +216,16 @@ export function PlatformSetupClient({ token }: { token: string }) {
               <p className="text-xs text-muted-foreground">Required for Pro and Agency plan upgrades</p>
             </div>
           </div>
-          <StatusBadge ok={data.billing.stripeConfigured && data.billing.stripeProPriceId && data.billing.stripeAgencyPriceId} />
+          <StatusBadge ok={data.billing?.stripeConfigured && data.billing?.stripeProPriceId && data.billing?.stripeAgencyPriceId} />
         </div>
 
         <div className="space-y-2">
           {[
-            { label: 'STRIPE_SECRET_KEY', set: data.billing.stripeConfigured },
-            { label: 'STRIPE_WEBHOOK_SECRET', set: data.billing.stripeConfigured },
-            { label: 'STRIPE_PUBLISHABLE_KEY', set: data.billing.stripePublishableKey },
-            { label: 'STRIPE_PRO_PRICE_ID', set: data.billing.stripeProPriceId },
-            { label: 'STRIPE_AGENCY_PRICE_ID', set: data.billing.stripeAgencyPriceId },
+            { label: 'STRIPE_SECRET_KEY', set: data.billing?.stripeConfigured },
+            { label: 'STRIPE_WEBHOOK_SECRET', set: data.billing?.stripeConfigured },
+            { label: 'STRIPE_PUBLISHABLE_KEY', set: data.billing?.stripePublishableKey },
+            { label: 'STRIPE_PRO_PRICE_ID', set: data.billing?.stripeProPriceId },
+            { label: 'STRIPE_AGENCY_PRICE_ID', set: data.billing?.stripeAgencyPriceId },
           ].map(v => (
             <div key={v.label} className="flex items-center gap-3">
               <span className={cn('w-2 h-2 rounded-full flex-shrink-0', v.set ? 'bg-green-500' : 'bg-red-400')} />
@@ -235,11 +235,11 @@ export function PlatformSetupClient({ token }: { token: string }) {
           ))}
         </div>
 
-        {(!data.billing.stripeProPriceId || !data.billing.stripeAgencyPriceId) && (
+        {(!data.billing?.stripeProPriceId || !data.billing?.stripeAgencyPriceId) && (
           <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 p-3 space-y-2">
             <p className="text-xs font-semibold text-blue-800 dark:text-blue-200">How to get Stripe Price IDs:</p>
             <ol className="text-xs text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
-              <li>Go to <a href={data.billing.dashboardUrl} target="_blank" rel="noopener noreferrer" className="underline">Stripe Dashboard → Products</a></li>
+              <li>Go to <a href={data.billing?.dashboardUrl} target="_blank" rel="noopener noreferrer" className="underline">Stripe Dashboard → Products</a></li>
               <li>Create a "Pro" product with a $29/month recurring price</li>
               <li>Create an "Agency" product with a $99/month recurring price</li>
               <li>Copy the Price ID for each (starts with <code className="font-mono">price_</code>)</li>
@@ -252,7 +252,7 @@ export function PlatformSetupClient({ token }: { token: string }) {
       {/* Refresh */}
       <div className="flex justify-end">
         <button
-          onClick={() => { setLoading(true); setData(null); fetch(`${API_URL}/api/v1/admin/platform-status`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()).then((d: StatusData) => setData(d)).finally(() => setLoading(false)) }}
+          onClick={() => { setLoading(true); setData(null); setError(null); fetch(`${API_URL}/api/v1/admin/platform-status`, { headers: { Authorization: `Bearer ${token}` } }).then(r => { if (!r.ok) throw new Error(r.status === 403 ? 'Admin access required' : 'Failed to load'); return r.json() }).then((d: StatusData) => setData(d)).catch((e: Error) => setError(e.message)).finally(() => setLoading(false)) }}
           className="text-sm px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
         >
           🔄 Refresh Status
