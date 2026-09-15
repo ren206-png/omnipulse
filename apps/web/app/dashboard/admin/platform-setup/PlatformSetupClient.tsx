@@ -60,9 +60,12 @@ export function PlatformSetupClient({ token }: { token: string }) {
     fetch(`${API_URL}/api/v1/admin/platform-status`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(r.status === 403 ? 'Admin access required' : 'Failed to load platform status')
+        return r.json()
+      })
       .then((d: StatusData) => setData(d))
-      .catch(() => setError('Failed to load platform status'))
+      .catch((e: Error) => setError(e.message ?? 'Failed to load platform status'))
       .finally(() => setLoading(false))
   }, [token])
 
