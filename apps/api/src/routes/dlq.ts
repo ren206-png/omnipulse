@@ -9,10 +9,11 @@ import { logger } from '../lib/logger.js'
 
 const router = Router()
 
-// Admin check: must be authenticated and must be the ADMIN_EMAIL
+// Admin check: must be authenticated and must be in ADMIN_EMAIL (comma-separated)
 function requireAdmin(req: Request, res: Response, next: () => void) {
   if (!env.ADMIN_EMAIL) { sendError(res, 404, 'NOT_FOUND', 'Not found'); return }
-  if (!req.user?.email || req.user.email.toLowerCase() !== env.ADMIN_EMAIL.toLowerCase()) {
+  const adminEmails = env.ADMIN_EMAIL.split(',').map((e) => e.trim().toLowerCase())
+  if (!req.user?.email || !adminEmails.includes(req.user.email.toLowerCase())) {
     sendError(res, 403, 'FORBIDDEN', 'Access denied')
     return
   }
