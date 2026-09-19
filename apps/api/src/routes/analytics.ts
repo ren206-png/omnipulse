@@ -294,7 +294,7 @@ router.get('/platform-comparison', async (req: Request, res: Response): Promise<
 
   if (!await assertAnalyticsPlanAccess(workspaceId, res)) return
 
-  // WEEKLY-AUDIT: `days` is user-supplied with no bounds check — a value like 99999999 queries entire DB history. Add: const clampedDays = Math.min(Math.max(parseInt(days, 10) || 30, 1), 365); then use clampedDays below. Same fix needed in hashtag-performance endpoint.
+  // WEEKLY-AUDIT: `days` is user-supplied with no bounds check — a value like 99999999 queries entire DB history. Add: const clampedDays = Math.min(Math.max(parseInt(days, 10) || 30, 1), 365); then use clampedDays below. Same unbounded-days fix also needed in the hashtag performance handler below.
   const since = new Date(Date.now() - parseInt(days, 10) * 24 * 60 * 60 * 1000)
 
   const metrics = await (prisma as any).postMetric.findMany({
