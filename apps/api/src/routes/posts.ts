@@ -1199,6 +1199,7 @@ router.post('/:id/ab-test', async (req: Request, res: Response): Promise<void> =
   try {
     const original = await (prisma.scheduledPost.findUnique as Function)({ where: { id } })
     if (!original) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
+    // WEEKLY-AUDIT: A/B test only allows workspace owners, not admins — inconsistent with all other post routes that allow OWNER or ADMIN. Consider using getWorkspaceRole and checking role !== 'MEMBER'.
     const workspace = await findWorkspaceById(original.workspaceId)
     if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     // Mark original as A/B test active
@@ -1217,6 +1218,7 @@ router.post('/:id/ab-test', async (req: Request, res: Response): Promise<void> =
     })
     res.status(201).json({ variant })
   } catch (err) {
+    logger.error({ err }, 'A/B test create error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create A/B variant')
   }
 })
@@ -1292,6 +1294,7 @@ router.get('/:id/ab-variants', async (req: Request, res: Response): Promise<void
     const variants = await (prisma.scheduledPost.findMany as Function)({ where: { abVariantOf: id }, include: { metrics: true } })
     res.json({ original, variants })
   } catch (err) {
+    logger.error({ err }, 'A/B variants fetch error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch variants')
   }
 })
@@ -1310,6 +1313,7 @@ router.get('/:id/comments', async (req: Request, res: Response): Promise<void> =
     const comments = await (prisma as any).postComment.findMany({ where: { postId: id }, orderBy: { createdAt: 'asc' } })
     res.json({ comments })
   } catch (err) {
+    logger.error({ err }, 'Fetch post comments error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch comments')
   }
 })
@@ -1331,6 +1335,7 @@ router.post('/:id/comments', async (req: Request, res: Response): Promise<void> 
     })
     res.status(201).json({ comment })
   } catch (err) {
+    logger.error({ err }, 'Create post comment error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create comment')
   }
 })
@@ -1345,6 +1350,7 @@ router.delete('/:id/comments/:commentId', async (req: Request, res: Response): P
     await (prisma as any).postComment.delete({ where: { id: commentId } })
     res.json({ success: true })
   } catch (err) {
+    logger.error({ err }, 'Delete post comment error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to delete comment')
   }
 })

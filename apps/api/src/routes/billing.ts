@@ -243,6 +243,7 @@ async function handleWebhookEvent(event: Stripe.Event) {
 
     case 'invoice.payment_succeeded': {
       const invoice = event.data.object as Stripe.Invoice
+      // WEEKLY-AUDIT: This still uses the pre-v18 Stripe API pattern (invoice.subscription). The invoice.payment_failed handler was updated to use invoice.parent.subscription_details.subscription for Stripe v18+. Apply the same pattern here so the AI usage counter reset actually fires on billing period renewal.
       const subId = (invoice as any).subscription as string | null
       if (!subId) break
       // Reset monthly AI usage counter at billing period renewal

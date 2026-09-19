@@ -22,6 +22,7 @@ import { logger } from '../lib/logger.js'
 import { prisma } from '../lib/prisma.js'
 import { sendAlert } from '../lib/alertManager.js'
 import { heartbeat } from '../lib/workerHeartbeat.js'
+import { encryptToken } from '../lib/tokenEncryption.js'
 
 const REFRESH_INTERVAL_MS = 30 * 60 * 1000  // every 30 minutes
 const REFRESH_WINDOW_MS   = 2 * 60 * 60 * 1000 // refresh if expiring within 2h
@@ -127,7 +128,7 @@ async function runTokenRefreshCycle(): Promise<void> {
         if (result) {
           await prisma.socialAccount.update({
             where: { id: account.id },
-            data: { accessToken: result.token, tokenExpiresAt: result.expiresAt },
+            data: { accessToken: encryptToken(result.token), tokenExpiresAt: result.expiresAt },
           })
           refreshed++
           logger.info(
@@ -144,7 +145,7 @@ async function runTokenRefreshCycle(): Promise<void> {
           await prisma.socialAccount.update({
             where: { id: account.id },
             data: {
-              accessToken:   result.accessToken,
+              accessToken:   encryptToken(result.accessToken),
               refreshToken:  result.refreshToken,
               tokenExpiresAt: result.expiresAt,
             },

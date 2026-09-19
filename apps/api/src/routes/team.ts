@@ -211,14 +211,13 @@ router.patch('/:workspaceId/members/:userId', async (req: Request, res: Response
     return
   }
 
-  // Cannot demote yourself if you're the only admin
-  const workspace = await findWorkspaceById(workspaceId)
-  if (workspace?.ownerId === userId) {
-    sendError(res, 400, 'CANNOT_MODIFY_OWNER', 'Cannot change the owner\'s role')
-    return
-  }
-
   try {
+    // Cannot demote yourself if you're the only admin
+    const workspace = await findWorkspaceById(workspaceId)
+    if (workspace?.ownerId === userId) {
+      sendError(res, 400, 'CANNOT_MODIFY_OWNER', 'Cannot change the owner\'s role')
+      return
+    }
     const member = await prisma.workspaceMember.update({
       where: { workspaceId_userId: { workspaceId, userId } },
       data: { role: role as 'ADMIN' | 'MEMBER' },

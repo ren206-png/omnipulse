@@ -239,10 +239,7 @@ export async function executeInstance(
   }
 
   // MAX_STEPS_PER_JOB reached — re-queue continuation
-  await patchInstance(prisma, instanceId, instance.revision + steps - 1, {
-    context,
-    currentNodeId: currentNode.id,
-  })
+  // State was already persisted by the last in-loop patchInstance call above
   return { status: 'CONTINUATION', nextNodeKey: currentNode.nodeKey }
 }
 

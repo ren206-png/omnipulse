@@ -53,6 +53,7 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
     }
 
     const passwordHash = await bcrypt.hash(password, 12)
+    // WEEKLY-AUDIT: user create and workspace INSERT are not in a transaction. If the INSERT fails, the user account exists without a default workspace. Wrap both in prisma.$transaction([...]) or use interactive transactions.
     const user = await prisma.user.create({
       data: { email, passwordHash, role: 'OWNER', twoFactorBackupCodes: [] },
       select: { id: true, email: true, role: true },

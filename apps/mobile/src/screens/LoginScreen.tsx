@@ -44,7 +44,6 @@ export default function LoginScreen() {
             {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Sign In</Text>}
           </TouchableOpacity>
         </View>
-        <Text style={styles.hint}>Demo: demo@getomnipulse.com / Demo1234!</Text>
       </View>
     </KeyboardAvoidingView>
   )

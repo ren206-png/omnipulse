@@ -74,6 +74,7 @@ function nextAllowedTime(now: Date, start: number, end: number, blockedDays: num
   candidate.setUTCHours(start)
   candidate.setUTCDate(candidate.getUTCDate() + 1)
 
+  // WEEKLY-AUDIT: If all 7 days are in blockedDays, the loop exits after 7 iterations and returns a date that is still on a blocked day. Add a guard after the loop: if (blockedDays.includes(candidate.getUTCDay())) throw new Error('All days of the week are blocked — cannot compute next send window').
   let safety = 0
   while (blockedDays.includes(candidate.getUTCDay()) && safety++ < 7) {
     candidate.setUTCDate(candidate.getUTCDate() + 1)

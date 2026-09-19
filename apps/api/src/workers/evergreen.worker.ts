@@ -19,6 +19,7 @@ export function startEvergreenWorker() {
         nextDate.setDate(nextDate.getDate() + post.evergreenInterval)
 
         if (nextDate <= new Date()) {
+          const futureDate = new Date(Date.now() + post.evergreenInterval * 24 * 60 * 60 * 1000)
           // Create a recycled copy
           const newPost = await (prisma.scheduledPost.create as Function)({
             data: {
@@ -26,11 +27,16 @@ export function startEvergreenWorker() {
               content: post.content,
               platforms: post.platforms,
               mediaUrls: post.mediaUrls,
-              scheduledFor: new Date(Date.now() + post.evergreenInterval * 24 * 60 * 60 * 1000),
+              scheduledFor: futureDate,
               status: 'SCHEDULED',
               submittedBy: post.submittedBy,
               evergreenParentId: post.id,
             },
+          })
+          // Advance the original post's scheduledFor so it won't recycle again until the next interval
+          await (prisma.scheduledPost.update as Function)({
+            where: { id: post.id },
+            data: { scheduledFor: futureDate },
           })
           await publishPostQueue.add('publish-post', { postId: (newPost as { id: string }).id, workspaceId: post.workspaceId }, {
             delay: post.evergreenInterval * 24 * 60 * 60 * 1000,

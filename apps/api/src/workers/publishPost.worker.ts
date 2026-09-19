@@ -110,7 +110,8 @@ async function publishToPlatform(
 
   if (platform === 'INSTAGRAM') {
     // Instagram Graph API v20 — Business Account ID is stored as externalProfileId
-    const igUserId = account.externalProfileId || 'me'
+    if (!account.externalProfileId) throw new Error('Instagram Business Account ID not configured — reconnect this account')
+    const igUserId = account.externalProfileId
     if (post.mediaUrls?.length > 0) {
       // Step 1: Create media container
       const containerRes = await fetch(

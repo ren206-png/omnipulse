@@ -112,7 +112,7 @@ const worker = new Worker(
         await sendEmail({ to: author.email, subject: tpl.subject, html: tpl.html })
       }
       logger.info({ postId, ratio, totalEngagement, avgEngagement }, '[EngagementAlert] Standout post notified')
-    } else if (ratio <= 0.3 && totalEngagement === 0) {
+    } else if (ratio <= 0.3) {
       // ❄️ Underperformer — only alert if truly zero engagement
       await notify({
         userId: post.submittedBy,
