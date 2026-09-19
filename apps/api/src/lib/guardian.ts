@@ -106,7 +106,7 @@ export async function detectAndFix(): Promise<GuardianReport> {
 export async function remindPendingReviews(): Promise<void> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000) // 24 hours ago
 
-  let stalePosts: Array<{ id: string; workspaceId: string; content: string; platforms: string[]; submittedBy: string }>
+  let stalePosts: Awaited<ReturnType<typeof prisma.scheduledPost.findMany>>
   try {
     stalePosts = await prisma.scheduledPost.findMany({
       where: {
