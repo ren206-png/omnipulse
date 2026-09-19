@@ -37,8 +37,8 @@ export function ApiKeysManager({ token }: Props) {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) return
-      const data = await res.json()
-      setKeys(data.keys)
+      const data = await res.json() as { keys?: ApiKey[] }
+      setKeys(data.keys ?? [])
     } finally {
       setLoading(false)
     }
@@ -65,12 +65,15 @@ export function ApiKeysManager({ token }: Props) {
   }
 
   async function revokeKey(id: string) {
-    await fetch(`${API}/api/v1/api-keys/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    setRevokeId(null)
-    fetchKeys()
+    try {
+      await fetch(`${API}/api/v1/api-keys/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } finally {
+      setRevokeId(null)
+      fetchKeys()
+    }
   }
 
   function closeModal() {

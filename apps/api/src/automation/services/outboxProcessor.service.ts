@@ -159,12 +159,13 @@ export async function processOutboxEntry(
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function markFailed(prisma: PrismaClient, outboxId: string, reason: string): Promise<void> {
+  const current = await prisma.automationOutbox.findUnique({ where: { id: outboxId }, select: { payload: true } })
   await prisma.automationOutbox.update({
     where: { id: outboxId },
     data:  {
       status:  'FAILED',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      payload: { failureReason: reason } as any,
+      payload: { ...(current?.payload as object ?? {}), failureReason: reason } as any,
     },
   })
 }

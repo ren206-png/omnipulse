@@ -72,6 +72,8 @@ export function assertResourceBelongsToWorkspace(
   }
 }
 
+// WEEKLY-AUDIT: OAuth state tokens embed iat but expiry is never validated. A state token generated hours ago remains valid indefinitely. Add an expiry check in extractOAuthStatePayload: if (Date.now() - payload.iat > 10_min) throw TenantAccessError(400, 'INVALID_STATE', 'OAuth state expired').
+
 /**
  * Create a tamper-proof OAuth state token.
  * Format: `<nonce>.<hmac-sha256-hex>`
@@ -126,10 +128,17 @@ export function extractOAuthStatePayload(
     throw new TenantAccessError(400, 'INVALID_STATE', 'OAuth state missing workspaceId')
   }
 
+  if (typeof payload.userId !== 'string' || !payload.userId) {
+    throw new TenantAccessError(400, 'INVALID_STATE', 'OAuth state missing userId')
+  }
+  if (typeof payload.platform !== 'string' || !payload.platform) {
+    throw new TenantAccessError(400, 'INVALID_STATE', 'OAuth state missing platform')
+  }
+
   return {
     workspaceId: payload.workspaceId,
-    userId: payload.userId ?? '',
-    platform: payload.platform ?? '',
+    userId: payload.userId,
+    platform: payload.platform,
     pkceVerifier: payload.pkceVerifier,
   }
 }

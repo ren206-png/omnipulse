@@ -46,7 +46,7 @@ export function startAutomationResumeWorker(): void {
       // Load instance
       const instance = await prisma.contactFlowInstance.findUnique({
         where:  { id: instanceId },
-        select: { id: true, status: true, wakeAt: true, revision: true, currentNodeId: true, flowVersionId: true },
+        select: { id: true, status: true, wakeAt: true, revision: true, currentNodeId: true },
       })
 
       if (!instance) {

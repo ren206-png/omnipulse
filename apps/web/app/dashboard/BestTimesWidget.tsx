@@ -48,6 +48,8 @@ export function BestTimesWidget({ token }: { token: string }) {
       const data = await res.json() as { recommendations: PlatformRecommendation[] }
       setRecommendations(data.recommendations)
       if (data.recommendations.length > 0) setSelected(data.recommendations[0].platform)
+    } catch {
+      // network failure — leave recommendations empty
     } finally {
       setLoading(false)
     }

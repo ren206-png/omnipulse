@@ -20,7 +20,7 @@ import { prisma } from '../lib/prisma.js'
 import { logger } from '../lib/logger.js'
 import { TriggerJobPayloadSchema, RetryableError } from '../automation/types/index.js'
 import { createInstance } from '../automation/services/instanceManager.service.js'
-import { executeQueue, TRIGGER_QUEUE, EXECUTE_QUEUE } from '../automation/queues/index.js'
+import { executeQueue, TRIGGER_QUEUE } from '../automation/queues/index.js'
 
 let _worker: Worker | null = null
 

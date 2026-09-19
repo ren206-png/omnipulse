@@ -12,7 +12,7 @@ export function NoAccountsBanner({ token, workspaceId }: { token: string; worksp
     fetch(`${apiUrl}/api/v1/social-accounts?workspaceId=${workspaceId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
+      .then((r) => { if (!r.ok) throw new Error(); return r.json() })
       .then((data: { accounts?: unknown[] }) => {
         if (!data.accounts?.length) setShow(true)
       })

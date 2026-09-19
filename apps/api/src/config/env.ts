@@ -86,13 +86,6 @@ export const env = {
   // TikTok OAuth
   TIKTOK_CLIENT_KEY: process.env.TIKTOK_CLIENT_KEY ?? '',
   TIKTOK_CLIENT_SECRET: process.env.TIKTOK_CLIENT_SECRET ?? '',
-  // Feature flags
-  FF_AGENCY_APPROVALS: process.env.FF_AGENCY_APPROVALS === 'true',
-  FF_EVERGREEN_QUEUE: process.env.FF_EVERGREEN_QUEUE === 'true',
-  FF_OUTCOME_ANALYTICS: process.env.FF_OUTCOME_ANALYTICS === 'true',
-  FF_PHOTO_TO_POST: process.env.FF_PHOTO_TO_POST === 'true',
-  FF_PUBLISH_RELIABILITY: process.env.FF_PUBLISH_RELIABILITY === 'true',
-  FF_TRADEFLOW_BRIDGE: process.env.FF_TRADEFLOW_BRIDGE === 'true',
   // Automation
   AUTOMATION_ENGINE_ENABLED: process.env.AUTOMATION_ENGINE_ENABLED === 'true',
   AUTOMATION_WEBHOOK_SECRET: process.env.AUTOMATION_WEBHOOK_SECRET ?? '',
