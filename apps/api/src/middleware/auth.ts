@@ -24,6 +24,9 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const token = req.headers.authorization?.startsWith('Bearer ')
     ? req.headers.authorization.slice(7)
     : (req.cookies as Record<string, string> | undefined)?.token
+    // WEEKLY-AUDIT: query-param token fallback leaks JWTs into server logs, browser history,
+    // and CDN/proxy logs. Only kept for SSE which cannot set headers. Replace with short-lived
+    // one-time SSE tokens issued by a POST /notifications/sse-token endpoint.
     ?? (typeof req.query.token === 'string' ? req.query.token : undefined)
 
   if (!token) {
@@ -38,10 +41,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return
   }
 
-  // Check if the token was issued before a password reset
+  // Verify the user still exists and the token was not issued before a password reset
   prisma.user.findUnique({ where: { id: payload.id }, select: { passwordChangedAt: true } })
     .then((user) => {
-      if (user?.passwordChangedAt && payload.iat !== undefined) {
+      if (!user) {
+        sendError(res, 401, 'INVALID_TOKEN', 'Token is invalid or expired')
+        return
+      }
+      if (user.passwordChangedAt && payload.iat !== undefined) {
         const changedAtSec = Math.floor(user.passwordChangedAt.getTime() / 1000)
         if (payload.iat < changedAtSec) {
           sendError(res, 401, 'TOKEN_REVOKED', 'Token invalidated by password reset')

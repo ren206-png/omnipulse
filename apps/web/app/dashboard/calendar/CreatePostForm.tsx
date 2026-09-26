@@ -619,6 +619,9 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlatforms])
 
+  // Cancel pending autosave on unmount
+  useEffect(() => () => { if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current) }, [])
+
   const utmBuiltUrl = utmUrl.trim()
     ? `${utmUrl.trim()}?utm_source=${encodeURIComponent(utmSource)}&utm_medium=${encodeURIComponent(utmMedium)}&utm_campaign=${encodeURIComponent(utmCampaign)}`
     : ''
@@ -881,7 +884,6 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
       const decoder = new TextDecoder()
       let buffer = ''
       let accumulated = ''
-      let currentVariation = 0
 
       while (true) {
         const { done, value } = await reader.read()
@@ -907,7 +909,6 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
               for (let i = 0; i < parts.length; i++) {
                 vars[i] = parts[i].trim()
               }
-              currentVariation = Math.min(parts.length - 1, numVariations - 1)
               setGeneratedVariations([...vars])
             }
           } catch { /* malformed chunk — skip */ }

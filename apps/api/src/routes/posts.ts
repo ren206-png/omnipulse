@@ -283,7 +283,7 @@ interface PlatformVariantInput {
 function validateVariants(raw: unknown): { variants: PlatformVariantInput[]; error?: never } | { error: string; variants?: never } {
   if (!raw) return { variants: [] }
   if (!Array.isArray(raw)) return { error: 'platformVariants must be an array' }
-  const ALLOWED = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X']
+  const ALLOWED = VALID_PLATFORMS as readonly string[]
   const seen = new Set<string>()
   const out: PlatformVariantInput[] = []
   for (const v of raw) {
@@ -1079,6 +1079,10 @@ router.patch('/:id/metrics', async (req: Request, res: Response): Promise<void> 
   }
 
   if (!platform) { sendError(res, 400, 'MISSING_FIELD', 'platform is required'); return }
+  if (!VALID_PLATFORMS.includes(platform as typeof VALID_PLATFORMS[number])) {
+    sendError(res, 400, 'INVALID_PLATFORM', `platform must be one of: ${VALID_PLATFORMS.join(', ')}`)
+    return
+  }
 
   try {
     const post = await prisma.scheduledPost.findUnique({ where: { id } })
@@ -1406,10 +1410,11 @@ router.post('/:id/smart-schedule', async (req: Request, res: Response): Promise<
       candidate.setUTCDate(candidate.getUTCDate() + daysOut)
       candidate.setUTCHours(bestHour, 0, 0, 0)
 
+      // Clamp window to [0, 23] to avoid date-rollover when bestHour is 0 or 23
       const windowStart = new Date(candidate)
-      windowStart.setUTCHours(bestHour - 1, 0, 0, 0)
+      windowStart.setUTCHours(Math.max(0, bestHour - 1), 0, 0, 0)
       const windowEnd = new Date(candidate)
-      windowEnd.setUTCHours(bestHour + 1, 59, 59, 999)
+      windowEnd.setUTCHours(Math.min(23, bestHour + 1), 59, 59, 999)
 
       const conflict = await prisma.scheduledPost.findFirst({
         where: {

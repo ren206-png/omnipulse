@@ -76,6 +76,10 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
     }
     throw err
   }
+  // WEEKLY-AUDIT: parsedState.userId is verified only by HMAC signature, not compared against
+  // req.user.id. A valid state token from another user could be replayed here to link social
+  // accounts into a different workspace. Fix: add `if (parsedState.userId !== req.user!.id) {...}`
+  // or replace extractOAuthStatePayload with verifyOAuthState(state, req.user.id, workspaceId).
 
   try {
     const { platform, workspaceId, pkceVerifier } = parsedState

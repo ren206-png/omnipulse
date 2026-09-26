@@ -18,6 +18,7 @@ async function postFirstComment(
   externalId: string,
   accessToken: string,
   comment: string,
+  linkedinPersonUrn?: string | null,
 ): Promise<void> {
   try {
     if (platform === 'X') {
@@ -62,7 +63,7 @@ async function postFirstComment(
           'LinkedIn-Version': '202406',
         },
         body: JSON.stringify({
-          actor: 'urn:li:person:me',
+          actor: linkedinPersonUrn ?? '',
           message: { text: comment },
         }),
       })
@@ -356,6 +357,7 @@ const worker = new Worker(
       // ── End LinkedIn ─────────────────────────────────────────────────────────
 
       try {
+        const rawToken = decryptToken(account.accessToken)
         let externalId: string
         if (FF_PUBLISH_RELIABILITY) {
           // Capture externalId via closure so reliablePublish drives the retry loop
@@ -369,13 +371,13 @@ const worker = new Worker(
               try {
                 capturedExternalId = await publishToPlatform(
                   { content, mediaUrls },
-                  { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
+                  { platform, accessToken: rawToken, externalProfileId: account.externalProfileId },
                 )
                 return { success: true, statusCode: 200 }
               } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err)
                 // Heuristic: treat 4xx-like messages as terminal
-                const is4xx = /4\d\d|unauthorized|forbidden|invalid/i.test(msg)
+                const is4xx = /4\d\d|unauthorized|forbidden/i.test(msg)
                 return { success: false, error: msg, statusCode: is4xx ? 400 : 500 }
               }
             },
@@ -388,7 +390,7 @@ const worker = new Worker(
         } else {
           externalId = await publishToPlatform(
             { content, mediaUrls },
-            { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
+            { platform, accessToken: rawToken, externalProfileId: account.externalProfileId },
           )
         }
         responseLog[platform] = externalId
@@ -406,7 +408,7 @@ const worker = new Worker(
                 const replyRes = await fetch('https://api.twitter.com/2/tweets', {
                   method: 'POST',
                   headers: {
-                    Authorization: `Bearer ${account.accessToken}`,
+                    Authorization: `Bearer ${rawToken}`,
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify({
@@ -452,11 +454,9 @@ const worker = new Worker(
         if (!externalId || externalId.includes('_manual_required')) continue
         const account = accounts.find((a) => a.platform === platform)
         if (!account) continue
-        // For LinkedIn, use the raw decrypted token
-        const accessToken = platform === 'LINKEDIN'
-          ? decryptToken(account.accessToken)
-          : account.accessToken
-        await postFirstComment(platform, externalId, accessToken, post.firstComment)
+        const accessToken = decryptToken(account.accessToken)
+        const liUrn = platform === 'LINKEDIN' ? (account as typeof account & { linkedinPersonUrn?: string | null }).linkedinPersonUrn : undefined
+        await postFirstComment(platform, externalId, accessToken, post.firstComment, liUrn)
       }
       logger.info({ postId, platforms: Object.keys(responseLog) }, 'First comment posted')
     }

@@ -238,14 +238,14 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
   const idx = assets.findIndex((a) => a.id === id)
   if (idx === -1) { res.status(404).json({ error: 'Not found' }); return }
 
-  const removed_candidate = assets[idx]
+  const removedCandidate = assets[idx]
   try {
     await assertWorkspaceAccess(callerWorkspaceId, req.user!.id)
   } catch (err) {
     if (err instanceof TenantAccessError) { res.status(err.statusCode).json({ error: err.message }); return }
     throw err
   }
-  if (!removed_candidate.workspaceId || removed_candidate.workspaceId !== callerWorkspaceId) {
+  if (!removedCandidate.workspaceId || removedCandidate.workspaceId !== callerWorkspaceId) {
     res.status(403).json({ error: 'Forbidden' }); return
   }
 
@@ -253,7 +253,7 @@ router.delete('/:id', requireAuth, async (req: Request, res: Response): Promise<
   writeStore(assets)
 
   // Delete file from disk
-  try { fs.unlinkSync(path.join(UPLOAD_DIR, removed_candidate.filename)) } catch { /* ignore */ }
+  try { fs.unlinkSync(path.join(UPLOAD_DIR, removedCandidate.filename)) } catch { /* ignore */ }
 
   res.status(204).end()
 })

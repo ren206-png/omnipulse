@@ -542,6 +542,9 @@ export function AccountsClient({ token }: Props) {
 
   function handleOAuthConnect(platform: Platform) {
     if (!activeWorkspace) return
+    // WEEKLY-AUDIT: JWT is passed as a URL query param here, exposing it in browser history,
+    // server access logs, and Referer headers sent to OAuth providers. Fix: exchange the JWT
+    // for a short-lived opaque OAuth state token server-side before this redirect.
     window.location.href = `${apiUrl}/api/v1/social-accounts/oauth/connect?platform=${platform}&workspaceId=${activeWorkspace.id}&token=${encodeURIComponent(token)}`
   }
 
