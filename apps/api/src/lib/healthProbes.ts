@@ -86,6 +86,7 @@ const MONITORED_QUEUES = [
   'automation-outbox',
   'automation-wakeup',
   'auth-token-refresh',
+  'system-monitor',
 ]
 
 const FAILED_JOB_ALERT_THRESHOLD = 20
@@ -131,6 +132,8 @@ const HEARTBEAT_STALE_SEC = {
   'evergreen-recycler':  2 * 60 * 60, // runs every hour
   'analytics':          25 * 60 * 60, // runs daily
   'weekly-digest':       7 * 24 * 60 * 60, // weekly
+  'system-monitor':      5 * 60,   // runs every 2 min
+  'auth-token-refresh': 45 * 60,   // runs every 30 min
 } as const
 
 export async function probeWorkers(): Promise<DeepHealthReport['subsystems']['workers']> {

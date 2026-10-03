@@ -14,7 +14,7 @@ export async function removeToken(): Promise<void> {
   return SecureStore.deleteItemAsync('token')
 }
 
-export async function apiFetch(path: string, options: RequestInit = {}): Promise<any> {
+export async function apiFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getToken()
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -28,5 +28,5 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     const err = await res.json().catch(() => ({})) as any
     throw new Error(err.message ?? `HTTP ${res.status}`)
   }
-  return res.json()
+  return res.json().catch(() => null) as Promise<T>
 }

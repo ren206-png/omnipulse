@@ -295,13 +295,16 @@ export function PostHistory({ token }: { token: string }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ utmTag: utmTagInput }),
       })
-      if (res.ok) {
-        setAttributions((prev) => ({ ...prev, [postId]: { calls: 0, bookings: 0, utmTag: utmTagInput } }))
-        setSetupTrackingId(null)
-        setUtmTagInput('')
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        setError(body.error ?? 'Failed to save UTM tag')
+        return
       }
+      setAttributions((prev) => ({ ...prev, [postId]: { calls: 0, bookings: 0, utmTag: utmTagInput } }))
+      setSetupTrackingId(null)
+      setUtmTagInput('')
     } catch {
-      // silently ignore
+      setError('Network error — could not save UTM tag')
     } finally {
       setUtmSaving(false)
     }
@@ -381,7 +384,7 @@ export function PostHistory({ token }: { token: string }) {
   async function handleBulkDelete() {
     const ids = Array.from(selected)
     try {
-      await Promise.all(
+      const results = await Promise.all(
         ids.map((id) =>
           fetch(`${apiUrl}/api/v1/posts/${id}`, {
             method: 'DELETE',
@@ -389,6 +392,10 @@ export function PostHistory({ token }: { token: string }) {
           })
         )
       )
+      const anyFailed = results.some((r) => !r.ok)
+      if (anyFailed) {
+        setError('Failed to delete some posts — please try again')
+      }
       setPosts((prev) => prev.filter((p) => !selected.has(p.id)))
       setSelected(new Set())
     } catch {

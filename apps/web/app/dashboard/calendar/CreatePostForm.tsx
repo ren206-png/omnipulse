@@ -244,7 +244,7 @@ function makeVariants(masterContent: string): Record<VariantPlatform, PlatformVa
   ) as unknown as Record<VariantPlatform, PlatformVariant>
 }
 
-function ContentScoreWidget({ content, platform }: { content: string; platform: string }) {
+function ContentScoreWidget({ content, platform, token }: { content: string; platform: string; token: string }) {
   const [result, setResult] = useState<{ score: number; grade: string; breakdown: { label: string; score: number; max: number; tip: string }[] } | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -256,7 +256,7 @@ function ContentScoreWidget({ content, platform }: { content: string; platform: 
       try {
         const r = await fetch(`${apiUrl}/api/v1/ai/score`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ content, platform }),
         })
         const d = await r.json()
@@ -355,9 +355,9 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
     fetch(`${apiUrl}/api/v1/analytics/best-times?workspaceId=${workspaceId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => r.json())
-      .then((data: { recommendations?: typeof bestRecs }) => {
-        setBestRecs(data.recommendations ?? [])
+      .then((r) => { if (!r.ok) return; return r.json() })
+      .then((data?: { recommendations?: typeof bestRecs }) => {
+        setBestRecs(data?.recommendations ?? [])
       })
       .catch(() => {/* silent */})
   }, [workspaceId, token])
@@ -446,9 +446,9 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
     fetch(`${apiUrl}/api/v1/campaigns?workspaceId=${workspaceId}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then(r => r.json())
-      .then((d: { campaigns?: Array<{ id: string; name: string; color: string }> }) => {
-        if (d.campaigns) setCampaigns(d.campaigns)
+      .then(r => { if (!r.ok) return; return r.json() })
+      .then((d?: { campaigns?: Array<{ id: string; name: string; color: string }> }) => {
+        if (d?.campaigns) setCampaigns(d.campaigns)
       })
       .catch(() => {})
   }, [workspaceId, token])
@@ -619,9 +619,17 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlatforms])
 
-  const utmBuiltUrl = utmUrl.trim()
-    ? `${utmUrl.trim()}?utm_source=${encodeURIComponent(utmSource)}&utm_medium=${encodeURIComponent(utmMedium)}&utm_campaign=${encodeURIComponent(utmCampaign)}`
-    : ''
+  const utmBuiltUrl = (() => {
+    const base = utmUrl.trim()
+    if (!base) return ''
+    const params = new URLSearchParams()
+    if (utmSource) params.set('utm_source', utmSource)
+    if (utmMedium) params.set('utm_medium', utmMedium)
+    if (utmCampaign) params.set('utm_campaign', utmCampaign)
+    const qs = params.toString()
+    if (!qs) return base
+    return `${base}${base.includes('?') ? '&' : '?'}${qs}`
+  })()
 
   function copyUtm() {
     if (!utmBuiltUrl) return
@@ -881,7 +889,6 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
       const decoder = new TextDecoder()
       let buffer = ''
       let accumulated = ''
-      let currentVariation = 0
 
       while (true) {
         const { done, value } = await reader.read()
@@ -907,7 +914,6 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
               for (let i = 0; i < parts.length; i++) {
                 vars[i] = parts[i].trim()
               }
-              currentVariation = Math.min(parts.length - 1, numVariations - 1)
               setGeneratedVariations([...vars])
             }
           } catch { /* malformed chunk — skip */ }
@@ -1565,7 +1571,7 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
           className={cn(charWarning && content.length > charLimit && 'border-destructive')}
         />
 
-        <ContentScoreWidget content={content} platform={selectedPlatforms[0] ?? 'INSTAGRAM'} />
+        <ContentScoreWidget content={content} platform={selectedPlatforms[0] ?? 'INSTAGRAM'} token={token} />
 
         {/* Per-platform content customiser */}
         {activeVariantPlatforms.length > 0 && (

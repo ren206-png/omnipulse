@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express'
+import { randomBytes } from 'crypto'
 import { prisma } from '../lib/prisma.js'
 import { getWorkspaceRole } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
@@ -56,8 +57,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     finalUrl = finalUrl + separator + utmParams.join('&')
   }
 
-  // Generate 6-char alphanumeric slug
-  const slug = Math.random().toString(36).slice(2, 8)
+  // Generate 6-char hex slug using crypto (unpredictable)
+  const slug = randomBytes(3).toString('hex')
 
   try {
     const link = await (prisma as any).shortLink.create({

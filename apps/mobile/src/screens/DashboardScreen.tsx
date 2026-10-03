@@ -62,7 +62,7 @@ export default function DashboardScreen() {
             </View>
           </View>
           <Text style={styles.postContent} numberOfLines={2}>{post.content}</Text>
-          <Text style={styles.postDate}>{new Date(post.scheduledFor).toLocaleDateString()}</Text>
+          <Text style={styles.postDate}>{post.scheduledFor ? new Date(post.scheduledFor).toLocaleDateString() : '—'}</Text>
         </View>
       ))}
     </ScrollView>

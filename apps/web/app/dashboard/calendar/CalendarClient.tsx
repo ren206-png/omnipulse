@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import {
   startOfMonth,
   endOfMonth,
@@ -151,6 +151,7 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
       '_blank',
     )
   }
+  const router = useRouter()
   const searchParams = useSearchParams()
   const reuseContent = searchParams.get('content') ?? ''
   const reusePlatforms = useMemo(() => {
@@ -464,7 +465,7 @@ export function CalendarClient({ workspaceId, token, activeWorkspaceId }: Props)
       setToastOpen(true)
       setTimeout(() => {
         setDialogOpen(false)
-        window.location.href = `/dashboard/calendar?postId=${data.post.id}`
+        router.push(`/dashboard/calendar?postId=${data.post.id}`)
       }, 1000)
     } catch {
       setToastMessage('Network error — could not duplicate post')

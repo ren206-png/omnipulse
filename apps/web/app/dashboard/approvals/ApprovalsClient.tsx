@@ -283,7 +283,8 @@ export function ApprovalsClient({ token }: Props) {
 
   async function revokeMagicLink(id: string) {
     try {
-      await fetch(`${apiUrl}/api/v1/magic-links/${id}/revoke`, { method: 'DELETE', headers })
+      const res = await fetch(`${apiUrl}/api/v1/magic-links/${id}/revoke`, { method: 'DELETE', headers })
+      if (!res.ok) { showToast('Failed to revoke link'); return }
       fetchMagicLinks()
       showToast('Link revoked')
     } catch {

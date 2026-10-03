@@ -115,11 +115,14 @@ export function TeamClient({ workspaceId, token, currentUserId }: Props) {
   async function handleRemove(userId: string) {
     setRemovingId(userId)
     try {
-      await fetch(`${apiUrl}/api/v1/team/${workspaceId}/members/${userId}`, {
+      const res = await fetch(`${apiUrl}/api/v1/team/${workspaceId}/members/${userId}`, {
         method: 'DELETE',
         headers,
       })
+      if (!res.ok) { const b = await res.json().catch(() => ({})) as { error?: string }; setError(b.error ?? 'Failed to remove member'); return }
       fetchAll()
+    } catch {
+      setError('Network error — could not remove member')
     } finally {
       setRemovingId(null)
       setConfirmRemoveId(null)
@@ -129,12 +132,15 @@ export function TeamClient({ workspaceId, token, currentUserId }: Props) {
   async function handleRoleChange(userId: string, role: string) {
     setUpdatingRoleId(userId)
     try {
-      await fetch(`${apiUrl}/api/v1/team/${workspaceId}/members/${userId}`, {
+      const res = await fetch(`${apiUrl}/api/v1/team/${workspaceId}/members/${userId}`, {
         method: 'PATCH',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ role }),
       })
+      if (!res.ok) { const b = await res.json().catch(() => ({})) as { error?: string }; setError(b.error ?? 'Failed to update role'); return }
       fetchAll()
+    } catch {
+      setError('Network error — could not update role')
     } finally {
       setUpdatingRoleId(null)
     }
@@ -143,11 +149,14 @@ export function TeamClient({ workspaceId, token, currentUserId }: Props) {
   async function handleRevokeInvite(inviteId: string) {
     setRevokingId(inviteId)
     try {
-      await fetch(`${apiUrl}/api/v1/team/${workspaceId}/invitations/${inviteId}`, {
+      const res = await fetch(`${apiUrl}/api/v1/team/${workspaceId}/invitations/${inviteId}`, {
         method: 'DELETE',
         headers,
       })
+      if (!res.ok) { const b = await res.json().catch(() => ({})) as { error?: string }; setError(b.error ?? 'Failed to revoke invitation'); return }
       fetchAll()
+    } catch {
+      setError('Network error — could not revoke invitation')
     } finally {
       setRevokingId(null)
     }

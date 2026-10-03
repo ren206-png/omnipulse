@@ -36,7 +36,7 @@ const resetLimiter = rateLimit({
 router.post('/register', authLimiter, async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body as { email?: string; password?: string }
 
-  if (!email || typeof email !== 'string' || !email.includes('@')) {
+  if (!email || typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     sendError(res, 400, 'INVALID_EMAIL', 'A valid email address is required')
     return
   }

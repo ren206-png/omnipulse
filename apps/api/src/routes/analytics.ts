@@ -294,7 +294,7 @@ router.get('/platform-comparison', async (req: Request, res: Response): Promise<
 
   if (!await assertAnalyticsPlanAccess(workspaceId, res)) return
 
-  const since = new Date(Date.now() - parseInt(days, 10) * 24 * 60 * 60 * 1000)
+  const since = new Date(Date.now() - (parseInt(days, 10) || 30) * 24 * 60 * 60 * 1000)
 
   const metrics = await (prisma as any).postMetric.findMany({
     where: {
@@ -344,7 +344,7 @@ router.get('/hashtag-performance', async (req: Request, res: Response): Promise<
 
   if (!await assertAnalyticsPlanAccess(workspaceId, res)) return
 
-  const since = new Date(Date.now() - parseInt(days, 10) * 24 * 60 * 60 * 1000)
+  const since = new Date(Date.now() - (parseInt(days, 10) || 30) * 24 * 60 * 60 * 1000)
 
   const posts = await prisma.scheduledPost.findMany({
     where: { workspaceId, status: 'PUBLISHED', scheduledFor: { gte: since } },
