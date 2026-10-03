@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import { Queue } from 'bullmq'
+import { logger } from './logger.js'
 
 function parseRedisUrl(url: string): { host: string; port: number; password?: string; db?: number } {
   const parsed = new URL(url)
@@ -19,7 +20,7 @@ export const redisConnection = {
 }
 
 export const publishPostQueue = new Queue('publish-post', { connection: redisConnection })
-publishPostQueue.on('error', (err) => console.error('[Queue:publish-post] Error:', err.message))
+publishPostQueue.on('error', (err) => logger.error({ err }, '[Queue:publish-post] Error'))
 
 export const analyticsSyncQueue = new Queue('analytics-sync', { connection: redisConnection })
-analyticsSyncQueue.on('error', (err) => console.error('[Queue:analytics-sync] Error:', err.message))
+analyticsSyncQueue.on('error', (err) => logger.error({ err }, '[Queue:analytics-sync] Error'))

@@ -294,8 +294,8 @@ const worker = new Worker(
           const ownerId = workspaceOwner?.ownerId ?? post.workspaceId
           const withinLimit = await checkLinkedInRateLimit(ownerId)
           if (!withinLimit) {
-            // Reschedule to same time tomorrow
-            const tomorrow = new Date(post.scheduledFor.getTime() + 24 * 60 * 60 * 1000)
+            // Reschedule 24h from now (or from scheduledFor if it's in the future)
+            const tomorrow = new Date(Math.max(Date.now(), post.scheduledFor.getTime()) + 24 * 60 * 60 * 1000)
             await prisma.scheduledPost.update({
               where: { id: post.id },
               data: { status: 'SCHEDULED', scheduledFor: tomorrow },

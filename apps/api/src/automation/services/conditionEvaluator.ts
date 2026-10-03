@@ -101,6 +101,8 @@ export function evaluateCondition(
     }
 
     case 'hasTag': {
+      // WEEKLY-AUDIT: contact.tags is always [] — tags are stored in automationFields._tags
+      // Fix: const tags = (ctx.contact as any).automationFields?._tags ?? ctx.contact.tags ?? []
       const tags = ctx.contact.tags ?? []
       const needle = normalizeText(expr.tag)
       return tags.some((t) => normalizeText(t) === needle)

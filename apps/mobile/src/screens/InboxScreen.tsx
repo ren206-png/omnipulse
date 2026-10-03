@@ -29,7 +29,9 @@ export default function InboxScreen() {
     try {
       await apiFetch(`/api/v1/inbox/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'READ' }) })
       setMessages(prev => prev.map(m => m.id === id ? { ...m, status: 'READ' } : m))
-    } catch {}
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Could not mark message as read')
+    }
   }
 
   const sendReply = async (id: string) => {

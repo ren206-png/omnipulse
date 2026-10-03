@@ -33,7 +33,7 @@ const WAKEUP_EVERY   = 30_000  // 30 seconds
 const SWEEP_BATCH    = 100     // max instances per sweep
 
 export const wakeupQueue = new Queue<Record<string, never>>(WAKEUP_QUEUE, { connection: redisConnection })
-wakeupQueue.on('error', (err) => console.error('[Queue:automation-wakeup] Error:', err.message))
+wakeupQueue.on('error', (err) => logger.error({ err }, '[Queue:automation-wakeup] Error'))
 
 let _worker: Worker | null = null
 

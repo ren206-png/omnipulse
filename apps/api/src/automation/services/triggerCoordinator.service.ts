@@ -21,7 +21,7 @@
 import type { PrismaClient } from '../../../generated/prisma/client.js'
 import { randomUUID } from 'node:crypto'
 import type { NormalizedInboundEvent, TriggerJobPayload, ResumeJobPayload } from '../types/index.js'
-import { assertWorkspaceAutomationEnabled, assertContactNotOptedOut } from './globalGuards.js'
+import { assertWorkspaceAutomationEnabled, assertContactNotOptedOut, ContactOptedOutError } from './globalGuards.js'
 import { ingestEvent } from './ingestion.service.js'
 import { matchTriggers, type MatchedFlow } from './triggerMatcher.service.js'
 
@@ -75,7 +75,8 @@ export async function coordinateTrigger(
   // ── 4. Opt-out guard ──────────────────────────────────────────────────────
   try {
     await assertContactNotOptedOut(prisma, contact.id)
-  } catch {
+  } catch (err) {
+    if (!(err instanceof ContactOptedOutError)) throw err
     await prisma.inboundAutomationEvent.update({
       where: { id: stored.id },
       data:  { processingStatus: 'IGNORED' },

@@ -54,7 +54,6 @@ import searchRouter from './routes/search.js'
 import seoRouter from './routes/seo.js'
 import seoDataRouter from './routes/seoData.js'
 import dlqRouter from './routes/dlq.js'
-import tradeflowRouter from './routes/tradeflow.js'
 import photoToPostRouter from './routes/photoToPost.js'
 import outcomeAnalyticsRouter from './routes/outcomeAnalytics.js'
 import approvalsRouter from './routes/approvals.js'
@@ -143,8 +142,6 @@ app.use(cors({
 }))
 // Raw body for Stripe webhooks — must be registered before express.json()
 app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }))
-// Raw body for TradeFlow webhooks — before express.json()
-// app.use('/api/v1/tradeflow/webhook', express.raw({ type: 'application/json' }))
 // Raw body for Automation inbound webhooks — HMAC is verified against the raw bytes
 app.use('/api/v1/automation/inbound', express.raw({ type: 'application/json' }))
 
@@ -221,7 +218,6 @@ app.use('/api/v1/links', linksRouter)
 app.use('/api/v1/search', searchRouter)
 app.use('/api/v1/seo', seoRouter)
 app.use('/api/v1/seo-data', seoDataRouter)
-// app.use('/api/v1/tradeflow', tradeflowRouter)
 app.use('/api/v1/photo-to-post', photoToPostRouter)
 app.use('/api/v1/outcome-analytics', outcomeAnalyticsRouter)
 app.use('/api/v1/approvals', approvalsRouter)
@@ -273,7 +269,7 @@ startStuckJobSweeperWorker().catch((err) => logger.error({ err }, 'Failed to sta
 // `void` suppresses the unused-import lint warning; the side effect is the worker registration.
 void engagementAlertWorker
 // Sync analytics every 6 hours (direct platform API calls)
-setInterval(() => { syncAnalytics().catch(() => {}) }, 6 * 60 * 60 * 1000)
+setInterval(() => { syncAnalytics().catch((err) => logger.error({ err }, '[syncAnalytics] Periodic sync failed')) }, 6 * 60 * 60 * 1000)
 // BullMQ analytics worker (Ayrshare-based daily sync — registers heartbeat)
 void analyticsWorker
 // RSS Feed worker — polls active feeds on their configured interval (every 5 min check)

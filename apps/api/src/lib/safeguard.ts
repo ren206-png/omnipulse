@@ -65,7 +65,7 @@ Scan criteria:
 
 Return ONLY valid JSON. No markdown fences, no prose.`
 
-function failSafe(platform: string): SafeGuardResult {
+function failSafe(_platform: string): SafeGuardResult {
   return {
     status: 'warning',
     flags: ['Safety scan unavailable — review manually before publishing'],

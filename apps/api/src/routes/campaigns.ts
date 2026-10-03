@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js'
 import { getWorkspaceRole } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
+import { logger } from '../lib/logger.js'
 
 const router = Router()
 router.use(requireAuth)
@@ -24,7 +25,8 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       include: { _count: { select: { posts: true } } },
     })
     res.json({ campaigns })
-  } catch {
+  } catch (err) {
+    logger.error({ err }, 'Failed to fetch campaigns')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch campaigns')
   }
 })

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
+import { randomInt } from 'crypto'
 import { prisma } from '../lib/prisma.js'
 import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
@@ -1431,7 +1432,7 @@ router.post('/:id/smart-schedule', async (req: Request, res: Response): Promise<
     if (!scheduledFor) {
       scheduledFor = new Date(now)
       scheduledFor.setUTCDate(scheduledFor.getUTCDate() + 7)
-      scheduledFor.setUTCHours(bestHour, Math.floor(Math.random() * 60), 0, 0)
+      scheduledFor.setUTCHours(bestHour, randomInt(60), 0, 0)
     }
 
     // Update the post to SCHEDULED

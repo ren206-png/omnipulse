@@ -28,6 +28,7 @@ export default function CalendarScreen() {
   }
 
   const grouped = posts.reduce((acc: Record<string, any[]>, post) => {
+    if (!post.scheduledFor) return acc
     const day = new Date(post.scheduledFor).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
     if (!acc[day]) acc[day] = []
     acc[day].push(post)

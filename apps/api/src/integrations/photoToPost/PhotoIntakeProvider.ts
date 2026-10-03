@@ -17,7 +17,7 @@ export class DirectUploadProvider implements PhotoIntakeProvider {
       const url = new URL(intake.photoUrl)
       const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(url.pathname) ||
         intake.photoUrl.includes('uploads') || intake.photoUrl.includes('media')
-      return { valid: isImage || true, reason: isImage ? undefined : 'URL may not be an image' }
+      return { valid: isImage, reason: isImage ? undefined : 'URL may not be an image' }
     } catch {
       return { valid: false, reason: 'Invalid URL' }
     }

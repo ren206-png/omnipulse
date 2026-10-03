@@ -6,7 +6,7 @@
  * they are immune to that problem.
  */
 
-import { prisma } from './prisma'
+import { prisma } from './prisma.js'
 
 export interface WorkspaceRow {
   id: string
@@ -67,6 +67,12 @@ export async function findWorkspaceByOwner(ownerId: string): Promise<WorkspaceRo
   return rows[0] ?? null
 }
 
+const ALLOWED_WORKSPACE_COLUMNS = new Set([
+  'name', 'plan', 'stripeCustomerId', 'stripeSubscriptionId', 'subscriptionStatus',
+  'onboardingComplete', 'brandName', 'brandLogoUrl', 'brandColor', 'customDomain',
+  'stripeMeteredItemId', 'aiGenerationsMonth', 'aiUsagePeriodStart', 'automationEnabled',
+])
+
 /**
  * Update one or more columns on a workspace.  Only the supplied columns are
  * touched.  Returns the updated row.
@@ -78,12 +84,17 @@ export async function updateWorkspace(
   const entries = Object.entries(data)
   if (entries.length === 0) return findWorkspaceById(id)
 
+  for (const [col] of entries) {
+    if (!ALLOWED_WORKSPACE_COLUMNS.has(col)) {
+      throw new Error(`updateWorkspace: column '${col}' is not in the allowed list`)
+    }
+  }
+
   // Build SET clause: "col" = $n
   const setClauses = entries.map(([col], i) => `"${col}" = $${i + 2}`).join(', ')
   const values = [id, ...entries.map(([, v]) => v)]
 
-  // Use template literal approach via $queryRaw with raw string building
-  // We need dynamic SQL here so we use prisma.$queryRawUnsafe
+  // Column names are validated against ALLOWED_WORKSPACE_COLUMNS above
   const rows = await prisma.$queryRawUnsafe<WorkspaceRow[]>(
     `UPDATE "Workspace" SET ${setClauses} WHERE id = $1 RETURNING
       id, name, "ownerId", plan,

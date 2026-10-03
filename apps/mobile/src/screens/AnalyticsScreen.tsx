@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator, TouchableOpacity } from 'react-native'
+import { View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator, TouchableOpacity, Alert } from 'react-native'
 import { apiFetch } from '../api/client'
 
 export default function AnalyticsScreen() {
@@ -28,9 +28,10 @@ export default function AnalyticsScreen() {
     setSyncing(true)
     try {
       await apiFetch(`/api/v1/analytics/sync?workspaceId=${workspaceId}`, { method: 'POST' })
-      setTimeout(() => { load() }, 3000)
-    } catch {}
-    finally { setSyncing(false) }
+      await load()
+    } catch (err: any) {
+      Alert.alert('Sync Failed', err.message ?? 'Could not sync analytics')
+    } finally { setSyncing(false) }
   }
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#6366f1" /></View>

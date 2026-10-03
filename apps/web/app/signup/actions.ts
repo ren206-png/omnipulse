@@ -13,11 +13,16 @@ export async function signupAction(
   if (password !== confirmPassword) return { error: 'Passwords do not match' }
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
-  const res = await fetch(`${apiUrl}/api/v1/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
+  let res: Response
+  try {
+    res = await fetch(`${apiUrl}/api/v1/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+  } catch {
+    return { error: 'Could not reach the server — please try again' }
+  }
 
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string }

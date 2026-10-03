@@ -14,8 +14,7 @@
  */
 
 import type { NodeExecutionContext, NodeExecutionResult } from './types.js'
-import { evaluateCondition } from '../conditionEvaluator.js'
-import { normalizeText } from '../conditionEvaluator.js'
+import { evaluateCondition, normalizeText } from '../conditionEvaluator.js'
 import { TerminalError } from '../../types/index.js'
 
 export async function executeConditionNode(nodeCtx: NodeExecutionContext): Promise<NodeExecutionResult> {
