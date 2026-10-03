@@ -162,7 +162,7 @@ jobs:
                   continue
               name = adv.get('module_name', adv_id)
               all_paths = [p for f in adv.get('findings', []) for p in f.get('paths', [])]
-              deployed = [p for p in all_paths if 'apps__mobile' not in p]
+              deployed = [p for p in all_paths if 'apps/mobile' not in p]
               if deployed:
                   failures.append(f\"{name} ({adv['severity']}): {deployed[0]}\")
 
