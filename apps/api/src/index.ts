@@ -253,7 +253,19 @@ if (env.SENTRY_DSN) {
 }
 
 // Global unhandled error fallback
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error & { status?: number; statusCode?: number; type?: string }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // Client errors raised by middleware (malformed JSON, oversized body, …) are 4xx, not 500s
+  const status = err.status ?? err.statusCode
+  if (typeof status === 'number' && status >= 400 && status < 500) {
+    logger.warn({ status, type: err.type }, 'Rejected malformed request')
+    if (!res.headersSent) {
+      const message = err.type === 'entity.parse.failed' ? 'Request body is not valid JSON'
+        : err.type === 'entity.too.large' ? 'Request body is too large'
+        : 'Bad request'
+      res.status(status).json({ error: message, code: 'BAD_REQUEST', statusCode: status })
+    }
+    return
+  }
   logger.error({ err }, 'Unhandled error')
   if (!res.headersSent) {
     res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Something went wrong' })
