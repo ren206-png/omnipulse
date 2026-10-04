@@ -371,7 +371,7 @@ const worker = new Worker(
               try {
                 capturedExternalId = await publishToPlatform(
                   { content, mediaUrls },
-                  { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
+                  { platform, accessToken: decryptToken(account.accessToken), externalProfileId: account.externalProfileId },
                 )
                 return { success: true, statusCode: 200 }
               } catch (err) {
@@ -390,7 +390,7 @@ const worker = new Worker(
         } else {
           externalId = await publishToPlatform(
             { content, mediaUrls },
-            { platform, accessToken: account.accessToken, externalProfileId: account.externalProfileId },
+            { platform, accessToken: decryptToken(account.accessToken), externalProfileId: account.externalProfileId },
           )
         }
         responseLog[platform] = externalId
@@ -408,7 +408,7 @@ const worker = new Worker(
                 const replyRes = await fetch('https://api.twitter.com/2/tweets', {
                   method: 'POST',
                   headers: {
-                    Authorization: `Bearer ${account.accessToken}`,
+                    Authorization: `Bearer ${decryptToken(account.accessToken)}`,
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify({
@@ -454,10 +454,8 @@ const worker = new Worker(
         if (!externalId || externalId.includes('_manual_required')) continue
         const account = accounts.find((a) => a.platform === platform)
         if (!account) continue
-        // For LinkedIn, use the raw decrypted token
-        const accessToken = platform === 'LINKEDIN'
-          ? decryptToken(account.accessToken)
-          : account.accessToken
+        // Tokens are stored encrypted for every platform — always decrypt before calling the API
+        const accessToken = decryptToken(account.accessToken)
         await postFirstComment(platform, externalId, accessToken, post.firstComment)
       }
       logger.info({ postId, platforms: Object.keys(responseLog) }, 'First comment posted')
