@@ -36,7 +36,7 @@ router.get('/oauth/connect', requireAuth, async (req: Request, res: Response): P
     // Instagram now uses Facebook/Meta OAuth (Basic Display API deprecated Dec 2024)
     // Requires an Instagram Business or Creator account linked to a Facebook Page
     INSTAGRAM: `https://www.facebook.com/dialog/oauth?client_id=${process.env.FACEBOOK_CLIENT_ID ?? 'FACEBOOK_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement&response_type=code&state=${state}`,
-    FACEBOOK: `https://www.facebook.com/v20.0/dialog/oauth?client_id=${process.env.FACEBOOK_CLIENT_ID ?? 'FACEBOOK_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=pages_manage_posts,pages_read_engagement&response_type=code&state=${state}`,
+    FACEBOOK: `https://www.facebook.com/v20.0/dialog/oauth?client_id=${process.env.FACEBOOK_CLIENT_ID ?? 'FACEBOOK_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=pages_show_list,pages_manage_posts,pages_read_engagement&response_type=code&state=${state}`,
     X: `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${process.env.X_CLIENT_ID ?? 'X_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=tweet.read+tweet.write+users.read&state=${state}&code_challenge=${pkceChallenge}&code_challenge_method=S256`,
     TIKTOK: `https://www.tiktok.com/v2/auth/authorize/?client_key=${process.env.TIKTOK_CLIENT_KEY ?? 'TIKTOK_CLIENT_KEY'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user.info.profile,user.info.stats,video.list&response_type=code&state=${state}`,
     GOOGLE: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID ?? 'GOOGLE_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=https://www.googleapis.com/auth/youtube.upload&response_type=code&state=${state}`,
@@ -154,13 +154,28 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
         res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
         return
       }
-      accessToken = tokenData.access_token
-      if (accessToken) {
-        const profileRes = await fetch(`https://graph.facebook.com/me?access_token=${accessToken}`)
-        const profile = await profileRes.json() as { id?: string; name?: string }
-        externalProfileId = profile.id ?? ''
-        profileName = profile.name ?? externalProfileId
+      // Facebook only allows publishing to a Page, using that Page's own access token
+      // (a user token posting to /me/feed is rejected with error #200). Exchange for a
+      // long-lived user token first — Page tokens derived from it do not expire.
+      const longRes = await fetch(
+        `https://graph.facebook.com/v20.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${process.env.FACEBOOK_CLIENT_ID}&client_secret=${process.env.FACEBOOK_CLIENT_SECRET}&fb_exchange_token=${tokenData.access_token}`,
+      )
+      const longData = await longRes.json() as { access_token?: string }
+      const userToken = longData.access_token ?? tokenData.access_token
+
+      const pagesRes = await fetch(`https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token&access_token=${userToken}`)
+      const pagesData = await pagesRes.json() as { data?: Array<{ id: string; name: string; access_token: string }> }
+      const page = pagesData.data?.[0]
+      if (!page?.access_token) {
+        logger.warn({ pages: pagesData.data?.length ?? 0 }, 'Facebook connect: no Page available on this account')
+        throw new Error('no_facebook_page')
       }
+      if ((pagesData.data?.length ?? 0) > 1) {
+        logger.info({ pages: pagesData.data!.length, chosen: page.id }, 'Facebook connect: multiple Pages — using the first')
+      }
+      accessToken = page.access_token
+      externalProfileId = page.id
+      profileName = page.name
     } else if (platform === 'X') {
       const tokenRes = await fetch('https://api.twitter.com/2/oauth2/token', {
         method: 'POST',
@@ -437,7 +452,7 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
     res.redirect(`${webUrl}/dashboard/accounts?connected=${platform}`)
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : 'oauth_failed'
-    const knownCodes = ['no_ig_business_account', 'linkedin_token_failed', 'linkedin_userinfo_failed']
+    const knownCodes = ['no_ig_business_account', 'no_facebook_page', 'linkedin_token_failed', 'linkedin_userinfo_failed']
     const safeCode = knownCodes.includes(errMsg) ? errMsg : 'oauth_failed'
     logger.error({ err }, 'OAuth callback error')
     res.redirect(`${(process.env.WEB_URL ?? 'http://localhost:3000')}/dashboard/accounts?error=${safeCode}`)

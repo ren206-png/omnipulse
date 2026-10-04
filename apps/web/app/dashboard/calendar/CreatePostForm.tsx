@@ -244,7 +244,7 @@ function makeVariants(masterContent: string): Record<VariantPlatform, PlatformVa
   ) as unknown as Record<VariantPlatform, PlatformVariant>
 }
 
-function ContentScoreWidget({ content, platform }: { content: string; platform: string }) {
+function ContentScoreWidget({ content, platform, token }: { content: string; platform: string; token: string }) {
   const [result, setResult] = useState<{ score: number; grade: string; breakdown: { label: string; score: number; max: number; tip: string }[] } | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -256,14 +256,19 @@ function ContentScoreWidget({ content, platform }: { content: string; platform: 
       try {
         const r = await fetch(`${apiUrl}/api/v1/ai/score`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ content, platform }),
         })
         const d = await r.json()
-        setResult(d)
-      } catch {}
+        // Only accept a well-formed score; an error body must never be rendered as a result
+        if (r.ok && d && Array.isArray(d.breakdown) && typeof d.score === 'number') setResult(d)
+        else setResult(null)
+      } catch {
+        setResult(null)
+      }
     }, 600) // debounce 600ms
-  }, [content, platform])
+    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
+  }, [content, platform, token])
 
   if (!result) return null
 
@@ -1566,7 +1571,7 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
           className={cn(charWarning && content.length > charLimit && 'border-destructive')}
         />
 
-        <ContentScoreWidget content={content} platform={selectedPlatforms[0] ?? 'INSTAGRAM'} />
+        <ContentScoreWidget content={content} platform={selectedPlatforms[0] ?? 'INSTAGRAM'} token={token} />
 
         {/* Per-platform content customiser */}
         {activeVariantPlatforms.length > 0 && (

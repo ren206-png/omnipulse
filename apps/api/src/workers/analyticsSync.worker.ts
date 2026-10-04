@@ -27,6 +27,8 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
 
   await runWithConcurrency(accounts, async (account) => {
     try {
+      // Tokens are stored encrypted — decrypt before sending to platform APIs
+      const accessToken = decryptToken(account.accessToken)
       let followers = 0
       let impressions = 0
       let engagementRate = 0

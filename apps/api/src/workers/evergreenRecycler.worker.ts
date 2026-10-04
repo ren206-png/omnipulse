@@ -113,7 +113,11 @@ async function findEmptySlot(workspaceId: string): Promise<Date> {
 }
 
 async function run(): Promise<void> {
-  if (!FF_EVERGREEN_QUEUE) return
+  if (!FF_EVERGREEN_QUEUE) {
+    // Feature intentionally off — worker is alive, just idle. Keep the health probe green.
+    await heartbeat('evergreen-recycler')
+    return
+  }
 
   logger.info('[EvergreenRecycler] Starting hourly run…')
 

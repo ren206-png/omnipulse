@@ -68,6 +68,7 @@ import { startEvergreenRecyclerWorker } from './workers/evergreenRecycler.worker
 import { startStuckJobSweeperWorker } from './workers/stuckJobSweeper.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
 import { analyticsWorker } from './workers/analytics.worker.js'
+import { publishPostWorker } from './workers/publishPost.worker.js'
 import { startGuardianWorker } from './workers/guardian.worker.js'
 import { engagementAlertWorker } from './workers/engagementAlert.worker.js'
 import { startRssFeedWorker } from './workers/rssFeed.worker.js'
@@ -253,7 +254,19 @@ if (env.SENTRY_DSN) {
 }
 
 // Global unhandled error fallback
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error & { status?: number; statusCode?: number; type?: string }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  // Client errors raised by middleware (malformed JSON, oversized body, …) are 4xx, not 500s
+  const status = err.status ?? err.statusCode
+  if (typeof status === 'number' && status >= 400 && status < 500) {
+    logger.warn({ status, type: err.type }, 'Rejected malformed request')
+    if (!res.headersSent) {
+      const message = err.type === 'entity.parse.failed' ? 'Request body is not valid JSON'
+        : err.type === 'entity.too.large' ? 'Request body is too large'
+        : 'Bad request'
+      res.status(status).json({ error: message, code: 'BAD_REQUEST', statusCode: status })
+    }
+    return
+  }
   logger.error({ err }, 'Unhandled error')
   if (!res.headersSent) {
     res.status(500).json({ error: 'INTERNAL_ERROR', message: 'Something went wrong' })
@@ -276,6 +289,9 @@ void engagementAlertWorker
 setInterval(() => { syncAnalytics().catch(() => {}) }, 6 * 60 * 60 * 1000)
 // BullMQ analytics worker (Ayrshare-based daily sync — registers heartbeat)
 void analyticsWorker
+// Publish worker — consumes the 'publish-post' queue. Worker is instantiated at module level;
+// without this import scheduled posts are enqueued but never published.
+void publishPostWorker
 // RSS Feed worker — polls active feeds on their configured interval (every 5 min check)
 startRssFeedWorker()
 // Weekly Digest worker — sends Monday 08:00 UTC performance emails

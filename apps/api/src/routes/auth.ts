@@ -33,6 +33,13 @@ const resetLimiter = rateLimit({
   message: 'Too many reset requests — please wait before trying again',
 })
 
+// Separate bucket for completing a reset so requesting links can't lock out setting the password
+const resetCompleteLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: 'Too many attempts — please wait before trying again',
+})
+
 router.post('/register', authLimiter, async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body as { email?: string; password?: string }
 
@@ -219,7 +226,7 @@ router.post('/forgot-password', resetLimiter, async (req: Request, res: Response
   }
 })
 
-router.post('/reset-password', resetLimiter, async (req: Request, res: Response): Promise<void> => {
+router.post('/reset-password', resetCompleteLimiter, async (req: Request, res: Response): Promise<void> => {
   const { token, password } = req.body as { token?: string; password?: string }
   if (!token) { sendError(res, 400, 'MISSING_FIELD', 'Reset token is required'); return }
   if (!password || password.length < 8) {
