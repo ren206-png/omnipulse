@@ -532,6 +532,8 @@ export function AccountsClient({ token }: Props) {
       if (connected) showToast(`${connected} connected successfully!`, 'success')
       else if (oauthError === 'no_ig_business_account') {
         showToast('No Instagram Business Account found. Convert your account to Business/Creator and link it to a Facebook Page first.', 'info')
+      } else if (oauthError === 'no_facebook_page') {
+        showToast('No Facebook Page found. Posting needs a Facebook Page you manage — create one, then reconnect and tick your Page when asked.', 'info')
       } else if (oauthError === 'TOKEN_EXCHANGE_FAILED') {
         showToast('OAuth failed: could not exchange authorization code for an access token. Please try again.', 'info')
       } else if (oauthError === 'invalid_state') {
