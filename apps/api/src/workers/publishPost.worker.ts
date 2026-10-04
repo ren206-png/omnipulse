@@ -197,7 +197,9 @@ const worker = new Worker(
       include: { platformVariants: true },
     })
     if (!post) {
-      throw new Error(`ScheduledPost ${postId} not found`)
+      // Post was deleted after its job was queued — nothing to publish. Do not retry or alert.
+      logger.warn({ postId, jobId: job.id }, '[PublishPost] Post no longer exists — skipping stale job')
+      return
     }
 
     // RV-5: Re-verify workspace ownership from DB — do not trust job payload alone.
