@@ -68,6 +68,7 @@ import { startEvergreenRecyclerWorker } from './workers/evergreenRecycler.worker
 import { startStuckJobSweeperWorker } from './workers/stuckJobSweeper.worker.js'
 import { syncAnalytics } from './workers/analyticsSync.worker.js'
 import { analyticsWorker } from './workers/analytics.worker.js'
+import { publishPostWorker } from './workers/publishPost.worker.js'
 import { startGuardianWorker } from './workers/guardian.worker.js'
 import { engagementAlertWorker } from './workers/engagementAlert.worker.js'
 import { startRssFeedWorker } from './workers/rssFeed.worker.js'
@@ -288,6 +289,9 @@ void engagementAlertWorker
 setInterval(() => { syncAnalytics().catch(() => {}) }, 6 * 60 * 60 * 1000)
 // BullMQ analytics worker (Ayrshare-based daily sync — registers heartbeat)
 void analyticsWorker
+// Publish worker — consumes the 'publish-post' queue. Worker is instantiated at module level;
+// without this import scheduled posts are enqueued but never published.
+void publishPostWorker
 // RSS Feed worker — polls active feeds on their configured interval (every 5 min check)
 startRssFeedWorker()
 // Weekly Digest worker — sends Monday 08:00 UTC performance emails
