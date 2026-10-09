@@ -75,7 +75,9 @@ export function OnboardingWizard({ token }: Props) {
 
   function connectPlatform(platformId: string) {
     if (!activeWorkspace?.id) return
-    window.location.href = `${API_URL}/api/v1/social-accounts/oauth/connect?platform=${platformId}&workspaceId=${activeWorkspace.id}`
+    // A browser navigation can't send an Authorization header, so the API reads the token from the query
+    // string (same as the Accounts page) — without it /oauth/connect answered 401 and nothing connected.
+    window.location.href = `${API_URL}/api/v1/social-accounts/oauth/connect?platform=${platformId}&workspaceId=${activeWorkspace.id}&token=${encodeURIComponent(token)}`
   }
 
   const progress = ((step) / (STEPS.length - 1)) * 100

@@ -6,6 +6,7 @@ import { sendError } from '../lib/apiError.js'
 import { publishPostQueue } from '../lib/queue.js'
 import { env } from '../config/env.js'
 import { logger } from '../lib/logger.js'
+import { toDlqItem, type DlqRow } from '../lib/dlqItem.js'
 
 const router = Router()
 
@@ -48,7 +49,16 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       }),
       (prisma as any).postDlq.count({ where }),
     ])
-    res.json({ entries, total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) })
+
+    // PostDlq has no copy of the post text, so fetch it for the page in one extra query.
+    const postIds = [...new Set((entries as Array<{ postId: string }>).map((e) => e.postId))]
+    const posts: Array<{ id: string; content: string }> = postIds.length
+      ? await (prisma as any).scheduledPost.findMany({ where: { id: { in: postIds } }, select: { id: true, content: true } })
+      : []
+    const contentByPostId = new Map(posts.map((p) => [p.id, p.content]))
+
+    const items = (entries as DlqRow[]).map((e) => toDlqItem(e, contentByPostId.get(e.postId)))
+    res.json({ items, total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) })
   } catch (err) {
     logger.error({ err }, 'List DLQ error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to list DLQ entries')

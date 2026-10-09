@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js'
 import { findWorkspaceById } from '../lib/workspaceRaw.js'
 import { requireAuth } from '../middleware/auth.js'
 import { publishPostQueue } from '../lib/queue.js'
+import { reschedulePublishJob, type ReschedulableQueue } from '../lib/reschedulePublish.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 import { PLAN_LIMITS } from '../lib/plans.js'
@@ -995,7 +996,22 @@ router.patch('/:id', async (req: Request, res: Response): Promise<void> => {
       include: { platformVariants: true },
     })
     logger.info({ postId: id }, 'Post updated')
-    res.json({ post: updated })
+
+    // A SCHEDULED post already has a delayed publish job fixed to its old time — swap it for one at
+    // the new time (the worker doesn't re-check scheduledFor, so the old job would publish on time X
+    // even though the post now says Y). DRAFTs have no job.
+    let jobId: string | undefined
+    if (updates.scheduledFor && post.status === 'SCHEDULED') {
+      const swap = await reschedulePublishJob(
+        publishPostQueue as unknown as ReschedulableQueue,
+        id,
+        post.workspaceId,
+        updates.scheduledFor,
+      )
+      jobId = swap.jobId
+      logger.info({ postId: id, jobId, removedStaleJobs: swap.removed }, 'Publish job rescheduled')
+    }
+    res.json({ post: updated, ...(jobId ? { jobId } : {}) })
   } catch (err) {
     logger.error({ err }, 'Update post error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to update post')
