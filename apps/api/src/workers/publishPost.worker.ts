@@ -173,6 +173,22 @@ async function publishToPlatform(
       )
       const container = await containerRes.json() as { id?: string; error?: { message?: string } }
       if (!containerRes.ok) throw new Error(container.error?.message ?? 'IG container creation failed')
+      // Step 1b: Instagram processes the media asynchronously — publishing before the container is
+      // FINISHED fails with "Media ID is not available". Poll until it is ready (max ~60s).
+      let ready = false
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const statusRes = await fetch(
+          `https://graph.facebook.com/v20.0/${container.id}?fields=status_code&access_token=${encodeURIComponent(accessToken)}`,
+          { signal: AbortSignal.timeout(15_000) },
+        )
+        const statusBody = await statusRes.json() as { status_code?: string }
+        if (statusBody.status_code === 'FINISHED') { ready = true; break }
+        if (statusBody.status_code === 'ERROR' || statusBody.status_code === 'EXPIRED') {
+          throw new PermanentPublishError(`Instagram could not process the media (${statusBody.status_code}). Check the image is a JPEG under 8MB with an aspect ratio between 4:5 and 1.91:1, on a publicly reachable host.`)
+        }
+        await new Promise((r) => setTimeout(r, 3000))
+      }
+      if (!ready) throw new Error('Instagram is still processing the media — will retry')
       // Step 2: Publish the container
       const publishRes = await fetch(
         `https://graph.facebook.com/v20.0/${igUserId}/media_publish`,
