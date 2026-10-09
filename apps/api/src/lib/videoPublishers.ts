@@ -79,6 +79,12 @@ async function refreshGoogleAccessToken(refreshToken: string): Promise<string> {
   return data.access_token
 }
 
+/** public by default; set YOUTUBE_PRIVACY_STATUS=private|unlisted (e.g. for testing). */
+function youtubePrivacy(): 'public' | 'unlisted' | 'private' {
+  const v = process.env.YOUTUBE_PRIVACY_STATUS
+  return v === 'private' || v === 'unlisted' ? v : 'public'
+}
+
 async function uploadToYouTube(content: string, videoUrl: string, accessToken: string): Promise<string> {
   const { res: src, size, type } = await openVideo(videoUrl, 'YouTube')
 
@@ -95,7 +101,7 @@ async function uploadToYouTube(content: string, videoUrl: string, accessToken: s
     body: JSON.stringify({
       snippet: { title, description: content.replace(/[<>]/g, '').slice(0, 5000), categoryId: '22' },
       // Videos from API projects that have not passed YouTube's audit are forced to private by YouTube.
-      status: { privacyStatus: 'public', selfDeclaredMadeForKids: false },
+      status: { privacyStatus: youtubePrivacy(), selfDeclaredMadeForKids: false },
     }),
     signal: AbortSignal.timeout(YOUTUBE_REQUEST_TIMEOUT_MS),
   })
