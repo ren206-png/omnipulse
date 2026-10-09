@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js'
 import { logger } from '../lib/logger.js'
 import { decryptToken } from '../lib/tokenEncryption.js'
 import { heartbeat } from '../lib/workerHeartbeat.js'
+import { resolveInstagramUserId } from '../lib/instagramId.js'
 
 /** Run up to `concurrency` async tasks at a time, in chunks */
 async function runWithConcurrency<T>(
@@ -37,10 +38,10 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
 
       if (account.platform === 'INSTAGRAM') {
         // Instagram Business Account via Graph API v20
-        // externalProfileId stores the IG Business Account ID (set during OAuth)
-        const igUserId = account.externalProfileId
-        if (!/^\d+$/.test(igUserId ?? '')) {
-          logger.warn({ accountId: account.id, igUserId }, 'Instagram analytics skipped: stored profile ID is not a numeric Business Account ID — reconnect the account')
+        // externalProfileId holds the handle; the Graph API needs the numeric Business Account ID
+        const igUserId = await resolveInstagramUserId(accessToken, account.externalProfileId)
+        if (!igUserId) {
+          logger.warn({ accountId: account.id, handle: account.externalProfileId }, 'Instagram analytics skipped: could not resolve the Business Account ID — reconnect the account')
           return
         }
         const res = await fetch(

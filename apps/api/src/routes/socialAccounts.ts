@@ -38,7 +38,7 @@ router.get('/oauth/connect', requireAuth, async (req: Request, res: Response): P
     INSTAGRAM: `https://www.facebook.com/dialog/oauth?client_id=${process.env.FACEBOOK_CLIENT_ID ?? 'FACEBOOK_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement&response_type=code&state=${state}`,
     FACEBOOK: `https://www.facebook.com/v20.0/dialog/oauth?client_id=${process.env.FACEBOOK_CLIENT_ID ?? 'FACEBOOK_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=pages_show_list,pages_manage_posts,pages_read_engagement&response_type=code&state=${state}`,
     X: `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${process.env.X_CLIENT_ID ?? 'X_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=tweet.read+tweet.write+users.read&state=${state}&code_challenge=${pkceChallenge}&code_challenge_method=S256`,
-    TIKTOK: `https://www.tiktok.com/v2/auth/authorize/?client_key=${process.env.TIKTOK_CLIENT_KEY ?? 'TIKTOK_CLIENT_KEY'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user.info.profile,user.info.stats,video.list&response_type=code&state=${state}`,
+    TIKTOK: `https://www.tiktok.com/v2/auth/authorize/?client_key=${process.env.TIKTOK_CLIENT_KEY ?? 'TIKTOK_CLIENT_KEY'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=user.info.profile,user.info.stats,video.list,video.publish&response_type=code&state=${state}`,
     GOOGLE: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID ?? 'GOOGLE_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('openid profile https://www.googleapis.com/auth/youtube.upload')}&response_type=code&state=${state}`,
     YOUTUBE: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID ?? 'GOOGLE_CLIENT_ID'}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent('https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly')}&response_type=code&access_type=offline&prompt=consent&state=${state}`,
     // LinkedIn: personal profile scope. Add pages=true param to also request org scope.
@@ -218,13 +218,14 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
         res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
         return
       }
-      const tokenData = await tokenRes.json() as { access_token?: string; open_id?: string; error?: string; error_description?: string }
+      const tokenData = await tokenRes.json() as { access_token?: string; refresh_token?: string; open_id?: string; error?: string; error_description?: string }
       if (!tokenData.access_token) {
         logger.error({ tokenData }, 'TikTok token exchange returned no access_token')
         res.redirect(`${webUrl}/dashboard/accounts?error=TOKEN_EXCHANGE_FAILED`)
         return
       }
       accessToken = tokenData.access_token
+      refreshToken = tokenData.refresh_token ?? null
       externalProfileId = tokenData.open_id ?? ''
       if (accessToken && externalProfileId) {
         try {

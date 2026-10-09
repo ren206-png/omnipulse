@@ -6,7 +6,9 @@ import { logger } from '../lib/logger.js'
 import { redisConnection, publishPostQueue } from '../lib/queue.js'
 import { notify } from '../lib/notify.js'
 import { emitWebhook } from '../lib/webhookEmitter.js'
-import { decryptToken } from '../lib/tokenEncryption.js'
+import { decryptToken, encryptToken } from '../lib/tokenEncryption.js'
+import { resolveInstagramUserId, INSTAGRAM_RECONNECT_MESSAGE } from '../lib/instagramId.js'
+import { PermanentPublishError, publishTikTokVideo, publishYouTubeVideo, type PersistTokens } from '../lib/videoPublishers.js'
 import { isLinkedInTokenExpired, refreshLinkedInToken } from '../lib/linkedinToken.js'
 import { publishLinkedInText, publishLinkedInImage, publishLinkedInVideo } from '../lib/linkedinPublisher.js'
 import { scheduleEngagementCheck } from './engagementAlert.worker.js'
@@ -77,16 +79,49 @@ async function postFirstComment(
 }
 
 /** Thrown for platforms that have no publishing implementation — never retryable. */
-class UnsupportedPlatformError extends Error {
+class UnsupportedPlatformError extends PermanentPublishError {
   constructor(platform: string) {
     super(`Publishing to ${platform} is not supported yet — this post was not published there.`)
     this.name = 'UnsupportedPlatformError'
   }
 }
 
+/** Decrypted credentials + a way to persist refreshed tokens, handed to the platform publishers. */
+interface PublishAccount {
+  platform: string
+  accessToken: string
+  externalProfileId: string
+  refreshToken?: string | null
+  persistTokens?: PersistTokens
+}
+
+function toPublishAccount(account: {
+  id: string
+  platform: string
+  accessToken: string
+  refreshToken?: string | null
+  externalProfileId: string
+}): PublishAccount {
+  return {
+    platform: account.platform,
+    accessToken: decryptToken(account.accessToken),
+    externalProfileId: account.externalProfileId,
+    refreshToken: account.refreshToken ? decryptToken(account.refreshToken) : null,
+    persistTokens: async (t) => {
+      await prisma.socialAccount.update({
+        where: { id: account.id },
+        data: {
+          accessToken: encryptToken(t.accessToken),
+          ...(t.refreshToken ? { refreshToken: encryptToken(t.refreshToken) } : {}),
+        },
+      })
+    },
+  }
+}
+
 async function publishToPlatform(
   post: { content: string; mediaUrls: string[] },
-  account: { platform: string; accessToken: string; externalProfileId: string },
+  account: PublishAccount,
 ): Promise<string> {
   const { platform, accessToken } = account
   const content = post.content
@@ -118,12 +153,9 @@ async function publishToPlatform(
 
   if (platform === 'INSTAGRAM') {
     // Instagram Graph API v20 — Business Account ID is stored as externalProfileId
-    const igUserId = account.externalProfileId
-    // The Graph API needs the numeric Instagram Business Account ID. A handle (or nothing) means the
-    // account was saved without it — fail clearly instead of letting Graph return a confusing error.
-    if (!/^\d+$/.test(igUserId ?? '')) {
-      throw new Error('Invalid Instagram account ID — disconnect and reconnect Instagram on the Accounts page.')
-    }
+    // externalProfileId holds the handle, not the numeric Business Account ID the Graph API needs
+    const igUserId = await resolveInstagramUserId(accessToken, account.externalProfileId)
+    if (!igUserId) throw new PermanentPublishError(INSTAGRAM_RECONNECT_MESSAGE)
     if (post.mediaUrls?.length > 0) {
       // Step 1: Create media container
       const containerRes = await fetch(
@@ -158,8 +190,16 @@ async function publishToPlatform(
     throw new Error('Instagram requires at least one image or video. Add media to publish.')
   }
 
-  // TIKTOK and GOOGLE/YouTube need video-upload flows that are not implemented. Fail loudly:
-  // returning a placeholder id here used to mark these posts PUBLISHED when nothing was posted.
+  if (platform === 'YOUTUBE') {
+    return publishYouTubeVideo(post, { accessToken, refreshToken: account.refreshToken }, account.persistTokens)
+  }
+
+  if (platform === 'TIKTOK') {
+    return publishTikTokVideo(post, { accessToken, refreshToken: account.refreshToken }, account.persistTokens)
+  }
+
+  // Remaining platforms (GOOGLE) have no publisher. Fail loudly: returning a placeholder id here
+  // used to mark these posts PUBLISHED when nothing was posted.
   throw new UnsupportedPlatformError(platform)
 }
 
@@ -383,15 +423,12 @@ const worker = new Worker(
             platform,
             publishFn: async () => {
               try {
-                capturedExternalId = await publishToPlatform(
-                  { content, mediaUrls },
-                  { platform, accessToken: decryptToken(account.accessToken), externalProfileId: account.externalProfileId },
-                )
+                capturedExternalId = await publishToPlatform({ content, mediaUrls }, toPublishAccount(account))
                 return { success: true, statusCode: 200 }
               } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err)
                 // Heuristic: treat 4xx-like messages as terminal
-                const is4xx = err instanceof UnsupportedPlatformError || /4\d\d|unauthorized|forbidden|invalid/i.test(msg)
+                const is4xx = err instanceof PermanentPublishError || /4\d\d|unauthorized|forbidden|invalid/i.test(msg)
                 return { success: false, error: msg, statusCode: is4xx ? 400 : 500 }
               }
             },
@@ -402,10 +439,7 @@ const worker = new Worker(
           }
           externalId = capturedExternalId
         } else {
-          externalId = await publishToPlatform(
-            { content, mediaUrls },
-            { platform, accessToken: decryptToken(account.accessToken), externalProfileId: account.externalProfileId },
-          )
+          externalId = await publishToPlatform({ content, mediaUrls }, toPublishAccount(account))
         }
         responseLog[platform] = externalId
 
