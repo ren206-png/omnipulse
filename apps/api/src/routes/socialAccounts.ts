@@ -159,15 +159,31 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
       const longData = await longRes.json() as { access_token?: string }
       const userToken = longData.access_token ?? tokenData.access_token
 
-      const pagesRes = await fetch(`https://graph.facebook.com/v20.0/me/accounts?fields=id,name,access_token&access_token=${userToken}`)
-      const pagesData = await pagesRes.json() as { data?: Array<{ id: string; name: string; access_token: string }> }
-      const page = pagesData.data?.[0]
+      const pagesRes = await fetch(
+        `https://graph.facebook.com/v20.0/me/accounts?fields=${encodeURIComponent('id,name,access_token,fan_count,instagram_business_account{username}')}&limit=100&access_token=${userToken}`,
+      )
+      const pagesData = await pagesRes.json() as {
+        data?: Array<{ id: string; name: string; access_token: string; fan_count?: number; instagram_business_account?: { username?: string } }>
+      }
+      const pages = pagesData.data ?? []
+      // Accounts often manage several Pages (duplicates, test Pages). Prefer the Page linked to this
+      // workspace's connected Instagram account, then any Page with Instagram linked, then the one
+      // with the most followers — never just "the first".
+      const connectedIg = await prisma.socialAccount.findFirst({
+        where: { workspaceId, platform: 'INSTAGRAM' },
+        select: { externalProfileId: true },
+      })
+      const igHandle = connectedIg?.externalProfileId?.replace(/^@/, '').toLowerCase()
+      const page =
+        pages.find((p) => igHandle && p.instagram_business_account?.username?.toLowerCase() === igHandle) ??
+        pages.find((p) => p.instagram_business_account) ??
+        [...pages].sort((x, y) => (y.fan_count ?? 0) - (x.fan_count ?? 0))[0]
       if (!page?.access_token) {
-        logger.warn({ pages: pagesData.data?.length ?? 0 }, 'Facebook connect: no Page available on this account')
+        logger.warn({ pages: pages.length }, 'Facebook connect: no Page available on this account')
         throw new Error('no_facebook_page')
       }
-      if ((pagesData.data?.length ?? 0) > 1) {
-        logger.info({ pages: pagesData.data!.length, chosen: page.id }, 'Facebook connect: multiple Pages — using the first')
+      if (pages.length > 1) {
+        logger.info({ pages: pages.length, chosen: page.id }, 'Facebook connect: multiple Pages — chose the Instagram-linked / largest one')
       }
       accessToken = page.access_token
       externalProfileId = page.id
