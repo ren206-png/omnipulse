@@ -294,6 +294,8 @@ startStuckJobSweeperWorker().catch((err) => logger.error({ err }, 'Failed to sta
 void engagementAlertWorker
 // Sync analytics every 6 hours (direct platform API calls)
 setInterval(() => { syncAnalytics().catch(() => {}) }, 6 * 60 * 60 * 1000)
+// ...and once shortly after boot, so the 'analytics' heartbeat is fresh without waiting for the cron
+setTimeout(() => { syncAnalytics().catch(() => {}) }, 90_000)
 // BullMQ analytics worker (Ayrshare-based daily sync — registers heartbeat)
 void analyticsWorker
 // Publish worker — consumes the 'publish-post' queue. Worker is instantiated at module level;

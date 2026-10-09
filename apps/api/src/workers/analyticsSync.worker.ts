@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js'
 import { logger } from '../lib/logger.js'
 import { decryptToken } from '../lib/tokenEncryption.js'
+import { heartbeat } from '../lib/workerHeartbeat.js'
 
 /** Run up to `concurrency` async tasks at a time, in chunks */
 async function runWithConcurrency<T>(
@@ -137,4 +138,7 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
       logger.error({ err, accountId: account.id }, 'Analytics sync failed for account')
     }
   })
+
+  // A full run (not a single-workspace manual sync) counts as the 'analytics' worker being alive
+  if (!workspaceId) await heartbeat('analytics')
 }
