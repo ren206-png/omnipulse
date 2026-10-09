@@ -39,6 +39,10 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
         // Instagram Business Account via Graph API v20
         // externalProfileId stores the IG Business Account ID (set during OAuth)
         const igUserId = account.externalProfileId
+        if (!/^\d+$/.test(igUserId ?? '')) {
+          logger.warn({ accountId: account.id, igUserId }, 'Instagram analytics skipped: stored profile ID is not a numeric Business Account ID — reconnect the account')
+          return
+        }
         const res = await fetch(
           `https://graph.facebook.com/v20.0/${igUserId}?fields=followers_count,media_count&access_token=${accessToken}`,
         )

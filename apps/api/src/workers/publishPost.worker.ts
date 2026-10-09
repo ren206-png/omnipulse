@@ -118,7 +118,12 @@ async function publishToPlatform(
 
   if (platform === 'INSTAGRAM') {
     // Instagram Graph API v20 — Business Account ID is stored as externalProfileId
-    const igUserId = account.externalProfileId || 'me'
+    const igUserId = account.externalProfileId
+    // The Graph API needs the numeric Instagram Business Account ID. A handle (or nothing) means the
+    // account was saved without it — fail clearly instead of letting Graph return a confusing error.
+    if (!/^\d+$/.test(igUserId ?? '')) {
+      throw new Error('Invalid Instagram account ID — disconnect and reconnect Instagram on the Accounts page.')
+    }
     if (post.mediaUrls?.length > 0) {
       // Step 1: Create media container
       const containerRes = await fetch(
