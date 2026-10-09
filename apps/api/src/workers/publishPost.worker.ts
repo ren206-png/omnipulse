@@ -76,6 +76,14 @@ async function postFirstComment(
   }
 }
 
+/** Thrown for platforms that have no publishing implementation — never retryable. */
+class UnsupportedPlatformError extends Error {
+  constructor(platform: string) {
+    super(`Publishing to ${platform} is not supported yet — this post was not published there.`)
+    this.name = 'UnsupportedPlatformError'
+  }
+}
+
 async function publishToPlatform(
   post: { content: string; mediaUrls: string[] },
   account: { platform: string; accessToken: string; externalProfileId: string },
@@ -145,8 +153,9 @@ async function publishToPlatform(
     throw new Error('Instagram requires at least one image or video. Add media to publish.')
   }
 
-  // TIKTOK and GOOGLE/YouTube require complex video upload flows — log as pending
-  return `${platform}_manual_required`
+  // TIKTOK and GOOGLE/YouTube need video-upload flows that are not implemented. Fail loudly:
+  // returning a placeholder id here used to mark these posts PUBLISHED when nothing was posted.
+  throw new UnsupportedPlatformError(platform)
 }
 
 // ── LinkedIn per-user daily rate limit (95 posts/day conservative) ───────────
@@ -377,7 +386,7 @@ const worker = new Worker(
               } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err)
                 // Heuristic: treat 4xx-like messages as terminal
-                const is4xx = /4\d\d|unauthorized|forbidden|invalid/i.test(msg)
+                const is4xx = err instanceof UnsupportedPlatformError || /4\d\d|unauthorized|forbidden|invalid/i.test(msg)
                 return { success: false, error: msg, statusCode: is4xx ? 400 : 500 }
               }
             },

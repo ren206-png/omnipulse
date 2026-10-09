@@ -23,6 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Fetch workspaces server-side so the shell hydrates instantly with real data
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000'
   let workspaces: Workspace[] = []
+  const hiddenNav: string[] = []
   try {
     const res = await fetch(`${apiUrl}/api/v1/workspaces`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -41,8 +42,20 @@ export default async function DashboardLayout({ children }: { children: React.Re
     // If API is down, continue with empty workspaces (shell handles gracefully)
   }
 
+  // Hide nav entries for features the API has switched off (their routes would 404)
+  try {
+    const fr = await fetch(`${apiUrl}/api/v1/features`, { cache: 'no-store' })
+    if (fr.ok) {
+      const f = (await fr.json()) as { approvals?: boolean; evergreen?: boolean }
+      if (f.approvals === false) hiddenNav.push('/dashboard/approvals')
+      if (f.evergreen === false) hiddenNav.push('/dashboard/evergreen')
+    }
+  } catch {
+    // Features endpoint unavailable — show everything rather than hide working features
+  }
+
   return (
-    <DashboardShell token={token} initialWorkspaces={workspaces}>
+    <DashboardShell token={token} initialWorkspaces={workspaces} hiddenNav={hiddenNav}>
       {children}
     </DashboardShell>
   )

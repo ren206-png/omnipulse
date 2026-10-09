@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, type ReactNode } from 'react'
+import { useState, useRef, useEffect, createContext, useContext, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext'
@@ -17,6 +17,9 @@ import { SESSION_EXPIRED_EVENT } from './hooks/useAuthFetch'
 import { OmniPulseLogo } from '@/components/OmniPulseLogo'
 
 interface Workspace { id: string; name: string }
+
+// Nav hrefs to hide because their feature is switched off on the API
+const HiddenNavContext = createContext<string[]>([])
 
 const NAV_GROUPS = [
   {
@@ -194,6 +197,7 @@ function WorkspaceSwitcher({ token }: { token: string }) {
 }
 
 function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNavClick?: () => void; onOpenCmd?: () => void }) {
+  const hiddenNav = useContext(HiddenNavContext)
   const pathname = usePathname()
 
   const initialOpen = NAV_GROUPS.reduce<Record<string, boolean>>((acc, group) => {
@@ -262,7 +266,7 @@ function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNav
 
               {openGroups[group.label] && (
                 <div className="mt-0.5 space-y-0.5">
-                  {group.links.map((link) => {
+                  {group.links.filter((l) => !hiddenNav.includes(l.href)).map((link) => {
                     const isActive = pathname === link.href || pathname.startsWith(link.href + '/')
                     return (
                       <Link
@@ -397,10 +401,12 @@ export function DashboardShell({
   children,
   token,
   initialWorkspaces,
+  hiddenNav = [],
 }: {
   children: ReactNode
   token: string
   initialWorkspaces: Workspace[]
+  hiddenNav?: string[]
 }) {
   const [cmdOpen, setCmdOpen] = useState(false)
   const [expiredMessage, setExpiredMessage] = useState<string | null>(null)
@@ -418,6 +424,7 @@ export function DashboardShell({
 
   return (
     <WorkspaceProvider initialWorkspaces={initialWorkspaces}>
+      <HiddenNavContext.Provider value={hiddenNav}>
       <ToastProvider>
         {expiredMessage && <SessionExpiredBanner message={expiredMessage} />}
         <div className="flex min-h-screen">
@@ -429,6 +436,7 @@ export function DashboardShell({
         <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} token={token} />
         <OnboardingWidgetConnector />
       </ToastProvider>
+      </HiddenNavContext.Provider>
     </WorkspaceProvider>
   )
 }

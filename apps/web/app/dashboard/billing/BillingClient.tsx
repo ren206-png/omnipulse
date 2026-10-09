@@ -6,7 +6,10 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useWorkspace } from '../context/WorkspaceContext'
 
-type Plan = 'FREE' | 'PRO' | 'AGENCY'
+type Plan = 'FREE' | 'STARTER' | 'PRO' | 'AGENCY'
+
+// Order used to tell upgrades from downgrades
+const PLAN_RANK: Record<Plan, number> = { FREE: 0, STARTER: 1, PRO: 2, AGENCY: 3 }
 
 interface PlanLimits {
   workspaces: number
@@ -33,7 +36,7 @@ interface Props {
 }
 
 const PLANS: Array<{
-  id: Plan
+  id: Exclude<Plan, 'FREE'>
   name: string
   price: string
   description: string
@@ -41,17 +44,16 @@ const PLANS: Array<{
   highlight?: boolean
 }> = [
   {
-    id: 'FREE',
-    name: 'Free',
-    price: '$0',
-    description: 'For solo creators getting started',
+    id: 'STARTER',
+    name: 'Starter',
+    price: '$9.99',
+    description: 'For solo creators — 14-day free trial',
     features: [
       '1 workspace',
-      '1 social account',
-      'Up to 3 scheduled posts',
-      'Calendar & analytics',
-      'No team members',
-      'No AI generation',
+      '3 social accounts',
+      '30 scheduled posts',
+      '1 team member',
+      '10 AI generations / hour',
     ],
   },
   {
@@ -60,11 +62,11 @@ const PLANS: Array<{
     price: '$29',
     description: 'For professionals and small teams',
     features: [
-      '3 workspaces',
+      '5 workspaces',
       '10 social accounts',
-      '500 scheduled posts',
-      'Up to 5 team members',
-      'AI content generation',
+      '200 scheduled posts',
+      '5 team members',
+      '30 AI generations / hour',
       'Post approval workflow',
     ],
     highlight: true,
@@ -81,6 +83,7 @@ const PLANS: Array<{
       'Unlimited team members',
       '100 AI generations / hour',
       'Post approval workflow',
+      'White-label branding & client portal',
     ],
   },
 ]
@@ -99,7 +102,7 @@ export function BillingClient({ token }: Props) {
   const [status, setStatus] = useState<BillingStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [actionLoading, setActionLoading] = useState<Plan | 'portal' | null>(null)
+  const [actionLoading, setActionLoading] = useState<Exclude<Plan, 'FREE'> | 'portal' | null>(null)
 
   const successParam = searchParams.get('success')
   const cancelledParam = searchParams.get('cancelled')
@@ -127,7 +130,7 @@ export function BillingClient({ token }: Props) {
 
   useEffect(() => { fetchStatus() }, [fetchStatus])
 
-  async function handleUpgrade(plan: Plan) {
+  async function handleUpgrade(plan: Exclude<Plan, 'FREE'>) {
     if (!activeWorkspace) return
     setActionLoading(plan)
     try {
@@ -260,10 +263,7 @@ export function BillingClient({ token }: Props) {
       <div className="grid gap-4 md:grid-cols-3">
         {PLANS.map((plan) => {
           const isCurrent = currentPlan === plan.id
-          const isDowngrade = (
-            (currentPlan === 'AGENCY' && plan.id !== 'AGENCY') ||
-            (currentPlan === 'PRO' && plan.id === 'FREE')
-          )
+          const isDowngrade = PLAN_RANK[plan.id] < PLAN_RANK[currentPlan]
 
           return (
             <div
@@ -293,7 +293,7 @@ export function BillingClient({ token }: Props) {
                 <h3 className="text-lg font-bold">{plan.name}</h3>
                 <div className="flex items-baseline gap-1 mt-1">
                   <span className="text-3xl font-bold">{plan.price}</span>
-                  {plan.id !== 'FREE' && <span className="text-sm text-muted-foreground">/ month</span>}
+                  <span className="text-sm text-muted-foreground">/ month</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">{plan.description}</p>
               </div>
@@ -309,14 +309,6 @@ export function BillingClient({ token }: Props) {
 
               {isCurrent ? (
                 <Button disabled variant="outline" className="w-full">Current plan</Button>
-              ) : plan.id === 'FREE' ? (
-                <Button
-                  variant="outline"
-                  className="w-full text-muted-foreground"
-                  disabled
-                >
-                  {isDowngrade ? 'Downgrade via portal' : 'Free plan'}
-                </Button>
               ) : (
                 <Button
                   className="w-full"

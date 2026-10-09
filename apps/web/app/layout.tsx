@@ -63,7 +63,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <meta name="google-site-verification" content={process.env.GOOGLE_SITE_VERIFICATION} />
         )}
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-        <link rel="icon" href="/favicon.ico" sizes="32x32" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#0a0a0f" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

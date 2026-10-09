@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/node'
 import express from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
+import { FF_AGENCY_APPROVALS, FF_EVERGREEN_QUEUE } from './lib/featureFlags.js'
 import cookieParser from 'cookie-parser'
 import { logger } from './lib/logger.js'
 import { env } from './config/env.js'
@@ -162,6 +163,12 @@ app.use('/api/', rateLimit({
   legacyHeaders: false,
   message: { error: 'TOO_MANY_REQUESTS', message: 'Too many requests — please slow down' },
 }))
+
+// Public, non-sensitive: which optional features are switched on, so the UI can hide nav
+// entries whose routes would otherwise 404.
+app.get('/api/v1/features', (_req, res) => {
+  res.json({ approvals: FF_AGENCY_APPROVALS, evergreen: FF_EVERGREEN_QUEUE })
+})
 
 app.get('/health', (_req, res) => {
   // Intentionally synchronous and bulletproof — must always return 200 for Railway healthcheck
