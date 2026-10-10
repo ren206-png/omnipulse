@@ -8,7 +8,7 @@ import { env } from '../config/env.js'
 import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 import { rateLimit } from '../middleware/rateLimit.js'
-import { requireAuth } from '../middleware/auth.js'
+import { requireAuth, invalidateAuthCache } from '../middleware/auth.js'
 import { sendPasswordResetEmail } from '../lib/email.js'
 import { TOTP, Secret } from 'otpauth'
 
@@ -247,6 +247,7 @@ router.post('/reset-password', resetCompleteLimiter, async (req: Request, res: R
       data: { passwordHash, passwordResetToken: null, passwordResetExpires: null, passwordChangedAt: new Date() },
     })
 
+    invalidateAuthCache(user.id)
     logger.info({ userId: user.id }, 'Password reset successfully')
     res.json({ message: 'Password updated successfully.' })
   } catch (err) {

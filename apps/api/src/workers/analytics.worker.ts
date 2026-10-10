@@ -1,10 +1,8 @@
 import 'dotenv/config'
 import { Worker } from 'bullmq'
-import { prisma } from '../lib/prisma.js'
-import { AyrshareService } from '../integrations/ayrshare.js'
 import { analyticsSyncQueue, redisConnection } from '../lib/queue.js'
 import { logger } from '../lib/logger.js'
-import { heartbeat } from '../lib/workerHeartbeat.js'
+import { syncAnalytics } from './analyticsSync.worker.js'
 
 // Register the daily cron scheduler inside an async function so it executes
 // AFTER the crash handlers in index.ts are registered (not at module load time).
@@ -22,42 +20,14 @@ async function registerScheduler(): Promise<void> {
 // Small delay so index.ts has time to wire crash handlers before this runs
 setTimeout(() => { registerScheduler().catch(() => {}) }, 2000)
 
+// The daily job runs the direct platform-API sync (the same one the 6-hourly timer in index.ts
+// runs). It used to go through Ayrshare, which needs AYRSHARE_API_KEY — unset in production — so
+// every nightly run threw before it could record a heartbeat. syncAnalytics() records it itself.
 const worker = new Worker(
   'analytics-sync',
   async () => {
-    const accounts = await prisma.socialAccount.findMany()
-    let successCount = 0
-    let failureCount = 0
-
-    const service = new AyrshareService()
-
-    for (const account of accounts) {
-      try {
-        const analytics = await service.getAnalytics(account.externalProfileId)
-        await prisma.analyticsSnapshot.create({
-          data: {
-            socialAccountId: account.id,
-            followers: analytics.followers,
-            impressions: analytics.impressions,
-            engagementRate: analytics.engagementRate,
-          },
-        })
-        successCount++
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        logger.warn(
-          { accountId: account.id, platform: account.platform, error: message },
-          'Analytics sync failed for account',
-        )
-        failureCount++
-      }
-    }
-
-    logger.info(
-      { successCount, failureCount, total: accounts.length },
-      'Analytics daily sync complete',
-    )
-    await heartbeat('analytics')
+    await syncAnalytics()
+    logger.info('Analytics daily sync complete')
   },
   { connection: redisConnection },
 )

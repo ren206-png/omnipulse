@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, type ReactNode } from 'react'
+import { useState, useRef, useEffect, createContext, useContext, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { WorkspaceProvider, useWorkspace } from './context/WorkspaceContext'
@@ -17,6 +17,9 @@ import { SESSION_EXPIRED_EVENT } from './hooks/useAuthFetch'
 import { OmniPulseLogo } from '@/components/OmniPulseLogo'
 
 interface Workspace { id: string; name: string }
+
+// Nav hrefs to hide because their feature is switched off on the API
+const HiddenNavContext = createContext<string[]>([])
 
 const NAV_GROUPS = [
   {
@@ -193,7 +196,20 @@ function WorkspaceSwitcher({ token }: { token: string }) {
   )
 }
 
-function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNavClick?: () => void; onOpenCmd?: () => void }) {
+function SidebarContent({
+  token,
+  onNavClick,
+  onOpenCmd,
+  active = true,
+}: {
+  token: string
+  onNavClick?: () => void
+  onOpenCmd?: () => void
+  /** false for the mobile drawer while it is closed: it is always mounted (CSS hides it), and a second
+   * NotificationBell would double the notifications fetch and open a second live (SSE) connection. */
+  active?: boolean
+}) {
+  const hiddenNav = useContext(HiddenNavContext)
   const pathname = usePathname()
 
   const initialOpen = NAV_GROUPS.reduce<Record<string, boolean>>((acc, group) => {
@@ -213,7 +229,7 @@ function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNav
         <OmniPulseLogo variant="wordmark" height={52} className="w-full" />
         <div className="flex items-center gap-1 mt-2">
           <ThemeToggle />
-          <NotificationBell token={token} />
+          {active && <NotificationBell token={token} />}
           <button
             onClick={onOpenCmd}
             className="hidden md:flex items-center gap-1 text-xs text-muted-foreground border rounded px-2 py-1 hover:bg-accent transition-colors"
@@ -226,7 +242,7 @@ function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNav
 
       <nav className="flex-1 p-3 overflow-y-auto">
         {/* Dashboard home link */}
-        <Link
+        <Link prefetch={false}
           href="/dashboard"
           onClick={onNavClick}
           className={cn(
@@ -240,7 +256,7 @@ function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNav
         </Link>
 
         {/* New Post button */}
-        <Link
+        <Link prefetch={false}
           href="/dashboard/calendar?new=1"
           onClick={onNavClick}
           className="flex items-center gap-2 mx-3 mt-1 mb-2 px-3 py-2 rounded-md text-sm font-medium border border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
@@ -262,10 +278,10 @@ function SidebarContent({ token, onNavClick, onOpenCmd }: { token: string; onNav
 
               {openGroups[group.label] && (
                 <div className="mt-0.5 space-y-0.5">
-                  {group.links.map((link) => {
+                  {group.links.filter((l) => !hiddenNav.includes(l.href)).map((link) => {
                     const isActive = pathname === link.href || pathname.startsWith(link.href + '/')
                     return (
-                      <Link
+                      <Link prefetch={false}
                         key={link.href}
                         href={link.href}
                         onClick={onNavClick}
@@ -324,7 +340,7 @@ function Sidebar({ token, onOpenCmd }: { token: string; onOpenCmd: () => void })
             ✕
           </button>
         </div>
-        <SidebarContent token={token} onNavClick={() => setMobileOpen(false)} onOpenCmd={onOpenCmd} />
+        <SidebarContent token={token} onNavClick={() => setMobileOpen(false)} onOpenCmd={onOpenCmd} active={mobileOpen} />
       </aside>
       <aside className="hidden md:flex w-56 flex-shrink-0 border-r bg-background flex-col h-screen sticky top-0">
         <SidebarContent token={token} onOpenCmd={onOpenCmd} />
@@ -349,7 +365,7 @@ function MobileBottomNav() {
         const isPost = item.label === 'Post'
         const isActive = !isPost && (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href.split('?')[0])))
         return (
-          <Link
+          <Link prefetch={false}
             key={item.href}
             href={item.href}
             className={cn(
@@ -397,10 +413,12 @@ export function DashboardShell({
   children,
   token,
   initialWorkspaces,
+  hiddenNav = [],
 }: {
   children: ReactNode
   token: string
   initialWorkspaces: Workspace[]
+  hiddenNav?: string[]
 }) {
   const [cmdOpen, setCmdOpen] = useState(false)
   const [expiredMessage, setExpiredMessage] = useState<string | null>(null)
@@ -418,6 +436,7 @@ export function DashboardShell({
 
   return (
     <WorkspaceProvider initialWorkspaces={initialWorkspaces}>
+      <HiddenNavContext.Provider value={hiddenNav}>
       <ToastProvider>
         {expiredMessage && <SessionExpiredBanner message={expiredMessage} />}
         <div className="flex min-h-screen">
@@ -429,6 +448,7 @@ export function DashboardShell({
         <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} token={token} />
         <OnboardingWidgetConnector />
       </ToastProvider>
+      </HiddenNavContext.Provider>
     </WorkspaceProvider>
   )
 }
