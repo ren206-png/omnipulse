@@ -294,7 +294,8 @@ router.get('/platform-comparison', async (req: Request, res: Response): Promise<
 
   if (!await assertAnalyticsPlanAccess(workspaceId, res)) return
 
-  const since = new Date(Date.now() - parseInt(days, 10) * 24 * 60 * 60 * 1000)
+  const daysNum = Math.min(365, Math.max(1, parseInt(days, 10) || 30))
+  const since = new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000)
 
   const metrics = await (prisma as any).postMetric.findMany({
     where: {

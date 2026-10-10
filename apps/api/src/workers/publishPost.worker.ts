@@ -64,6 +64,7 @@ async function postFirstComment(
           'LinkedIn-Version': '202406',
         },
         body: JSON.stringify({
+          // WEEKLY-AUDIT: actor must be the real LinkedIn person URN (e.g. "urn:li:person:ABC123"), not "urn:li:person:me". postFirstComment needs to accept personUrn as a param and callers need to pass account.linkedinPersonUrn
           actor: 'urn:li:person:me',
           message: { text: comment },
         }),

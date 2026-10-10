@@ -11,6 +11,33 @@ import { sendInvitationEmail } from '../lib/email.js'
 
 const router = Router()
 
+// GET /api/v1/team/invitations/:token — public, no auth required (user may not have account yet)
+router.get('/invitations/:token', async (req: Request, res: Response): Promise<void> => {
+  const { token } = req.params
+  try {
+    const inv = await prisma.workspaceInvitation.findUnique({
+      where: { token },
+      include: { workspace: { select: { id: true, name: true } } },
+    })
+    if (!inv) { sendError(res, 404, 'NOT_FOUND', 'Invitation not found or expired'); return }
+    if (inv.acceptedAt) { sendError(res, 410, 'ALREADY_ACCEPTED', 'This invitation has already been used'); return }
+    if (inv.expiresAt < new Date()) { sendError(res, 410, 'EXPIRED', 'This invitation has expired'); return }
+
+    res.json({
+      invitation: {
+        email: inv.email,
+        role: inv.role,
+        workspaceName: inv.workspace.name,
+        workspaceId: inv.workspace.id,
+        expiresAt: inv.expiresAt,
+      },
+    })
+  } catch (err) {
+    logger.error({ err }, 'Get invitation error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to get invitation')
+  }
+})
+
 router.use(requireAuth)
 
 // Check that the requester is at least ADMIN in the workspace
@@ -265,32 +292,6 @@ router.delete('/:workspaceId/members/:userId', async (req: Request, res: Respons
   }
 })
 
-// GET /api/v1/team/invitations/:token — public, get invite details
-router.get('/invitations/:token', async (req: Request, res: Response): Promise<void> => {
-  const { token } = req.params
-  try {
-    const inv = await prisma.workspaceInvitation.findUnique({
-      where: { token },
-      include: { workspace: { select: { id: true, name: true } } },
-    })
-    if (!inv) { sendError(res, 404, 'NOT_FOUND', 'Invitation not found or expired'); return }
-    if (inv.acceptedAt) { sendError(res, 410, 'ALREADY_ACCEPTED', 'This invitation has already been used'); return }
-    if (inv.expiresAt < new Date()) { sendError(res, 410, 'EXPIRED', 'This invitation has expired'); return }
-
-    res.json({
-      invitation: {
-        email: inv.email,
-        role: inv.role,
-        workspaceName: inv.workspace.name,
-        workspaceId: inv.workspace.id,
-        expiresAt: inv.expiresAt,
-      },
-    })
-  } catch (err) {
-    logger.error({ err }, 'Get invitation error')
-    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to get invitation')
-  }
-})
 
 // POST /api/v1/team/invitations/:token/accept — requires auth
 router.post('/invitations/:token/accept', async (req: Request, res: Response): Promise<void> => {

@@ -93,6 +93,7 @@ router.post('/:id/retry', async (req: Request, res: Response): Promise<void> => 
 
     // Fetch post to get workspaceId for payload verification in worker
     const post = await (prisma as any).scheduledPost.findUnique({ where: { id: entry.postId }, select: { workspaceId: true } })
+    if (!post) { sendError(res, 404, 'NOT_FOUND', 'Post no longer exists'); return }
 
     // Reset post to SCHEDULED and re-enqueue
     await (prisma as any).scheduledPost.update({

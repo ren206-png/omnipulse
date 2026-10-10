@@ -38,10 +38,15 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return
   }
 
-  // Check if the token was issued before a password reset. The lookup is cached briefly per
-  // user: it used to cost a cross-region database round trip on every single API request.
+  // Check user still exists and token was not issued before a password reset.
+  // The lookup is cached briefly: it used to cost a cross-region round trip on every request.
+  // Returns undefined when the user row no longer exists (deleted account).
   getPasswordChangedAtSec(payload.id)
     .then((changedAtSec) => {
+      if (changedAtSec === undefined) {
+        sendError(res, 401, 'UNAUTHORIZED', 'User not found')
+        return
+      }
       if (changedAtSec !== null && payload.iat !== undefined && payload.iat < changedAtSec) {
         sendError(res, 401, 'TOKEN_REVOKED', 'Token invalidated by password reset')
         return
@@ -57,17 +62,19 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 // ── passwordChangedAt cache ───────────────────────────────────────────────────
 // Bounded staleness: a password reset invalidates the entry immediately (see
 // invalidateAuthCache, called from the reset route), so the TTL only matters if the
-// API runs as several instances.
+// API runs as several instances. Returns undefined for deleted users (not cached).
 const PWD_CACHE_TTL_MS = 30_000
 const PWD_CACHE_MAX = 5_000
 const pwdCache = new Map<string, { changedAtSec: number | null; expiresAt: number }>()
 
-async function getPasswordChangedAtSec(userId: string): Promise<number | null> {
+async function getPasswordChangedAtSec(userId: string): Promise<number | null | undefined> {
   const hit = pwdCache.get(userId)
   if (hit && hit.expiresAt > Date.now()) return hit.changedAtSec
 
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordChangedAt: true } })
-  const changedAtSec = user?.passwordChangedAt ? Math.floor(user.passwordChangedAt.getTime() / 1000) : null
+  if (!user) return undefined  // deleted user — not cached so each request re-checks
+
+  const changedAtSec = user.passwordChangedAt ? Math.floor(user.passwordChangedAt.getTime() / 1000) : null
 
   if (pwdCache.size >= PWD_CACHE_MAX) {
     const oldest = pwdCache.keys().next().value

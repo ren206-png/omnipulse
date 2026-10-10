@@ -202,8 +202,8 @@ router.get('/ical', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as { workspaceId?: string }
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE', 'workspaceId required'); return }
   try {
-    const workspace = await findWorkspaceById(workspaceId)
-    if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     const posts = await prisma.scheduledPost.findMany({
       where: { workspaceId, scheduledFor: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
       orderBy: { scheduledFor: 'asc' },
@@ -284,7 +284,7 @@ interface PlatformVariantInput {
 function validateVariants(raw: unknown): { variants: PlatformVariantInput[]; error?: never } | { error: string; variants?: never } {
   if (!raw) return { variants: [] }
   if (!Array.isArray(raw)) return { error: 'platformVariants must be an array' }
-  const ALLOWED = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X']
+  const ALLOWED = ['FACEBOOK', 'INSTAGRAM', 'TIKTOK', 'X', 'LINKEDIN', 'GOOGLE', 'YOUTUBE']
   const seen = new Set<string>()
   const out: PlatformVariantInput[] = []
   for (const v of raw) {
@@ -1215,8 +1215,8 @@ router.post('/:id/ab-test', async (req: Request, res: Response): Promise<void> =
   try {
     const original = await (prisma.scheduledPost.findUnique as Function)({ where: { id } })
     if (!original) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
-    const workspace = await findWorkspaceById(original.workspaceId)
-    if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const role = await getWorkspaceRole(original.workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     // Mark original as A/B test active
     await (prisma.scheduledPost.update as Function)({ where: { id }, data: { abTestActive: true } })
     // Create variant
@@ -1303,8 +1303,8 @@ router.get('/:id/ab-variants', async (req: Request, res: Response): Promise<void
   try {
     const original = await (prisma.scheduledPost.findUnique as Function)({ where: { id }, include: { metrics: true } })
     if (!original) { sendError(res, 404, 'NOT_FOUND', 'Post not found'); return }
-    const workspace = await findWorkspaceById(original.workspaceId)
-    if (!workspace || workspace.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const role = await getWorkspaceRole(original.workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
     const variants = await (prisma.scheduledPost.findMany as Function)({ where: { abVariantOf: id }, include: { metrics: true } })
     res.json({ original, variants })
   } catch (err) {
