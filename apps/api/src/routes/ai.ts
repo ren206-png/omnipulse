@@ -31,11 +31,9 @@ async function checkDailyLimit(userId: string, key: string, limit: number): Prom
   const redisKey = `${key}:${userId}:${today}`
   const current = parseInt((await redis.get(redisKey)) ?? '0', 10)
   const allowed = current < limit
-  // TTL: seconds until midnight UTC
   const now = new Date()
   const midnight = new Date(today)
   midnight.setUTCDate(midnight.getUTCDate() + 1)
-  const ttl = Math.ceil((midnight.getTime() - now.getTime()) / 1000)
   return { allowed, remaining: Math.max(0, limit - current), resetAt: midnight.toISOString() }
 }
 

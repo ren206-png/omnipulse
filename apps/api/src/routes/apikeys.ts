@@ -20,6 +20,16 @@ async function checkWorkspaceAccess(workspaceId: string, userId: string) {
   return membership ? workspace : null
 }
 
+async function checkWorkspaceAdminAccess(workspaceId: string, userId: string) {
+  const workspace = await findWorkspaceById(workspaceId)
+  if (!workspace) return null
+  if (workspace.ownerId === userId) return workspace
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+  })
+  return membership?.role === 'ADMIN' ? workspace : null
+}
+
 // GET /api/v1/api-keys?workspaceId=
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   const { workspaceId } = req.query as Record<string, string>
@@ -46,8 +56,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   if (!workspaceId) { sendError(res, 400, 'MISSING_WORKSPACE', 'workspaceId required'); return }
   if (!name) { sendError(res, 400, 'MISSING_NAME', 'name required'); return }
   try {
-    const workspace = await checkWorkspaceAccess(workspaceId, req.user!.id)
-    if (!workspace) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const workspace = await checkWorkspaceAdminAccess(workspaceId, req.user!.id)
+    if (!workspace) { sendError(res, 403, 'FORBIDDEN', 'Only workspace owners and admins can create API keys'); return }
 
     const raw = `op_live_${randomBytes(16).toString('hex')}`
     const keyHash = createHash('sha256').update(raw).digest('hex')
@@ -71,8 +81,8 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const existing = await prisma.apiKey.findUnique({ where: { id } })
     if (!existing) { sendError(res, 404, 'NOT_FOUND', 'API key not found'); return }
-    const workspace = await checkWorkspaceAccess(existing.workspaceId, req.user!.id)
-    if (!workspace) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    const workspace = await checkWorkspaceAdminAccess(existing.workspaceId, req.user!.id)
+    if (!workspace) { sendError(res, 403, 'FORBIDDEN', 'Only workspace owners and admins can revoke API keys'); return }
 
     await prisma.apiKey.update({ where: { id }, data: { revokedAt: new Date() } })
     res.json({ success: true })

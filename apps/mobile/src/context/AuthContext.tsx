@@ -21,6 +21,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getToken().then(t => {
       setTokenState(t)
       setLoading(false)
+    }).catch(() => {
+      setLoading(false)
     })
   }, [])
 
