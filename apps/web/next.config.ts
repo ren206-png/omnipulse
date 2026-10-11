@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import { withSentryConfig } from '@sentry/nextjs/config'
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -24,4 +25,10 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default nextConfig
+// No SENTRY_AUTH_TOKEN is configured, so source-map upload is disabled (errors still report, with
+// minified stack traces). Add a token + org/project later to get readable production stack traces.
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  telemetry: false,
+  sourcemaps: { disable: true },
+})

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import * as Sentry from '@sentry/nextjs'
 import Link from 'next/link'
 import { OmniPulseLogo } from '@/components/OmniPulseLogo'
 
@@ -13,6 +14,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error('[GlobalError]', error)
+    Sentry.captureException(error)
   }, [error])
 
   return (

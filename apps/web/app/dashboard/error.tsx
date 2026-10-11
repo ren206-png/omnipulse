@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import * as Sentry from '@sentry/nextjs'
 import Link from 'next/link'
 
 export default function DashboardError({
@@ -12,6 +13,7 @@ export default function DashboardError({
 }) {
   useEffect(() => {
     console.error('[DashboardError]', error)
+    Sentry.captureException(error)
   }, [error])
 
   return (
