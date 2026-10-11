@@ -3991,7 +3991,10 @@ export const UserScalarFieldEnum = {
   twoFactorSecret: 'twoFactorSecret',
   twoFactorEnabled: 'twoFactorEnabled',
   twoFactorBackupCodes: 'twoFactorBackupCodes',
-  passwordChangedAt: 'passwordChangedAt'
+  passwordChangedAt: 'passwordChangedAt',
+  emailVerifiedAt: 'emailVerifiedAt',
+  emailVerifyToken: 'emailVerifyToken',
+  emailVerifyExpires: 'emailVerifyExpires'
 } as const
 
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]

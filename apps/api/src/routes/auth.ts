@@ -9,7 +9,8 @@ import { sendError } from '../lib/apiError.js'
 import { logger } from '../lib/logger.js'
 import { rateLimit } from '../middleware/rateLimit.js'
 import { requireAuth, invalidateAuthCache } from '../middleware/auth.js'
-import { sendPasswordResetEmail } from '../lib/email.js'
+import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/email.js'
+import { newVerifyToken, isVerifyTokenUsable } from '../lib/emailVerification.js'
 import { TOTP, Secret } from 'otpauth'
 
 function verifyTOTP(secret: string, token: string): boolean {
@@ -31,6 +32,18 @@ const resetLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
   message: 'Too many reset requests — please wait before trying again',
+})
+
+// Verification link clicks and re-sends get their own buckets
+const verifyLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  message: 'Too many verification attempts — please wait before trying again',
+})
+const resendVerifyLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: 'Too many verification emails requested — please wait before trying again',
 })
 
 // Separate bucket for completing a reset so requesting links can't lock out setting the password
@@ -60,22 +73,26 @@ router.post('/register', authLimiter, async (req: Request, res: Response): Promi
     }
 
     const passwordHash = await bcrypt.hash(password, 12)
+    const verify = newVerifyToken()
     const user = await prisma.user.create({
-      data: { email, passwordHash, role: 'OWNER', twoFactorBackupCodes: [] },
+      data: {
+        email,
+        passwordHash,
+        role: 'OWNER',
+        twoFactorBackupCodes: [],
+        emailVerifyToken: verify.token,
+        emailVerifyExpires: verify.expires,
+      },
       select: { id: true, email: true, role: true },
     })
     // Create default workspace separately to avoid nested-create Prisma validation issues
     await prisma.$executeRaw`INSERT INTO "Workspace" (id, name, "ownerId") VALUES (gen_random_uuid()::text, 'My Workspace', ${user.id})`
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      env.JWT_SECRET,
-      // expiresIn requires StringValue (branded ms type); cast plain string to satisfy constraint
-      { expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] },
-    )
+    // No session yet: the account must confirm its email before it can sign in.
+    await sendVerificationEmail({ to: user.email, verifyToken: verify.token })
 
-    logger.info({ userId: user.id }, 'User registered')
-    res.status(201).json({ token, user })
+    logger.info({ userId: user.id }, 'User registered — verification email sent')
+    res.status(201).json({ requiresVerification: true, user })
   } catch (err) {
     logger.error({ err }, 'Register error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Registration failed')
@@ -104,6 +121,11 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
     const valid = await bcrypt.compare(password, user.passwordHash)
     if (!valid) {
       sendError(res, 401, 'INVALID_CREDENTIALS', 'Invalid email or password')
+      return
+    }
+
+    if (!user.emailVerifiedAt) {
+      sendError(res, 403, 'EMAIL_NOT_VERIFIED', 'Please confirm your email address first — check your inbox for the confirmation link.')
       return
     }
 
@@ -190,6 +212,51 @@ router.post('/2fa/verify-login', authLimiter, async (req: Request, res: Response
   }
 })
 
+// POST /api/v1/auth/verify-email — confirm an address using the emailed single-use token
+router.post('/verify-email', verifyLimiter, async (req: Request, res: Response): Promise<void> => {
+  const { token } = req.body as { token?: string }
+  if (!token || typeof token !== 'string') { sendError(res, 400, 'MISSING_FIELD', 'Verification token is required'); return }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { emailVerifyToken: token } })
+    if (!user || !isVerifyTokenUsable(user)) {
+      sendError(res, 400, 'INVALID_TOKEN', 'This confirmation link is invalid or has expired. Request a new one.')
+      return
+    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerifiedAt: new Date(), emailVerifyToken: null, emailVerifyExpires: null },
+    })
+    logger.info({ userId: user.id }, 'Email verified')
+    res.json({ message: 'Email confirmed. You can now sign in.' })
+  } catch (err) {
+    logger.error({ err }, 'Verify email error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to confirm email')
+  }
+})
+
+// POST /api/v1/auth/resend-verification — always 200 so it cannot be used to probe for accounts
+router.post('/resend-verification', resendVerifyLimiter, async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body as { email?: string }
+  if (!email || !email.includes('@')) { sendError(res, 400, 'INVALID_EMAIL', 'A valid email address is required'); return }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email } })
+    if (user && !user.emailVerifiedAt) {
+      const verify = newVerifyToken()
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { emailVerifyToken: verify.token, emailVerifyExpires: verify.expires },
+      })
+      await sendVerificationEmail({ to: user.email, verifyToken: verify.token })
+    }
+    res.json({ message: 'If that account needs confirming, a new link has been sent.' })
+  } catch (err) {
+    logger.error({ err }, 'Resend verification error')
+    sendError(res, 500, 'INTERNAL_ERROR', 'Failed to process request')
+  }
+})
+
 router.post('/forgot-password', resetLimiter, async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body as { email?: string }
   if (!email || !email.includes('@')) {
@@ -244,7 +311,14 @@ router.post('/reset-password', resetCompleteLimiter, async (req: Request, res: R
     const passwordHash = await bcrypt.hash(password, 12)
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash, passwordResetToken: null, passwordResetExpires: null, passwordChangedAt: new Date() },
+      data: {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+        passwordChangedAt: new Date(),
+        // Receiving the reset email proves ownership of the address
+        ...(user.emailVerifiedAt ? {} : { emailVerifiedAt: new Date(), emailVerifyToken: null, emailVerifyExpires: null }),
+      },
     })
 
     invalidateAuthCache(user.id)

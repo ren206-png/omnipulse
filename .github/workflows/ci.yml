@@ -73,7 +73,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run tests
-        run: pnpm --filter @omnipulse/api exec tsx --test src/routes/__tests__/tenantIsolation.test.ts src/lib/__tests__/reschedulePublish.test.ts src/lib/__tests__/dlqItem.test.ts
+        run: pnpm --filter @omnipulse/api exec tsx --test src/routes/__tests__/tenantIsolation.test.ts src/lib/__tests__/reschedulePublish.test.ts src/lib/__tests__/dlqItem.test.ts src/lib/__tests__/emailVerification.test.ts src/lib/__tests__/tokenEncryption.test.ts src/lib/__tests__/publishWiring.test.ts
         env:
           # Tenant isolation tests mock Prisma — dummy values prevent env.ts from throwing
           DATABASE_URL: postgresql://x:x@localhost:5432/x

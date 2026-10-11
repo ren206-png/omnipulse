@@ -152,8 +152,16 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">
-              {error}
+            <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md space-y-1">
+              <p>{error}</p>
+              {/confirm your email/i.test(error) && (
+                <Link
+                  href={`/verify-email?email=${encodeURIComponent(email)}`}
+                  className="underline underline-offset-4"
+                >
+                  Resend the confirmation email
+                </Link>
+              )}
             </div>
           )}
 

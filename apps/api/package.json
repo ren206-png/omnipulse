@@ -10,6 +10,7 @@
     "prisma": "prisma",
     "seed": "tsx prisma/seed.ts",
     "tsc": "tsc",
+    "test:unit": "tsx --test src/lib/__tests__/emailVerification.test.ts src/lib/__tests__/tokenEncryption.test.ts src/lib/__tests__/publishWiring.test.ts src/lib/__tests__/dlqItem.test.ts src/lib/__tests__/reschedulePublish.test.ts",
     "reencrypt-tokens:dry": "tsx scripts/reencryptTokens.ts",
     "reencrypt-tokens": "tsx scripts/reencryptTokens.ts --execute"
   },

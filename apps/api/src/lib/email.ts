@@ -146,3 +146,27 @@ export async function sendPasswordResetEmail(opts: { to: string; resetToken: str
     logger.error({ err, to: opts.to }, 'Password reset email send failed')
   }
 }
+
+export async function sendVerificationEmail(opts: { to: string; verifyToken: string }) {
+  const appUrl = process.env.WEB_URL ?? 'http://localhost:3000'
+  const verifyUrl = `${appUrl}/verify-email/${opts.verifyToken}`
+
+  try {
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM ?? 'OmniPulse <noreply@getomnipulse.com>',
+      to: opts.to,
+      subject: 'Confirm your OmniPulse email',
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
+          <h1 style="color:#6366f1;margin-bottom:8px">OmniPulse</h1>
+          <h2 style="color:#1f2937">Confirm your email</h2>
+          <p style="color:#4b5563">Welcome! Click the button below to confirm this email address and activate your account.</p>
+          <a href="${verifyUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin:16px 0">Confirm Email</a>
+          <p style="color:#9ca3af;font-size:12px">This link expires in 24 hours. If you didn't create an OmniPulse account, you can safely ignore this email.</p>
+        </div>
+      `,
+    })
+  } catch (err) {
+    logger.error({ err, to: opts.to }, 'Verification email send failed')
+  }
+}

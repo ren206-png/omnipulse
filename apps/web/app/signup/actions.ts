@@ -24,7 +24,11 @@ export async function signupAction(
     return { error: body.error ?? 'Registration failed' }
   }
 
-  const body = (await res.json().catch(() => null)) as { token: string } | null
+  const body = (await res.json().catch(() => null)) as { token?: string; requiresVerification?: boolean } | null
+  // New accounts must confirm their email before they get a session
+  if (body?.requiresVerification) {
+    redirect(`/verify-email?sent=1&email=${encodeURIComponent(email)}`)
+  }
   if (!body?.token) return { error: 'Registration failed — invalid server response' }
   const cookieStore = await cookies()
   cookieStore.set('token', body.token, {

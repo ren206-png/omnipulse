@@ -7,7 +7,7 @@ const AUTH_ROUTES = ['/login', '/signup', '/reset-password']
 // Legal/contact pages, public bio pages (/u/:slug), client portals (/portal/:token) and
 // crawler/PWA files must be reachable by logged-out visitors.
 const ALWAYS_PUBLIC_ROUTES = [
-  '/invite', '/reports', '/privacy', '/terms', '/contact', '/u/', '/portal/',
+  '/invite', '/verify-email', '/reports', '/privacy', '/terms', '/contact', '/u/', '/portal/',
   '/robots.txt', '/sitemap.xml', '/manifest.json', '/opengraph-image',
 ]
 // The landing page — always public, authenticated users stay here too

@@ -22,6 +22,9 @@ model User {
   twoFactorEnabled     Boolean               @default(false)
   twoFactorBackupCodes String[]
   passwordChangedAt    DateTime?
+  emailVerifiedAt      DateTime?
+  emailVerifyToken     String?               @unique
+  emailVerifyExpires   DateTime?
 }
 
 enum Role {
