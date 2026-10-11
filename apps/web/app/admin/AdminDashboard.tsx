@@ -44,7 +44,7 @@ function StatCard({ label, value, sub }: { label: string; value: number | string
 }
 
 export function AdminDashboard({ token, initialStats, apiUrl }: { token: string; initialStats: Stats; apiUrl: string }) {
-  const [stats] = useState<Stats>(initialStats)
+  const stats = initialStats
   const [users, setUsers] = useState<User[]>([])
   const [total, setTotal] = useState(0)
   const [pages, setPages] = useState(1)

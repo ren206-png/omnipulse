@@ -24,6 +24,9 @@ export function rateLimit({ windowMs, max, message }: RateLimitOptions) {
   }, windowMs).unref()
 
   return (req: Request, res: Response, next: NextFunction): void => {
+    // WEEKLY-AUDIT: X-Forwarded-For first value is client-controlled and can be spoofed to bypass
+    // rate limiting. This in-memory store also doesn't work across multiple instances.
+    // Consider express-rate-limit + rate-limit-redis for a production deployment.
     const ip = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0].trim()
       ?? req.socket.remoteAddress
       ?? 'unknown'

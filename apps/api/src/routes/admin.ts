@@ -253,5 +253,4 @@ router.post('/queues/:name/clean-failed', async (req: Request, res: Response): P
   }
 })
 
-export { Queue, redisConnection }
 export default router
