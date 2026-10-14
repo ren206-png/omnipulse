@@ -17,6 +17,7 @@ import { generateCaption } from '../lib/visualCopywriter.js'
 import { logActivity } from '../lib/activity.js'
 import { assertWorkspaceAccess, TenantAccessError } from '../lib/tenantGuard.js'
 import { trackAiGeneration } from '../lib/trackAiUsage.js'
+import { publishPostQueue } from '../lib/queue.js'
 
 // Singleton Redis for AI rate-limit counters
 let _aiRedis: IORedis | null = null
@@ -1430,9 +1431,6 @@ Rules:
     }
   })
 
-  // WEEKLY-AUDIT: Posts are created as SCHEDULED but no BullMQ jobs are enqueued here.
-  // Without a queued job, these posts will never publish. Fix: after createMany, fetch
-  // the created post IDs and call publishQueue.add('publish', { postId }, { delay }) for each.
   try {
     await prisma.scheduledPost.createMany({ data: postsData })
   } catch (err) {
@@ -1446,6 +1444,14 @@ Rules:
     where: { campaignId: campaign.id },
     orderBy: { scheduledFor: 'asc' },
   })
+
+  // Enqueue a BullMQ publish job for each post at its scheduled time
+  await Promise.all(
+    createdPosts.map((post) => {
+      const delay = Math.max(0, post.scheduledFor.getTime() - Date.now())
+      return publishPostQueue.add('publish', { postId: post.id }, { delay, jobId: `post:${post.id}` })
+    }),
+  )
 
   await logActivity({
     workspaceId,
