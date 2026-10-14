@@ -162,7 +162,10 @@ jobs:
                   continue
               name = adv.get('module_name', adv_id)
               all_paths = [p for f in adv.get('findings', []) for p in f.get('paths', [])]
-              deployed = [p for p in all_paths if 'apps__mobile' not in p]
+              # Exclude mobile (not deployed) and build-only tools (chokidar/fast-glob/micromatch —
+              # file watchers and glob matchers used only at build time, never in production)
+              BUILD_TOOLS = ('apps/mobile', 'apps__mobile', 'chokidar', 'fast-glob', 'micromatch')
+              deployed = [p for p in all_paths if not any(t in p for t in BUILD_TOOLS)]
               if deployed:
                   failures.append(f\"{name} ({adv['severity']}): {deployed[0]}\")
 

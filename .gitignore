@@ -32,3 +32,4 @@ apps/mobile/ios/
 pnpm-workspace.yaml
 apps/api/prisma/dev.db
 apps/mobile/.env
+*.tsbuildinfo
