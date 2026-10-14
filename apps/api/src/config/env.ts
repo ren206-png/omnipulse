@@ -15,6 +15,9 @@ if (process.env.NODE_ENV === 'production') {
   const encKey = process.env.TOKEN_ENCRYPTION_KEY ?? ''
   if (!encKey || encKey.length !== 64) {
     // Use console.error here — logger cannot be imported into env.ts (circular dependency)
+    // WEEKLY-AUDIT: This only logs and continues — the app starts without encryption in production.
+    // Consider throwing here (or calling process.exit(1)) so a misconfigured deployment fails
+    // loudly instead of silently storing plaintext tokens.
     console.error(
       '[STARTUP] TOKEN_ENCRYPTION_KEY must be a 64-character hex string (32 bytes) in production. ' +
         'Social account tokens will not be encrypted correctly.',

@@ -24,6 +24,9 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const token = req.headers.authorization?.startsWith('Bearer ')
     ? req.headers.authorization.slice(7)
     : (req.cookies as Record<string, string> | undefined)?.token
+    // WEEKLY-AUDIT: query-param token fallback leaks JWTs into server logs, browser history,
+    // and CDN/proxy logs. Only kept for SSE which cannot set headers. Replace with short-lived
+    // one-time SSE tokens issued by a POST /notifications/sse-token endpoint.
     ?? (typeof req.query.token === 'string' ? req.query.token : undefined)
 
   if (!token) {
@@ -38,10 +41,14 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return
   }
 
-  // Check if the token was issued before a password reset. The lookup is cached briefly per
-  // user: it used to cost a cross-region database round trip on every single API request.
+  // Check if user still exists and the token was not issued before a password reset.
+  // The lookup is cached briefly per user to avoid a DB round trip on every API request.
   getPasswordChangedAtSec(payload.id)
     .then((changedAtSec) => {
+      if (changedAtSec === false) {
+        sendError(res, 401, 'INVALID_TOKEN', 'Token is invalid or expired')
+        return
+      }
       if (changedAtSec !== null && payload.iat !== undefined && payload.iat < changedAtSec) {
         sendError(res, 401, 'TOKEN_REVOKED', 'Token invalidated by password reset')
         return
@@ -60,14 +67,16 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 // API runs as several instances.
 const PWD_CACHE_TTL_MS = 30_000
 const PWD_CACHE_MAX = 5_000
-const pwdCache = new Map<string, { changedAtSec: number | null; expiresAt: number }>()
+const pwdCache = new Map<string, { changedAtSec: number | null | false; expiresAt: number }>()
 
-async function getPasswordChangedAtSec(userId: string): Promise<number | null> {
+// false = user not found (deleted); null = user exists, no password reset; number = changedAt unix sec
+async function getPasswordChangedAtSec(userId: string): Promise<number | null | false> {
   const hit = pwdCache.get(userId)
   if (hit && hit.expiresAt > Date.now()) return hit.changedAtSec
 
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordChangedAt: true } })
-  const changedAtSec = user?.passwordChangedAt ? Math.floor(user.passwordChangedAt.getTime() / 1000) : null
+  if (!user) return false
+  const changedAtSec = user.passwordChangedAt ? Math.floor(user.passwordChangedAt.getTime() / 1000) : null
 
   if (pwdCache.size >= PWD_CACHE_MAX) {
     const oldest = pwdCache.keys().next().value

@@ -24,6 +24,9 @@ export async function checkLimit(
   } else if (resource === 'teamMembers') {
     current = await prisma.workspaceMember.count({ where: { workspaceId } })
   }
+  // WEEKLY-AUDIT: 'workspaces' resource has no counting branch — current stays 0 and the
+  // limit is always allowed:true. Fix: add a workspace count branch using the owner's userId
+  // (requires passing userId to this function, since workspaceId is the checked workspace).
 
   return { allowed: current < limit, limit: limit === Infinity ? -1 : limit, current }
 }

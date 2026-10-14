@@ -18,10 +18,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getToken().then(t => {
-      setTokenState(t)
-      setLoading(false)
-    })
+    getToken()
+      .then(t => {
+        setTokenState(t)
+      })
+      .catch(() => {
+        // SecureStore unavailable — proceed unauthenticated
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }, [])
 
   const login = async (email: string, password: string) => {
