@@ -18,6 +18,17 @@
       "msgpackr-extract",
       "prisma",
       "sharp"
-    ]
+    ],
+    "overrides": {
+      "proxy-addr": "2.0.8",
+      "mysql2": "3.24.6",
+      "fast-uri": "3.1.8",
+      "http-cache-semantics": "4.3.0",
+      "ip-address": "10.7.4",
+      "postcss": "8.5.30",
+      "deepmerge-ts": "8.0.2",
+      "image-size": "2.0.4",
+      "source-map-js": "1.2.2"
+    }
   }
 }
