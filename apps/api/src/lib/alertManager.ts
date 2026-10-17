@@ -23,14 +23,21 @@ export interface Alert {
   meta?: Record<string, unknown>
 }
 
-const DEDUP_WINDOW_MS = 15 * 60 * 1000 // 15 minutes
+/**
+ * How long an identical alert is suppressed after it fires. Critical alerts always fire; warnings and
+ * info repeat at most every 6 hours (a long-lived condition used to re-report every 15 minutes —
+ * hundreds of Sentry events a week for one issue).
+ */
+export function dedupWindowMs(severity: AlertSeverity): number {
+  return severity === 'critical' ? 0 : 6 * 60 * 60 * 1000
+}
 const dedupCache = new Map<string, number>()
 
 function isDuplicate(key: string, severity: AlertSeverity): boolean {
   if (severity === 'critical') return false // always fire critical alerts
   const last = dedupCache.get(key)
   if (!last) return false
-  return Date.now() - last < DEDUP_WINDOW_MS
+  return Date.now() - last < dedupWindowMs(severity)
 }
 
 function recordAlert(key: string): void {

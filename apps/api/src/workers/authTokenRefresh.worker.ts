@@ -93,6 +93,10 @@ async function runTokenRefreshCycle(): Promise<void> {
   // but a refreshToken exists — assume they need a proactive refresh).
   const expiringAccounts = await prisma.socialAccount.findMany({
     where: {
+      // Google/YouTube access tokens are refreshed on demand by the publisher (videoPublishers.ts),
+      // so they must not be flagged here — they have a refresh token and no stored expiry, which
+      // used to make every cycle report them as "cannot be auto-refreshed".
+      platform: { notIn: ['GOOGLE', 'YOUTUBE'] },
       OR: [
         { tokenExpiresAt: { lte: cutoff } },
         { tokenExpiresAt: null, refreshToken: { not: null } },
