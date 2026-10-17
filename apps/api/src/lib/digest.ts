@@ -27,13 +27,17 @@ export async function sendWeeklyDigest(workspaceId?: string) {
 
   for (const workspace of workspaces) {
     try {
-      const totalPosts = workspace.posts.length
-      const totalEngagement = workspace.posts.reduce((sum: number, p: any) =>
-        sum + p.metrics.reduce((s: number, m: any) => s + m.likes + m.comments + m.shares, 0), 0)
-      const totalReach = workspace.posts.reduce((sum: number, p: any) =>
-        sum + p.metrics.reduce((s: number, m: any) => s + m.reach, 0), 0)
+      type PostMetric = { likes: number; comments: number; shares: number; reach: number }
+      type DigestPost = { content: string; platforms: string[]; metrics: PostMetric[] }
+      type DigestAccount = { platform: string; snapshots: Array<{ followers: number }> }
 
-      const accountRows = workspace.socialAccounts.map((a: any) => {
+      const totalPosts = workspace.posts.length
+      const totalEngagement = (workspace.posts as DigestPost[]).reduce((sum, p) =>
+        sum + p.metrics.reduce((s, m) => s + m.likes + m.comments + m.shares, 0), 0)
+      const totalReach = (workspace.posts as DigestPost[]).reduce((sum, p) =>
+        sum + p.metrics.reduce((s, m) => s + m.reach, 0), 0)
+
+      const accountRows = (workspace.socialAccounts as DigestAccount[]).map((a) => {
         const latest = a.snapshots[0]
         const prev = a.snapshots[1]
         const followerDiff = latest && prev ? latest.followers - prev.followers : 0
@@ -41,9 +45,9 @@ export async function sendWeeklyDigest(workspaceId?: string) {
         return `<tr><td style="padding:8px;border-bottom:1px solid #f3f4f6">${a.platform}</td><td style="padding:8px;border-bottom:1px solid #f3f4f6">${latest?.followers?.toLocaleString() ?? 'N/A'}</td><td style="padding:8px;border-bottom:1px solid #f3f4f6;color:${followerDiff >= 0 ? '#10b981' : '#ef4444'}">${diffStr}</td></tr>`
       }).join('')
 
-      const topPost = workspace.posts.sort((a: any, b: any) => {
-        const ae = a.metrics.reduce((s: number, m: any) => s + m.likes + m.comments, 0)
-        const be = b.metrics.reduce((s: number, m: any) => s + m.likes + m.comments, 0)
+      const topPost = [...(workspace.posts as DigestPost[])].sort((a, b) => {
+        const ae = a.metrics.reduce((s, m) => s + m.likes + m.comments, 0)
+        const be = b.metrics.reduce((s, m) => s + m.likes + m.comments, 0)
         return be - ae
       })[0]
 

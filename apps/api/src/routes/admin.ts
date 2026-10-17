@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import type { Request, Response } from 'express'
+import type { Request, Response, NextFunction } from 'express'
 import { prisma } from '../lib/prisma.js'
 import { requireAuth } from '../middleware/auth.js'
 import { sendError } from '../lib/apiError.js'
@@ -13,7 +13,7 @@ import { redisConnection } from '../lib/queue.js'
 const router = Router()
 
 // All admin routes require auth + must be the ADMIN_EMAIL
-function requireAdmin(req: Request, res: Response, next: () => void) {
+function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   if (!env.ADMIN_EMAIL) { sendError(res, 404, 'NOT_FOUND', 'Not found'); return }
   const adminEmails = env.ADMIN_EMAIL.split(',').map((e) => e.trim().toLowerCase())
   if (!req.user?.email || !adminEmails.includes(req.user.email.toLowerCase())) {
@@ -24,7 +24,7 @@ function requireAdmin(req: Request, res: Response, next: () => void) {
 }
 
 router.use(requireAuth)
-router.use(requireAdmin as unknown as (req: Request, res: Response, next: () => void) => void)
+router.use(requireAdmin)
 
 // GET /api/v1/admin/stats — platform-wide numbers
 router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
