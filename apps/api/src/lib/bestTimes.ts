@@ -41,10 +41,10 @@ function buildHeatmap(
   return Array.from({ length: 24 }, (_, h) => {
     let score: number
     if (usesBenchmark) {
-      // Benchmark: peak hours = 100, adjacent = 60, others = 10
-      if (benchmarkHours.includes(h)) score = 80 + Math.floor(Math.random() * 20)
-      else if (benchmarkHours.some((b) => Math.abs(b - h) === 1)) score = 45 + Math.floor(Math.random() * 20)
-      else score = 5 + Math.floor(Math.random() * 15)
+      // Benchmark: deterministic scores — peak hours 85, adjacent 55, others 10
+      if (benchmarkHours.includes(h)) score = 85
+      else if (benchmarkHours.some((b) => Math.abs(b - h) === 1)) score = 55
+      else score = 10
     } else {
       score = Math.round((hourCounts[h] / max) * 100)
     }
