@@ -245,6 +245,10 @@ router.get('/calendar', async (req: Request, res: Response): Promise<void> => {
 
   const start = startDate ? new Date(startDate) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   const end   = endDate   ? new Date(endDate)   : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    sendError(res, 400, 'INVALID_DATE', 'startDate and endDate must be valid ISO date strings')
+    return
+  }
 
   try {
     const role = await getWorkspaceRole(workspaceId, req.user!.id)
@@ -706,56 +710,56 @@ router.get('/content-health', async (req: Request, res: Response): Promise<void>
   if (!workspaceId) { sendError(res, 400, 'BAD_REQUEST', 'workspaceId required'); return }
 
   try {
-  const role = await getWorkspaceRole(workspaceId, req.user!.id)
-  if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
+    const role = await getWorkspaceRole(workspaceId, req.user!.id)
+    if (!role) { sendError(res, 403, 'FORBIDDEN', 'Workspace not found or access denied'); return }
 
-  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-  const posts = await prisma.scheduledPost.findMany({
-    where: {
-      workspaceId,
-      status: 'PUBLISHED',
-      createdAt: { gte: since },
-    },
-    include: {
-      metrics: true,
-    },
-    orderBy: { scheduledFor: 'desc' },
-    take: 50,
-  })
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+    const posts = await prisma.scheduledPost.findMany({
+      where: {
+        workspaceId,
+        status: 'PUBLISHED',
+        createdAt: { gte: since },
+      },
+      include: {
+        metrics: true,
+      },
+      orderBy: { scheduledFor: 'desc' },
+      take: 50,
+    })
 
-  const enriched = posts.map((post) => {
-    const totalEngagement = post.metrics.reduce(
-      (sum, m) => sum + m.likes + m.comments + m.shares,
-      0,
-    )
-    const daysSincePublished = Math.floor(
-      (Date.now() - post.scheduledFor.getTime()) / (1000 * 60 * 60 * 24),
-    )
-    const healthScore = Math.min(100, Math.round((totalEngagement / Math.max(daysSincePublished, 1)) * 10))
-    const status =
-      healthScore >= 60 ? 'healthy' :
-      healthScore >= 25 ? 'aging' :
-      'repurpose'
+    const enriched = posts.map((post) => {
+      const totalEngagement = post.metrics.reduce(
+        (sum, m) => sum + m.likes + m.comments + m.shares,
+        0,
+      )
+      const daysSincePublished = Math.floor(
+        (Date.now() - post.scheduledFor.getTime()) / (1000 * 60 * 60 * 24),
+      )
+      const healthScore = Math.min(100, Math.round((totalEngagement / Math.max(daysSincePublished, 1)) * 10))
+      const status =
+        healthScore >= 60 ? 'healthy' :
+        healthScore >= 25 ? 'aging' :
+        'repurpose'
 
-    return {
-      id: post.id,
-      content: post.content,
-      platforms: post.platforms,
-      scheduledFor: post.scheduledFor,
-      daysSincePublished,
-      totalEngagement,
-      healthScore,
-      status,
-      metrics: post.metrics.map((m) => ({
-        platform: m.platform,
-        likes: m.likes,
-        comments: m.comments,
-        shares: m.shares,
-      })),
-    }
-  })
+      return {
+        id: post.id,
+        content: post.content,
+        platforms: post.platforms,
+        scheduledFor: post.scheduledFor,
+        daysSincePublished,
+        totalEngagement,
+        healthScore,
+        status,
+        metrics: post.metrics.map((m) => ({
+          platform: m.platform,
+          likes: m.likes,
+          comments: m.comments,
+          shares: m.shares,
+        })),
+      }
+    })
 
-  res.json({ posts: enriched })
+    res.json({ posts: enriched })
   } catch (err) {
     logger.error({ err }, 'Content health fetch error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch content health data')

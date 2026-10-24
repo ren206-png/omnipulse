@@ -952,6 +952,11 @@ router.get('/repurpose/suggestions', async (req: Request, res: Response): Promis
 
 // POST /api/v1/ai/coach — conversational post rewriting
 router.post('/coach', aiLimiter, async (req: Request, res: Response): Promise<void> => {
+  if (!env.ANTHROPIC_API_KEY) {
+    sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server')
+    return
+  }
+
   const { content, instruction, platform } = req.body as {
     content?: string
     instruction?: string
@@ -1449,14 +1454,14 @@ Rules:
   await Promise.all(
     createdPosts.map((post) => {
       const delay = Math.max(0, post.scheduledFor.getTime() - Date.now())
-      return publishPostQueue.add('publish', { postId: post.id }, { delay, jobId: `post:${post.id}` })
+      return publishPostQueue.add('publish-post', { postId: post.id }, { delay, jobId: `post:${post.id}` })
     }),
   )
 
   await logActivity({
     workspaceId,
     userId,
-    userEmail: '',
+    userEmail: req.user!.email,
     action: 'campaign_generated',
     targetId: campaign.id,
     targetType: 'campaign',

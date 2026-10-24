@@ -115,7 +115,7 @@ export function extractOAuthStatePayload(
     throw new TenantAccessError(400, 'INVALID_STATE', 'OAuth state signature is invalid')
   }
 
-  let payload: { workspaceId?: string; userId?: string; platform?: string; pkceVerifier?: string }
+  let payload: { workspaceId?: string; userId?: string; platform?: string; pkceVerifier?: string; iat?: number }
   try {
     payload = JSON.parse(Buffer.from(nonce, 'base64url').toString()) as typeof payload
   } catch {
@@ -124,6 +124,12 @@ export function extractOAuthStatePayload(
 
   if (typeof payload.workspaceId !== 'string' || !payload.workspaceId) {
     throw new TenantAccessError(400, 'INVALID_STATE', 'OAuth state missing workspaceId')
+  }
+
+  // Reject state tokens older than 10 minutes to prevent replay attacks
+  const STATE_TTL_MS = 10 * 60 * 1000
+  if (typeof payload.iat !== 'number' || Date.now() - payload.iat > STATE_TTL_MS) {
+    throw new TenantAccessError(400, 'INVALID_STATE', 'OAuth state token has expired')
   }
 
   return {
