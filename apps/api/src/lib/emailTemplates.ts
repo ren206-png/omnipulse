@@ -2,6 +2,10 @@
 // All functions return { subject, html }. Templates use inline styles only,
 // indigo #6366f1 primary colour, mobile-friendly single-column layout.
 
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
 const BASE = `
   <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f3f4f6;padding:32px 16px;min-height:100%">
     <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
@@ -33,9 +37,10 @@ function ctaButton(label: string, url: string): string {
 }
 
 function postPreview(content: string): string {
+  const safe = escHtml(content.slice(0, 280))
   return `
     <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:16px 0">
-      <p style="color:#374151;margin:0;font-size:14px;line-height:1.6;white-space:pre-wrap">${content.slice(0, 280)}${content.length > 280 ? '…' : ''}</p>
+      <p style="color:#374151;margin:0;font-size:14px;line-height:1.6;white-space:pre-wrap">${safe}${content.length > 280 ? '…' : ''}</p>
     </div>
   `
 }

@@ -342,6 +342,23 @@ router.post('/link-preview', async (req: Request, res: Response): Promise<void> 
     return
   }
 
+  // Block SSRF: reject private/loopback/link-local IP ranges
+  const hostname = parsedUrl.hostname
+  const isPrivate =
+    /^localhost$/i.test(hostname) ||
+    /^127\./.test(hostname) ||
+    /^10\./.test(hostname) ||
+    /^192\.168\./.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+    /^169\.254\./.test(hostname) ||
+    /^::1$/.test(hostname) ||
+    /^fc00:/i.test(hostname) ||
+    /^fe80:/i.test(hostname)
+  if (isPrivate) {
+    sendError(res, 400, 'INVALID_URL', 'URL points to a private or reserved address')
+    return
+  }
+
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 5000)
@@ -465,7 +482,7 @@ Distribute evenly across platforms and days. Write ready-to-publish content.`
 })
 
 // POST /api/v1/ai/generate-image
-router.post('/generate-image', async (req: Request, res: Response): Promise<void> => {
+router.post('/generate-image', aiLimiter, async (req: Request, res: Response): Promise<void> => {
   const { prompt, width = 1024, height = 1024 } = req.body as { prompt?: string; width?: number; height?: number }
   if (!prompt) { sendError(res, 400, 'MISSING_PROMPT', 'prompt required'); return }
   // Pollinations.ai — completely free, no API key
@@ -500,7 +517,7 @@ router.post('/translate', aiLimiter, async (req: Request, res: Response): Promis
 })
 
 // POST /api/v1/ai/score-post
-router.post('/score-post', async (req: Request, res: Response): Promise<void> => {
+router.post('/score-post', aiLimiter, async (req: Request, res: Response): Promise<void> => {
   const { content, platforms } = req.body as { content?: string; platforms?: string[] }
   if (!content) { sendError(res, 400, 'MISSING_CONTENT', 'content required'); return }
   if (!env.ANTHROPIC_API_KEY) { sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server'); return }
@@ -547,7 +564,7 @@ Return this exact JSON structure:
 })
 
 // POST /api/v1/ai/trends
-router.post('/trends', async (req: Request, res: Response): Promise<void> => {
+router.post('/trends', aiLimiter, async (req: Request, res: Response): Promise<void> => {
   const { niche, platforms } = req.body as { niche?: string; platforms?: string[] }
   if (!niche) { sendError(res, 400, 'MISSING_NICHE', 'niche required'); return }
   if (!env.ANTHROPIC_API_KEY) { sendError(res, 503, 'AI_UNAVAILABLE', 'AI features are not configured on this server'); return }

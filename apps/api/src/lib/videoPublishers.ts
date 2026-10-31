@@ -252,7 +252,7 @@ async function postToTikTok(content: string, videoUrl: string, accessToken: stri
 
   // 3. Initialise the direct post
   const chunkSize = size <= TIKTOK_CHUNK_BYTES ? size : TIKTOK_CHUNK_BYTES
-  const totalChunks = Math.floor(size / chunkSize) // the last chunk absorbs the remainder
+  const totalChunks = Math.ceil(size / chunkSize)
   const init = await tiktokCall<{ publish_id?: string; upload_url?: string }>('/v2/post/publish/video/init/', accessToken, {
     post_info: {
       title: content.slice(0, 2200),

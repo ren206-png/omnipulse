@@ -76,13 +76,28 @@ router.get('/oauth/callback', async (req: Request, res: Response): Promise<void>
     }
     throw err
   }
-  // WEEKLY-AUDIT: parsedState.userId is verified only by HMAC signature, not compared against
-  // req.user.id. A valid state token from another user could be replayed here to link social
-  // accounts into a different workspace. Fix: add `if (parsedState.userId !== req.user!.id) {...}`
-  // or replace extractOAuthStatePayload with verifyOAuthState(state, req.user.id, workspaceId).
-
   try {
-    const { platform, workspaceId, pkceVerifier } = parsedState
+    const { platform, workspaceId, userId: stateUserId, pkceVerifier } = parsedState
+
+    // Verify the user embedded in the signed state is authorized for the workspace.
+    // This prevents a replay where a valid state token from user A is used to attach
+    // a social account to user A's workspace via a different OAuth session.
+    const stateWorkspace = await findWorkspaceById(workspaceId)
+    if (!stateWorkspace) {
+      res.redirect(`${webUrl}/dashboard/accounts?error=invalid_workspace`)
+      return
+    }
+    if (stateWorkspace.ownerId !== stateUserId) {
+      const membership = await prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId, userId: stateUserId } },
+      })
+      if (!membership) {
+        logger.warn({ stateUserId, workspaceId }, 'OAuth callback: state userId not authorized for workspace')
+        res.redirect(`${webUrl}/dashboard/accounts?error=unauthorized`)
+        return
+      }
+    }
+
     const redirectUri = `${process.env.API_URL ?? 'http://localhost:4000'}/api/v1/social-accounts/oauth/callback`
 
     let accessToken = ''

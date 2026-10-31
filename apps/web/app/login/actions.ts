@@ -36,6 +36,9 @@ export async function loginAction(
   email: string,
   password: string,
 ): Promise<{ error?: string; requiresTwoFactor?: boolean; twoFactorToken?: string }> {
+  // WEEKLY-AUDIT: NEXT_PUBLIC_ prefix means this flag is embedded in client JS.
+  // If NEXT_PUBLIC_DEV_MODE=true is ever set in production, this bypass is live.
+  // Consider switching to a server-only env var (no NEXT_PUBLIC_ prefix).
   const isDevBypass =
     process.env.NEXT_PUBLIC_DEV_MODE === 'true' &&
     email === 'demo@getomnipulse.com' &&

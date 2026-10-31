@@ -778,10 +778,10 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ content: content.trim(), platforms: selectedPlatforms }),
       })
-      const data = (await res.json()) as typeof scoreResult & { error?: string }
+      const data = (await res.json()) as typeof scoreResult & { error?: string; message?: string }
       if (!res.ok) {
-        if ((data as any).error === 'PLAN_LIMIT') {
-          handlePlanLimit('AI Post Scoring', (data as any).message)
+        if (data.error === 'PLAN_LIMIT') {
+          handlePlanLimit('AI Post Scoring', data.message ?? '')
           return
         }
         setScoreError((data as { error?: string }).error ?? 'Scoring failed'); return
@@ -1016,10 +1016,11 @@ export function CreatePostForm({ selectedDate, workspaceId, token, onSuccess, on
       const data = (await res.json()) as {
         variants?: Record<string, { content: string; hashtags: string[]; mediaUrls: string[] }>
         error?: string
+        message?: string
       }
       if (!res.ok) {
-        if ((data as any).error === 'PLAN_LIMIT') {
-          handlePlanLimit('AI Content Multiplier', (data as any).message)
+        if (data.error === 'PLAN_LIMIT') {
+          handlePlanLimit('AI Content Multiplier', data.message ?? '')
           return
         }
         setMultiplyError(data.error ?? 'Failed to generate variants'); return

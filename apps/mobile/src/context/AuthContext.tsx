@@ -9,8 +9,12 @@ interface AuthContextType {
   logout: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextType>({} as any)
-export const useAuth = () => useContext(AuthContext)
+const AuthContext = createContext<AuthContextType | null>(null)
+export const useAuth = () => {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
+  return ctx
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setTokenState] = useState<string | null>(null)
@@ -35,9 +39,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     })
+    if (!data?.token) throw new Error('No token in login response')
     await setToken(data.token)
     setTokenState(data.token)
-    setUser(data.user)
+    setUser(data.user ?? null)
   }
 
   const logout = async () => {

@@ -122,7 +122,10 @@ export function NotificationBell({ token }: Props) {
 
   function handleNotificationClick(n: Notification) {
     if (!n.read) markRead(n.id)
-    if (n.link) window.location.href = n.link
+    // WEEKLY-AUDIT: only navigate to safe URLs to prevent open-redirect/javascript: injection
+    if (n.link && (n.link.startsWith('/') || /^https?:\/\//i.test(n.link))) {
+      window.location.href = n.link
+    }
     setOpen(false)
   }
 

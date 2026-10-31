@@ -433,54 +433,20 @@ export function DashboardContent({ token }: { token: string }) {
         </div>
       )}
 
-      {/* Two-column feed */}
-      {!loading && posts.length > 0 && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Upcoming posts */}
-          <div className="rounded-xl border bg-card shadow-sm">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h2 className="text-sm font-semibold">Upcoming Posts</h2>
-              <Link
-                href="/dashboard/calendar"
-                className="text-xs text-primary hover:underline"
-              >
-                View calendar →
-              </Link>
-            </div>
-            <div className="px-5">
-              {upcomingPosts.length === 0 ? (
-                <p className="py-6 text-sm text-muted-foreground text-center">
-                  No scheduled posts yet.{' '}
-                  <Link href="/dashboard/calendar" className="text-primary hover:underline">
-                    Create one
-                  </Link>
-                </p>
-              ) : (
-                upcomingPosts.map((p) => <PostRow key={p.id} post={p} />)
-              )}
-            </div>
+      {/* Recently published — Upcoming Posts are shown below by the dedicated component */}
+      {!loading && recentPublished.length > 0 && (
+        <div className="rounded-xl border bg-card shadow-sm">
+          <div className="flex items-center justify-between px-5 py-4 border-b">
+            <h2 className="text-sm font-semibold">Recently Published</h2>
+            <Link
+              href="/dashboard/analytics"
+              className="text-xs text-primary hover:underline"
+            >
+              View analytics →
+            </Link>
           </div>
-
-          {/* Recent published */}
-          <div className="rounded-xl border bg-card shadow-sm">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h2 className="text-sm font-semibold">Recently Published</h2>
-              <Link
-                href="/dashboard/analytics"
-                className="text-xs text-primary hover:underline"
-              >
-                View analytics →
-              </Link>
-            </div>
-            <div className="px-5">
-              {recentPublished.length === 0 ? (
-                <p className="py-6 text-sm text-muted-foreground text-center">
-                  No published posts yet.
-                </p>
-              ) : (
-                recentPublished.map((p) => <PostRow key={p.id} post={p} />)
-              )}
-            </div>
+          <div className="px-5">
+            {recentPublished.map((p) => <PostRow key={p.id} post={p} />)}
           </div>
         </div>
       )}

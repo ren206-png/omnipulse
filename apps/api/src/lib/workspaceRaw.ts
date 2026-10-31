@@ -6,7 +6,7 @@
  * they are immune to that problem.
  */
 
-import { prisma } from './prisma'
+import { prisma } from './prisma.js'
 
 export interface WorkspaceRow {
   id: string

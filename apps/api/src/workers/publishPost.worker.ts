@@ -62,7 +62,7 @@ async function postFirstComment(
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
           'X-Restli-Protocol-Version': '2.0.0',
-          'LinkedIn-Version': '202406',
+          'LinkedIn-Version': process.env.LINKEDIN_API_VERSION ?? '202506',
         },
         body: JSON.stringify({
           actor: linkedinPersonUrn ?? '',

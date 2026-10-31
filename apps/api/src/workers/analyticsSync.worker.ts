@@ -29,8 +29,6 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
 
   await runWithConcurrency(accounts, async (account) => {
     try {
-      // Tokens are stored encrypted — decrypt before sending to platform APIs
-      const accessToken = decryptToken(account.accessToken)
       let followers = 0
       let impressions = 0
       let engagementRate = 0
@@ -40,7 +38,7 @@ export async function syncAnalytics(workspaceId?: string): Promise<void> {
       if (account.platform === 'INSTAGRAM') {
         // Instagram Business Account via Graph API v20
         // externalProfileId holds the handle; the Graph API needs the numeric Business Account ID
-        const igUserId = await resolveInstagramUserId(accessToken, account.externalProfileId)
+        const igUserId = await resolveInstagramUserId(token, account.externalProfileId)
         if (!igUserId) {
           logger.warn({ accountId: account.id, handle: account.externalProfileId }, 'Instagram analytics skipped: could not resolve the Business Account ID — reconnect the account')
           return
