@@ -1,8 +1,10 @@
 import { prisma } from './prisma.js'
-import { Resend } from 'resend'
+import { sendEmail } from './mailer.js'
 import { logger } from './logger.js'
 
-const resend = new Resend(process.env.RESEND_API_KEY ?? 're_placeholder')
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
 
 export async function sendWeeklyDigest(workspaceId?: string) {
   const where = workspaceId ? { id: workspaceId } : {}
@@ -51,7 +53,7 @@ export async function sendWeeklyDigest(workspaceId?: string) {
         <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px;background:#fff">
           <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:24px;border-radius:12px;text-align:center;margin-bottom:24px">
             <h1 style="color:#fff;margin:0;font-size:24px">📊 Your Weekly Report</h1>
-            <p style="color:#e0e7ff;margin:8px 0 0">${workspace.name} · Week of ${new Date().toLocaleDateString()}</p>
+            <p style="color:#e0e7ff;margin:8px 0 0">${escHtml(workspace.name)} · Week of ${new Date().toLocaleDateString()}</p>
           </div>
 
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px">
@@ -79,8 +81,8 @@ export async function sendWeeklyDigest(workspaceId?: string) {
           ${topPost ? `
           <h3 style="color:#1f2937;margin-bottom:12px">🏆 Top Post This Week</h3>
           <div style="background:#f9fafb;padding:16px;border-radius:8px;margin-bottom:24px">
-            <p style="color:#374151;margin:0 0 8px">${topPost.content.substring(0, 200)}${topPost.content.length > 200 ? '...' : ''}</p>
-            <div style="color:#6b7280;font-size:12px">Platforms: ${topPost.platforms.join(', ')}</div>
+            <p style="color:#374151;margin:0 0 8px">${escHtml(topPost.content.substring(0, 200))}${topPost.content.length > 200 ? '...' : ''}</p>
+            <div style="color:#6b7280;font-size:12px">Platforms: ${escHtml(topPost.platforms.join(', '))}</div>
           </div>` : ''}
 
           <div style="text-align:center;padding-top:16px;border-top:1px solid #f3f4f6">
@@ -90,8 +92,7 @@ export async function sendWeeklyDigest(workspaceId?: string) {
         </div>
       `
 
-      await resend.emails.send({
-        from: process.env.EMAIL_FROM ?? 'OmniPulse <noreply@getomnipulse.com>',
+      await sendEmail({
         to: workspace.owner.email,
         subject: `📊 ${workspace.name} — Weekly Performance Report`,
         html,

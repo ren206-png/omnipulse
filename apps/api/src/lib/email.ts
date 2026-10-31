@@ -96,8 +96,7 @@ export async function sendPostRejectedEmail(opts: {
   calendarUrl: string
 }) {
   try {
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM ?? 'OmniPulse <noreply@getomnipulse.com>',
+    await sendEmail({
       to: opts.to,
       subject: 'Your post needs some changes',
       html: `
@@ -106,12 +105,12 @@ export async function sendPostRejectedEmail(opts: {
           <h2 style="color:#1f2937">Post sent back for revisions</h2>
           <p style="color:#4b5563">Your post was reviewed and needs a few changes before it can be published.</p>
           <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:16px 0">
-            <p style="color:#374151;margin:0;font-size:14px;white-space:pre-wrap">${opts.postContent.slice(0, 280)}${opts.postContent.length > 280 ? '…' : ''}</p>
+            <p style="color:#374151;margin:0;font-size:14px;white-space:pre-wrap">${escHtml(opts.postContent.slice(0, 280))}${opts.postContent.length > 280 ? '…' : ''}</p>
           </div>
           ${opts.note ? `
           <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;margin:16px 0">
             <p style="color:#92400e;font-size:13px;font-weight:600;margin:0 0 4px">Reviewer feedback:</p>
-            <p style="color:#374151;margin:0;font-size:14px">${opts.note}</p>
+            <p style="color:#374151;margin:0;font-size:14px">${escHtml(opts.note)}</p>
           </div>` : ''}
           <a href="${opts.calendarUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin:8px 0">Edit Post</a>
         </div>
@@ -127,8 +126,7 @@ export async function sendPasswordResetEmail(opts: { to: string; resetToken: str
   const resetUrl = `${appUrl}/reset-password/${opts.resetToken}`
 
   try {
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM ?? 'OmniPulse <noreply@getomnipulse.com>',
+    await sendEmail({
       to: opts.to,
       subject: 'Reset your OmniPulse password',
       html: `
@@ -151,8 +149,7 @@ export async function sendVerificationEmail(opts: { to: string; verifyToken: str
   const verifyUrl = `${appUrl}/verify-email/${opts.verifyToken}`
 
   try {
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM ?? 'OmniPulse <noreply@getomnipulse.com>',
+    await sendEmail({
       to: opts.to,
       subject: 'Confirm your OmniPulse email',
       html: `
