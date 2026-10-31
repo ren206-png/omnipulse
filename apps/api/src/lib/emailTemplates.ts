@@ -56,10 +56,10 @@ export function viralPostEmail(params: {
   const subject = `🔥 Your post is on fire — ${params.ratio}× average engagement`
   const html = body(`
     ${header('Post Performance Alert')}
-    <p style="color:#374151;font-size:15px;margin:0 0 8px">Great news for <strong>${params.workspaceName}</strong>!</p>
+    <p style="color:#374151;font-size:15px;margin:0 0 8px">Great news for <strong>${escHtml(params.workspaceName)}</strong>!</p>
     <p style="color:#374151;font-size:15px;margin:0 0 20px">One of your posts is getting <strong>${Math.round(params.ratio)}× more engagement</strong> than your average — ${params.totalEngagement.toLocaleString()} total interactions.</p>
     <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:16px;margin:0 0 20px">
-      <p style="color:#92400e;font-size:13px;margin:0;font-style:italic">"${params.postSnippet}"</p>
+      <p style="color:#92400e;font-size:13px;margin:0;font-style:italic">"${escHtml(params.postSnippet)}"</p>
     </div>
     <p style="color:#6b7280;font-size:14px;margin:0 0 20px">💡 Consider boosting this post or repurposing it on other platforms while it's trending.</p>
     ${ctaButton('View Analytics', params.dashboardUrl)}
@@ -76,10 +76,10 @@ export function underperformingPostEmail(params: {
   const subject = `📉 Post needs a boost — ${params.workspaceName}`
   const html = body(`
     ${header('Post Performance Alert')}
-    <p style="color:#374151;font-size:15px;margin:0 0 8px">Heads up for <strong>${params.workspaceName}</strong>.</p>
+    <p style="color:#374151;font-size:15px;margin:0 0 8px">Heads up for <strong>${escHtml(params.workspaceName)}</strong>.</p>
     <p style="color:#374151;font-size:15px;margin:0 0 20px">A post from 2 hours ago has gotten little engagement. It might be worth giving it a boost or trying a different angle.</p>
     <div style="background:#f3f4f6;border-radius:8px;padding:16px;margin:0 0 20px">
-      <p style="color:#374151;font-size:13px;margin:0;font-style:italic">"${params.postSnippet}"</p>
+      <p style="color:#374151;font-size:13px;margin:0;font-style:italic">"${escHtml(params.postSnippet)}"</p>
     </div>
     <p style="color:#6b7280;font-size:14px;margin:0 0 20px">💡 Try repurposing this content with a different hook, or check Content Health for suggestions.</p>
     ${ctaButton('View Content Health', params.dashboardUrl)}
@@ -101,11 +101,11 @@ export function publishFailureEmail(params: {
     ${header('Post publish failure')}
     <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin-bottom:20px">
       <p style="color:#b91c1c;font-weight:600;margin:0 0 4px;font-size:15px">Your post failed to publish</p>
-      <p style="color:#dc2626;margin:0;font-size:13px">Platform: <strong>${params.platform}</strong> &bull; Workspace: <strong>${params.workspaceName}</strong></p>
+      <p style="color:#dc2626;margin:0;font-size:13px">Platform: <strong>${escHtml(params.platform)}</strong> &bull; Workspace: <strong>${escHtml(params.workspaceName)}</strong></p>
     </div>
     ${params.postContent ? postPreview(params.postContent) : ''}
     <p style="color:#374151;font-size:14px;margin:0 0 8px"><strong>Error reason:</strong></p>
-    <p style="color:#6b7280;font-size:13px;font-family:monospace;background:#f3f4f6;border-radius:6px;padding:12px;margin:0 0 20px;word-break:break-all">${params.errorMessage.slice(0, 300)}</p>
+    <p style="color:#6b7280;font-size:13px;font-family:monospace;background:#f3f4f6;border-radius:6px;padding:12px;margin:0 0 20px;word-break:break-all">${escHtml(params.errorMessage.slice(0, 300))}</p>
     ${ctaButton('View Post &amp; Retry', params.retryUrl)}
     <p style="color:#9ca3af;font-size:12px;margin:20px 0 0">The post has been moved to the dead-letter queue. You can retry or dismiss it from your dashboard.</p>
     </div>
@@ -122,10 +122,10 @@ export function approvalRequestedEmail(params: {
   const subject = `OmniPulse: A post in ${params.workspaceName} needs your approval`
   const html = body(`
     ${header('Post awaiting your approval')}
-    <p style="color:#374151;font-size:15px;margin:0 0 16px">A post in <strong>${params.workspaceName}</strong> has been submitted and is waiting for your review.</p>
+    <p style="color:#374151;font-size:15px;margin:0 0 16px">A post in <strong>${escHtml(params.workspaceName)}</strong> has been submitted and is waiting for your review.</p>
     ${postPreview(params.postContent)}
     ${ctaButton('Review Post', params.approvalUrl)}
-    <p style="color:#9ca3af;font-size:12px;margin:20px 0 0">You received this because you are an admin or owner of ${params.workspaceName}.</p>
+    <p style="color:#9ca3af;font-size:12px;margin:20px 0 0">You received this because you are an admin or owner of ${escHtml(params.workspaceName)}.</p>
     </div>
   `)
   return { subject, html }
@@ -154,7 +154,7 @@ export function approvalDecisionEmail(params: {
   const reasonBlock = !isApproved && params.reason
     ? `<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;margin:16px 0">
          <p style="color:#92400e;font-size:13px;font-weight:600;margin:0 0 4px">Reviewer feedback:</p>
-         <p style="color:#374151;margin:0;font-size:14px">${params.reason}</p>
+         <p style="color:#374151;margin:0;font-size:14px">${escHtml(params.reason)}</p>
        </div>`
     : ''
 
@@ -183,7 +183,7 @@ export function magicLinkEmail(params: {
 
   const html = body(`
     ${header(`Invitation from ${params.inviterName}`)}
-    <p style="color:#374151;font-size:15px;margin:0 0 8px">You've been invited by <strong>${params.inviterName}</strong> to review and approve content for <strong>${params.workspaceName}</strong>.</p>
+    <p style="color:#374151;font-size:15px;margin:0 0 8px">You've been invited by <strong>${escHtml(params.inviterName)}</strong> to review and approve content for <strong>${escHtml(params.workspaceName)}</strong>.</p>
     <p style="color:#6b7280;font-size:14px;margin:0 0 20px">Click the button below to access the approval portal. No account required.</p>
     ${ctaButton('Open Approval Portal', params.magicLinkUrl)}
     <p style="color:#9ca3af;font-size:12px;margin:20px 0 0">This link expires on <strong>${expiryStr}</strong>. If you didn't expect this invitation, you can safely ignore this email.</p>
