@@ -243,6 +243,7 @@ async function handleWebhookEvent(event: Stripe.Event) {
 
     case 'invoice.payment_succeeded': {
       const invoice = event.data.object as Stripe.Invoice
+      // WEEKLY-AUDIT: (invoice as any).subscription — Stripe v18+ moved this field; remove cast once types updated
       const subId = (invoice as any).subscription as string | null
       if (!subId) break
       // Reset monthly AI usage counter at billing period renewal

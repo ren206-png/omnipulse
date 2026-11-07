@@ -180,6 +180,7 @@ app.get('/health', (_req, res) => {
 app.get('/l/:slug', async (req, res) => {
   const { slug } = req.params
   try {
+    // WEEKLY-AUDIT: (prisma as any) cast — shortLink model missing from generated types; add to Prisma schema to fix
     const link = await (prisma as any).shortLink.findUnique({ where: { slug } })
     if (!link) { res.status(404).send('Link not found'); return }
     await (prisma as any).shortLink.update({ where: { slug }, data: { clicks: { increment: 1 } } })
