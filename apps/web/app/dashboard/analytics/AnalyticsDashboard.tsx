@@ -57,7 +57,7 @@ function BestTimesSection({ workspaceId, token }: { workspaceId: string; token: 
         setRecs(data.recommendations ?? [])
         if (data.recommendations?.length) setActivePlatform(data.recommendations[0].platform)
       })
-      .catch(() => {/* silent */})
+      .catch((err) => console.error('[BestTimesSection] Failed to load best-times data', err))
       .finally(() => setLoading(false))
   }, [workspaceId, token])
 
@@ -252,7 +252,7 @@ function InsightsSummarySection({ workspaceId, token }: { workspaceId: string; t
     })
       .then((r) => r.json())
       .then((d: InsightsSummary) => setData(d))
-      .catch(() => {})
+      .catch((err) => console.error('[InsightsSummarySection] Failed to load insights', err))
       .finally(() => setLoading(false))
   }, [workspaceId, token, days])
 
@@ -331,7 +331,7 @@ export function AnalyticsDashboard({ workspaceId, token }: Props) {
     })
       .then((r) => r.json())
       .then((d: { comparison: PlatformStatExport[] }) => setPlatformBreakdown(d.comparison ?? []))
-      .catch(() => {/* silent */})
+      .catch((err) => console.error('[AnalyticsDashboard] Failed to load platform breakdown', err))
   }, [workspaceId, token])
 
   useEffect(() => {
@@ -341,7 +341,7 @@ export function AnalyticsDashboard({ workspaceId, token }: Props) {
     })
       .then((r) => r.json())
       .then((d: InsightsSummary) => setAnalyticsSummary(d.summary ?? null))
-      .catch(() => {/* silent */})
+      .catch((err) => console.error('[AnalyticsDashboard] Failed to load insights summary', err))
   }, [workspaceId, token])
 
   const fetchAnalytics = useCallback(async () => {
@@ -752,7 +752,7 @@ function TopPostsSection({
     })
       .then((r) => r.json())
       .then((data: { posts?: TopPost[] }) => setPosts(data.posts ?? []))
-      .catch(() => {/* silent */})
+      .catch((err) => console.error('[TopPostsSection] Failed to load top posts', err))
       .finally(() => setLoading(false))
   }, [workspaceId, token])
 

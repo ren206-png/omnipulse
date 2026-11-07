@@ -144,8 +144,6 @@ app.use(cors({
 }))
 // Raw body for Stripe webhooks — must be registered before express.json()
 app.use('/api/v1/billing/webhook', express.raw({ type: 'application/json' }))
-// Raw body for TradeFlow webhooks — before express.json()
-// app.use('/api/v1/tradeflow/webhook', express.raw({ type: 'application/json' }))
 // Raw body for Automation inbound webhooks — HMAC is verified against the raw bytes
 app.use('/api/v1/automation/inbound', express.raw({ type: 'application/json' }))
 
@@ -182,6 +180,7 @@ app.get('/health', (_req, res) => {
 app.get('/l/:slug', async (req, res) => {
   const { slug } = req.params
   try {
+    // WEEKLY-AUDIT: (prisma as any) cast — shortLink model missing from generated types; add to Prisma schema to fix
     const link = await (prisma as any).shortLink.findUnique({ where: { slug } })
     if (!link) { res.status(404).send('Link not found'); return }
     await (prisma as any).shortLink.update({ where: { slug }, data: { clicks: { increment: 1 } } })
@@ -228,7 +227,6 @@ app.use('/api/v1/links', linksRouter)
 app.use('/api/v1/search', searchRouter)
 app.use('/api/v1/seo', seoRouter)
 app.use('/api/v1/seo-data', seoDataRouter)
-// app.use('/api/v1/tradeflow', tradeflowRouter)
 app.use('/api/v1/photo-to-post', photoToPostRouter)
 app.use('/api/v1/outcome-analytics', outcomeAnalyticsRouter)
 app.use('/api/v1/approvals', approvalsRouter)

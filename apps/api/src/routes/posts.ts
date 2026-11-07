@@ -1241,6 +1241,7 @@ router.post('/:id/ab-test', async (req: Request, res: Response): Promise<void> =
     })
     res.status(201).json({ variant })
   } catch (err) {
+    logger.error({ err }, 'Create A/B variant error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create A/B variant')
   }
 })
@@ -1316,6 +1317,7 @@ router.get('/:id/ab-variants', async (req: Request, res: Response): Promise<void
     const variants = await (prisma.scheduledPost.findMany as Function)({ where: { abVariantOf: id }, include: { metrics: true } })
     res.json({ original, variants })
   } catch (err) {
+    logger.error({ err }, 'Fetch A/B variants error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch variants')
   }
 })
@@ -1331,9 +1333,11 @@ router.get('/:id/comments', async (req: Request, res: Response): Promise<void> =
     const member = await prisma.workspaceMember.findFirst({ where: { workspaceId: post.workspaceId, userId: req.user!.id } })
     const workspace = await findWorkspaceById(post.workspaceId)
     if (!member && workspace?.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    // WEEKLY-AUDIT: (prisma as any) cast — postComment model missing from generated types; add to Prisma schema to fix
     const comments = await (prisma as any).postComment.findMany({ where: { postId: id }, orderBy: { createdAt: 'asc' } })
     res.json({ comments })
   } catch (err) {
+    logger.error({ err }, 'Fetch post comments error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to fetch comments')
   }
 })
@@ -1350,11 +1354,13 @@ router.post('/:id/comments', async (req: Request, res: Response): Promise<void> 
     const member = await prisma.workspaceMember.findFirst({ where: { workspaceId: post.workspaceId, userId: req.user!.id } })
     const workspace = await findWorkspaceById(post.workspaceId)
     if (!member && workspace?.ownerId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Access denied'); return }
+    // WEEKLY-AUDIT: (prisma as any) cast — postComment model missing from generated types; add to Prisma schema to fix
     const comment = await (prisma as any).postComment.create({
       data: { postId: id, userId: req.user!.id, userEmail: req.user!.email, body: body.trim() },
     })
     res.status(201).json({ comment })
   } catch (err) {
+    logger.error({ err }, 'Create post comment error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to create comment')
   }
 })
@@ -1363,12 +1369,14 @@ router.post('/:id/comments', async (req: Request, res: Response): Promise<void> 
 router.delete('/:id/comments/:commentId', async (req: Request, res: Response): Promise<void> => {
   const { commentId } = req.params
   try {
+    // WEEKLY-AUDIT: (prisma as any) cast — postComment model missing from generated types; add to Prisma schema to fix
     const comment = await (prisma as any).postComment.findUnique({ where: { id: commentId } })
     if (!comment) { sendError(res, 404, 'NOT_FOUND', 'Comment not found'); return }
     if (comment.userId !== req.user!.id) { sendError(res, 403, 'FORBIDDEN', 'Can only delete your own comments'); return }
     await (prisma as any).postComment.delete({ where: { id: commentId } })
     res.json({ success: true })
   } catch (err) {
+    logger.error({ err }, 'Delete post comment error')
     sendError(res, 500, 'INTERNAL_ERROR', 'Failed to delete comment')
   }
 })
